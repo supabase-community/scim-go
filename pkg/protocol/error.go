@@ -64,8 +64,6 @@ func (e *Error) Is(target error) bool {
 	return ok && other.Status == e.Status && other.ScimType == e.ScimType
 }
 
-// The errors of RFC 7644, each pairing a scimType with the status the RFC states for it.
-
 // ErrInvalidFilter reports a filter this provider cannot honour, per Section 3.4.2.2.
 func ErrInvalidFilter(detail string) *Error {
 	return NewError(http.StatusBadRequest, ScimTypeInvalidFilter, detail)

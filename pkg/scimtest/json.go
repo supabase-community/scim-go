@@ -32,9 +32,6 @@ func AssertJSON(t TB, name string, value any) bool {
 	return false
 }
 
-// RoundTripDiff decodes the named golden file into value and lists the paths
-// at which encoding value again differs from the golden file, so value must
-// be a pointer.
 func RoundTripDiff(t TB, name string, value any) []string {
 	t.Helper()
 

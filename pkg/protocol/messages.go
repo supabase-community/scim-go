@@ -2,7 +2,6 @@ package protocol
 
 import "mokhan.ca/go/scim/pkg/core"
 
-// The message URIs of RFC 7644
 const (
 	messagesRoot = "urn:ietf:params:scim:api:messages:2.0"
 
