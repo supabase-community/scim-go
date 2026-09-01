@@ -19,5 +19,6 @@ require (
 
 tool (
 	golang.org/x/tools/cmd/goimports
+	golang.org/x/tools/cmd/goyacc
 	golang.org/x/vuln/cmd/govulncheck
 )

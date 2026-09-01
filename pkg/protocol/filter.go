@@ -1,3 +1,5 @@
+//go:generate go tool goyacc -o filter_grammar.go -p scimFilter filter_grammar.y
+
 package protocol
 
 import (
@@ -5,10 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"mokhan.ca/go/scim/pkg/core"
 )
@@ -62,26 +62,26 @@ func (*NotExpr) isFilter()       {}
 func (*ValuePathExpr) isFilter() {}
 
 // ParseFilter parses a SCIM filter expression, per RFC 7644, Section 3.4.2.2.
+// Parsing is driven by the goyacc grammar in filter_grammar.y.
 func ParseFilter(expr string) (Filter, error) {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return nil, nil
 	}
 
-	tokens, err := lexFilter(expr)
+	tokens, err := lexFilterTokens(expr)
 	if err != nil {
 		return nil, ErrInvalidFilter(err.Error())
 	}
 
-	p := &filterParser{tokens: tokens}
-	filter, err := p.parseOr(true)
-	if err != nil {
-		return nil, ErrInvalidFilter(err.Error())
+	lex := newFilterLex(tokens)
+	if scimFilterParse(lex) != 0 || lex.err != nil {
+		if lex.err != nil {
+			return nil, ErrInvalidFilter(lex.err.Error())
+		}
+		return nil, ErrInvalidFilter("invalid filter expression")
 	}
-	if p.peek().kind != tokEOF {
-		return nil, ErrInvalidFilter("unexpected trailing input in filter")
-	}
-	return filter, nil
+	return lex.result, nil
 }
 
 func Matches(f Filter, resource any) (bool, error) {
@@ -313,265 +313,4 @@ func splitAttrPath(token string) AttrPath {
 	}
 	attr, sub, _ := strings.Cut(rest, ".")
 	return AttrPath{URI: uri, Attribute: attr, SubAttr: sub}
-}
-
-type tokenKind int
-
-const (
-	tokEOF tokenKind = iota
-	tokLParen
-	tokRParen
-	tokLBracket
-	tokRBracket
-	tokAnd
-	tokOr
-	tokNot
-	tokPr
-	tokEq
-	tokNe
-	tokCo
-	tokSw
-	tokEw
-	tokGt
-	tokGe
-	tokLt
-	tokLe
-	tokString
-	tokLiteral
-	tokPath
-)
-
-type filterToken struct {
-	kind tokenKind
-	text string
-}
-
-func lexFilter(expr string) ([]filterToken, error) {
-	var tokens []filterToken
-	runes := []rune(expr)
-	i, n := 0, len(runes)
-
-	for i < n {
-		c := runes[i]
-		switch {
-		case unicode.IsSpace(c):
-			i++
-		case c == '(':
-			tokens = append(tokens, filterToken{kind: tokLParen})
-			i++
-		case c == ')':
-			tokens = append(tokens, filterToken{kind: tokRParen})
-			i++
-		case c == '[':
-			tokens = append(tokens, filterToken{kind: tokLBracket})
-			i++
-		case c == ']':
-			tokens = append(tokens, filterToken{kind: tokRBracket})
-			i++
-		case c == '"':
-			start := i
-			i++
-			for i < n && runes[i] != '"' {
-				if runes[i] == '\\' && i+1 < n {
-					i++
-				}
-				i++
-			}
-			if i >= n {
-				return nil, fmt.Errorf("unterminated string literal")
-			}
-			i++
-			tokens = append(tokens, filterToken{kind: tokString, text: string(runes[start:i])})
-		default:
-			start := i
-			for i < n && isFilterWordChar(runes[i]) {
-				i++
-			}
-			if i == start {
-				return nil, fmt.Errorf("unexpected character %q", string(c))
-			}
-			tokens = append(tokens, classifyFilterWord(string(runes[start:i])))
-		}
-	}
-	return tokens, nil
-}
-
-func isFilterWordChar(r rune) bool {
-	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' || r == '.' || r == ':' || r == '$'
-}
-
-func classifyFilterWord(word string) filterToken {
-	switch strings.ToLower(word) {
-	case "and":
-		return filterToken{kind: tokAnd}
-	case "or":
-		return filterToken{kind: tokOr}
-	case "not":
-		return filterToken{kind: tokNot}
-	case "pr":
-		return filterToken{kind: tokPr}
-	case "eq":
-		return filterToken{kind: tokEq, text: string(OpEqual)}
-	case "ne":
-		return filterToken{kind: tokNe, text: string(OpNotEqual)}
-	case "co":
-		return filterToken{kind: tokCo, text: string(OpContains)}
-	case "sw":
-		return filterToken{kind: tokSw, text: string(OpStartsWith)}
-	case "ew":
-		return filterToken{kind: tokEw, text: string(OpEndsWith)}
-	case "gt":
-		return filterToken{kind: tokGt, text: string(OpGreaterThan)}
-	case "ge":
-		return filterToken{kind: tokGe, text: string(OpGreaterEqual)}
-	case "lt":
-		return filterToken{kind: tokLt, text: string(OpLessThan)}
-	case "le":
-		return filterToken{kind: tokLe, text: string(OpLessEqual)}
-	case "true", "false", "null":
-		return filterToken{kind: tokLiteral, text: word}
-	}
-	if _, err := strconv.ParseFloat(word, 64); err == nil {
-		return filterToken{kind: tokLiteral, text: word}
-	}
-	return filterToken{kind: tokPath, text: word}
-}
-
-type filterParser struct {
-	tokens []filterToken
-	pos    int
-}
-
-func (p *filterParser) peek() filterToken {
-	if p.pos < len(p.tokens) {
-		return p.tokens[p.pos]
-	}
-	return filterToken{kind: tokEOF}
-}
-
-func (p *filterParser) next() filterToken {
-	tok := p.peek()
-	p.pos++
-	return tok
-}
-
-func (p *filterParser) parseOr(allowValuePath bool) (Filter, error) {
-	left, err := p.parseAnd(allowValuePath)
-	if err != nil {
-		return nil, err
-	}
-	for p.peek().kind == tokOr {
-		p.next()
-		right, err := p.parseAnd(allowValuePath)
-		if err != nil {
-			return nil, err
-		}
-		left = &LogicalExpr{Op: "or", Left: left, Right: right}
-	}
-	return left, nil
-}
-
-func (p *filterParser) parseAnd(allowValuePath bool) (Filter, error) {
-	left, err := p.parseNot(allowValuePath)
-	if err != nil {
-		return nil, err
-	}
-	for p.peek().kind == tokAnd {
-		p.next()
-		right, err := p.parseNot(allowValuePath)
-		if err != nil {
-			return nil, err
-		}
-		left = &LogicalExpr{Op: "and", Left: left, Right: right}
-	}
-	return left, nil
-}
-
-func (p *filterParser) parseNot(allowValuePath bool) (Filter, error) {
-	if p.peek().kind != tokNot {
-		return p.parsePrimary(allowValuePath)
-	}
-	p.next()
-
-	if p.peek().kind != tokLParen {
-		return nil, fmt.Errorf(`expected "(" after "not"`)
-	}
-	p.next()
-
-	inner, err := p.parseOr(allowValuePath)
-	if err != nil {
-		return nil, err
-	}
-	if p.peek().kind != tokRParen {
-		return nil, fmt.Errorf(`expected ")" to close "not("`)
-	}
-	p.next()
-
-	return &NotExpr{Expr: inner}, nil
-}
-
-func (p *filterParser) parsePrimary(allowValuePath bool) (Filter, error) {
-	tok := p.peek()
-
-	if tok.kind == tokLParen {
-		p.next()
-		inner, err := p.parseOr(allowValuePath)
-		if err != nil {
-			return nil, err
-		}
-		if p.peek().kind != tokRParen {
-			return nil, fmt.Errorf(`expected ")"`)
-		}
-		p.next()
-		return inner, nil
-	}
-
-	if tok.kind != tokPath {
-		return nil, fmt.Errorf("expected an attribute path, got %q", tok.text)
-	}
-	p.next()
-	path := splitAttrPath(tok.text)
-
-	if allowValuePath && p.peek().kind == tokLBracket {
-		p.next()
-		sub, err := p.parseOr(false)
-		if err != nil {
-			return nil, err
-		}
-		if p.peek().kind != tokRBracket {
-			return nil, fmt.Errorf(`expected "]"`)
-		}
-		p.next()
-		return &ValuePathExpr{Attribute: path.Attribute, Sub: sub}, nil
-	}
-
-	op := p.next()
-	if op.kind == tokPr {
-		return &AttrExpr{Path: path, Op: OpPresent}, nil
-	}
-
-	switch op.kind {
-	case tokEq, tokNe, tokCo, tokSw, tokEw, tokGt, tokGe, tokLt, tokLe:
-		valTok := p.next()
-		value, err := decodeFilterValue(valTok)
-		if err != nil {
-			return nil, err
-		}
-		return &AttrExpr{Path: path, Op: FilterOp(op.text), Value: value}, nil
-	default:
-		return nil, fmt.Errorf("expected a comparison operator, got %q", op.text)
-	}
-}
-
-func decodeFilterValue(tok filterToken) (any, error) {
-	switch tok.kind {
-	case tokString, tokLiteral:
-		var value any
-		if err := json.Unmarshal([]byte(tok.text), &value); err != nil {
-			return nil, fmt.Errorf("invalid comparison value %q: %w", tok.text, err)
-		}
-		return value, nil
-	default:
-		return nil, fmt.Errorf("expected a comparison value, got %q", tok.text)
-	}
 }

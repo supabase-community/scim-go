@@ -21,6 +21,10 @@ cover: ## Run tests and report coverage
 	go test -race -coverprofile=$(COVERAGE) ./...
 	go tool cover -func=$(COVERAGE)
 
+.PHONY: generate
+generate: ## Regenerate generated source files (e.g. the filter grammar parser)
+	go generate ./...
+
 .PHONY: fmt
 fmt: ## Format source files
 	gofmt -l -w .
@@ -43,7 +47,7 @@ tidy: ## Tidy go.mod and go.sum
 	go mod tidy
 
 .PHONY: check
-check: tidy fmt lint vulncheck test ## Run the full suite of checks
+check: generate tidy fmt lint vulncheck test ## Run the full suite of checks
 
 .PHONY: clean
 clean: ## Remove build artifacts
