@@ -54,7 +54,6 @@ func (r *memoryGroupRepository) Create(ctx context.Context, group *core.Group) (
 	defer r.mu.Unlock()
 
 	group.ID = uuid.Must(uuid.NewV4()).String()
-	group.Meta = core.NewMeta(r.baseURL, core.KindGroup).For(group)
 	r.items[group.ID] = group
 	return group, nil
 }
@@ -67,7 +66,6 @@ func (r *memoryGroupRepository) Replace(ctx context.Context, id string, group *c
 		return nil, scim.ErrNotFound
 	}
 	group.ID = id
-	group.Meta = core.NewMeta(r.baseURL, core.KindGroup).For(group)
 	r.items[id] = group
 	return group, nil
 }

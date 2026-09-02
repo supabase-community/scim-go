@@ -54,7 +54,6 @@ func (r *UserRepository) Create(ctx context.Context, user *core.User) (*core.Use
 	defer r.mu.Unlock()
 
 	user.ID = uuid.Must(uuid.NewV4()).String()
-	user.Meta = core.NewMeta(r.baseURL, core.KindUser).For(user)
 	r.items[user.ID] = user
 	return user, nil
 }
@@ -67,7 +66,6 @@ func (r *UserRepository) Replace(ctx context.Context, id string, user *core.User
 		return nil, scim.ErrNotFound
 	}
 	user.ID = id
-	user.Meta = core.NewMeta(r.baseURL, core.KindUser).For(user)
 	r.items[id] = user
 	return user, nil
 }

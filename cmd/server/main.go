@@ -11,12 +11,12 @@ import (
 
 func main() {
 	const externalURL = "http://example.com"
-	baseURL := core.Join(externalURL, scim.BasePath)
+	baseURL := scim.Join(externalURL, scim.BasePath)
 
 	userSchema := server.NewUserSchema(baseURL)
 	groupSchema := server.NewGroupSchema(baseURL)
-	userType := core.NewResourceType(baseURL, core.KindUser, userSchema)
-	groupType := core.NewResourceType(baseURL, core.KindGroup, groupSchema)
+	userType := scim.NewResourceType(baseURL, scim.KindUser, userSchema)
+	groupType := scim.NewResourceType(baseURL, scim.KindGroup, groupSchema)
 
 	users := server.NewMemoryUserRepository(baseURL)
 	groups := server.NewMemoryGroupRepository(baseURL)

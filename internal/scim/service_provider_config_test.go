@@ -6,16 +6,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/go-scim/pkg/core"
 )
 
 func TestNewServiceProviderConfig(t *testing.T) {
 	t.Run("advertises the schemes the caller declares", func(t *testing.T) {
-		scheme := NewOAuthBearerToken().AsPrimary()
+		scheme := core.NewOAuthBearerToken().AsPrimary()
 
 		config := NewServiceProviderConfig("", scheme)
 
-		require.Equal(t, []SchemaURI{SchemaServiceProviderConfig}, config.Schemas)
-		require.Equal(t, []*AuthenticationScheme{scheme}, config.AuthenticationSchemes)
+		require.Equal(t, []core.SchemaURI{core.SchemaServiceProviderConfig}, config.Schemas)
+		require.Equal(t, []*core.AuthenticationScheme{scheme}, config.AuthenticationSchemes)
 	})
 
 	t.Run("identifies itself with resource metadata", func(t *testing.T) {
@@ -23,7 +24,7 @@ func TestNewServiceProviderConfig(t *testing.T) {
 
 		config := NewServiceProviderConfig(baseURL)
 
-		require.Equal(t, ResourceTypeName("ServiceProviderConfig"), config.Meta.ResourceType)
+		require.Equal(t, core.ResourceTypeName("ServiceProviderConfig"), config.Meta.ResourceType)
 		require.Equal(t, baseURL+"/ServiceProviderConfig", config.Meta.Location)
 	})
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/go-scim/pkg/core"
 )
 
 func TestSchema(t *testing.T) {
@@ -14,8 +15,8 @@ func TestSchema(t *testing.T) {
 		schema := NewSchema(baseURL, KindUser)
 
 		t.Run("identifies itself by the URI of the kind it describes", func(t *testing.T) {
-			require.Equal(t, []SchemaURI{SchemaSchema}, schema.Schemas)
-			require.Equal(t, SchemaUser, schema.ID)
+			require.Equal(t, []core.SchemaURI{core.SchemaSchema}, schema.Schemas)
+			require.Equal(t, core.SchemaUser, schema.ID)
 			require.Equal(t, KindUser.Name, schema.Name)
 		})
 
@@ -33,10 +34,10 @@ func TestSchema(t *testing.T) {
 	})
 
 	t.Run("With", func(t *testing.T) {
-		userName := NewAttribute("userName", TypeString, "A unique identifier for the user.")
+		userName := core.NewAttribute("userName", core.TypeString, "A unique identifier for the user.")
 		schema := NewSchema(baseURL, KindUser)
 
 		require.Same(t, schema, schema.With(userName))
-		assert.Equal(t, []*Attribute{userName}, schema.Attributes)
+		assert.Equal(t, []*core.Attribute{userName}, schema.Attributes)
 	})
 }

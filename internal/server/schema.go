@@ -1,10 +1,12 @@
 package server
 
-import "github.com/supabase-community/go-scim/pkg/core"
+import (
+	"github.com/supabase-community/go-scim/internal/scim"
+	"github.com/supabase-community/go-scim/pkg/core"
+)
 
-// NewUserSchema builds the User schema document, per RFC 7643, Section 4.1.
 func NewUserSchema(baseURL string) *core.Schema {
-	return core.NewSchema(baseURL, core.KindUser).
+	return scim.NewSchema(baseURL, scim.KindUser).
 		Describe("User Account").
 		With(
 			core.NewAttribute("userName", core.TypeString, "Unique identifier for the User").
@@ -27,9 +29,8 @@ func NewUserSchema(baseURL string) *core.Schema {
 		)
 }
 
-// NewGroupSchema builds the Group schema document, per RFC 7643, Section 4.2.
 func NewGroupSchema(baseURL string) *core.Schema {
-	return core.NewSchema(baseURL, core.KindGroup).
+	return scim.NewSchema(baseURL, scim.KindGroup).
 		Describe("Group").
 		With(
 			core.NewAttribute("displayName", core.TypeString, "A human-readable name for the Group.").
@@ -41,10 +42,10 @@ func NewGroupSchema(baseURL string) *core.Schema {
 						AsImmutable(),
 					core.NewAttribute("$ref", core.TypeReference, "The URI of the User or Group that is a member of this Group.").
 						AsImmutable().
-						Referencing(core.KindUser.Name.Reference(), core.KindGroup.Name.Reference()),
+						Referencing(scim.KindUser.Name.Reference(), scim.KindGroup.Name.Reference()),
 					core.NewAttribute("type", core.TypeString, "A label indicating the type of resource, e.g. 'User' or 'Group'.").
 						AsImmutable().
-						Suggesting(string(core.KindUser.Name), string(core.KindGroup.Name)),
+						Suggesting(string(scim.KindUser.Name), string(scim.KindGroup.Name)),
 					core.NewAttribute("display", core.TypeString, "A human-readable name for the member.").
 						AsImmutable(),
 				),

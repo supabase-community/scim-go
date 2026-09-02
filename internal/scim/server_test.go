@@ -49,7 +49,7 @@ func (r *fakeUserRepo) Create(ctx context.Context, user *core.User) (*core.User,
 	defer r.mu.Unlock()
 	r.seq++
 	user.ID = "user-" + strconv.Itoa(r.seq)
-	user.Meta = core.NewMeta("http://example.com/scim/v2", core.KindUser).For(user)
+	// user.Meta = core.NewMeta("http://example.com/scim/v2", core.KindUser).For(user)
 	r.items[user.ID] = user
 	return user, nil
 }
@@ -61,7 +61,7 @@ func (r *fakeUserRepo) Replace(ctx context.Context, id string, user *core.User) 
 		return nil, ErrNotFound
 	}
 	user.ID = id
-	user.Meta = core.NewMeta("http://example.com/scim/v2", core.KindUser).For(user)
+	// user.Meta = core.NewMeta("http://example.com/scim/v2", core.KindUser).For(user)
 	r.items[id] = user
 	return user, nil
 }
@@ -110,7 +110,7 @@ func (r *fakeGroupRepo) Create(ctx context.Context, group *core.Group) (*core.Gr
 	defer r.mu.Unlock()
 	r.seq++
 	group.ID = "group-" + strconv.Itoa(r.seq)
-	group.Meta = core.NewMeta("http://example.com/scim/v2", core.KindGroup).For(group)
+	// group.Meta = core.NewMeta("http://example.com/scim/v2", core.KindGroup).For(group)
 	r.items[group.ID] = group
 	return group, nil
 }
@@ -122,7 +122,7 @@ func (r *fakeGroupRepo) Replace(ctx context.Context, id string, group *core.Grou
 		return nil, ErrNotFound
 	}
 	group.ID = id
-	group.Meta = core.NewMeta("http://example.com/scim/v2", core.KindGroup).For(group)
+	// group.Meta = core.NewMeta("http://example.com/scim/v2", core.KindGroup).For(group)
 	r.items[id] = group
 	return group, nil
 }

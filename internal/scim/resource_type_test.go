@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/go-scim/pkg/core"
 )
 
 func TestResourceType(t *testing.T) {
@@ -19,7 +20,7 @@ func TestResourceType(t *testing.T) {
 			require.Equal(t, KindUser.Name, resourceType.ID)
 			require.Equal(t, KindUser.Name, resourceType.Name)
 			require.Equal(t, "User Account", resourceType.Description)
-			require.Equal(t, SchemaUser, resourceType.Schema)
+			require.Equal(t, core.SchemaUser, resourceType.Schema)
 		})
 
 		t.Run("locates itself under the ResourceTypes endpoint", func(t *testing.T) {
@@ -29,7 +30,7 @@ func TestResourceType(t *testing.T) {
 
 		t.Run("declares the schema extensions it was given", func(t *testing.T) {
 			extended := NewResourceType(baseURL, KindUser, schema).
-				Extend(SchemaExtension{Schema: SchemaEnterpriseUser, Required: true})
+				Extend(core.SchemaExtension{Schema: core.SchemaEnterpriseUser, Required: true})
 
 			body, err := json.Marshal(extended)
 
@@ -48,13 +49,13 @@ func TestResourceType(t *testing.T) {
 
 	t.Run("Extend", func(t *testing.T) {
 		schema := NewSchema(baseURL, KindUser)
-		enterprise := SchemaExtension{Schema: SchemaEnterpriseUser, Required: true}
+		enterprise := core.SchemaExtension{Schema: core.SchemaEnterpriseUser, Required: true}
 
 		t.Run("keeps the extensions of an earlier call", func(t *testing.T) {
 			resourceType := NewResourceType(baseURL, KindUser, schema).Extend(enterprise)
 
-			require.Same(t, resourceType, resourceType.Extend(SchemaExtension{Schema: SchemaGroup}))
-			require.Equal(t, []SchemaExtension{enterprise, {Schema: SchemaGroup}}, resourceType.SchemaExtensions)
+			require.Same(t, resourceType, resourceType.Extend(core.SchemaExtension{Schema: core.SchemaGroup}))
+			require.Equal(t, []core.SchemaExtension{enterprise, {Schema: core.SchemaGroup}}, resourceType.SchemaExtensions)
 		})
 	})
 }
