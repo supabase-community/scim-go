@@ -1,3 +1,4 @@
+// Experimental: Development Server for testing SCIM 2.0
 package main
 
 import (
@@ -13,18 +14,17 @@ import (
 	"sync"
 
 	"github.com/gofrs/uuid"
-	"github.com/supabase-community/go-scim/internal/scim"
-	"github.com/supabase-community/go-scim/internal/server"
 	"github.com/supabase-community/go-scim/pkg/core"
 	"github.com/supabase-community/go-scim/pkg/protocol"
+	"github.com/supabase-community/go-scim/pkg/scim"
 )
 
 func main() {
 	const externalURL = "http://example.com"
 	baseURL := scim.Join(externalURL, scim.BasePath)
 
-	userSchema := server.NewUserSchema(baseURL)
-	groupSchema := server.NewGroupSchema(baseURL)
+	userSchema := NewUserSchema(baseURL)
+	groupSchema := NewGroupSchema(baseURL)
 	userType := &core.ResourceType{
 		Schemas:     []core.SchemaURI{core.SchemaResourceType},
 		ID:          "User",
@@ -51,10 +51,10 @@ func main() {
 		},
 	}
 
-	users := server.NewMemoryUserRepository(baseURL)
-	groups := server.NewMemoryGroupRepository(baseURL)
+	users := NewMemoryUserRepository(baseURL)
+	groups := NewMemoryGroupRepository(baseURL)
 
-	srv := server.NewServer(
+	srv := NewServer(
 		externalURL,
 		users,
 		groups,
