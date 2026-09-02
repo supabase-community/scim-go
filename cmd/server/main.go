@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -84,6 +85,18 @@ func validateUser(user *core.User) *protocol.Error {
 		return protocol.ErrInvalidValue(`"schemas" must include the User schema URN`)
 	}
 	return nil
+}
+
+func readBody(r *http.Request) ([]byte, error) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return nil, protocol.ErrTooLarge("the request body is too large")
+		}
+		return nil, protocol.ErrInvalidSyntax("could not read the request body")
+	}
+	return body, nil
 }
 
 func decodeUser(r *http.Request) (*core.User, error) {
