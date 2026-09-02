@@ -25,11 +25,11 @@ func NewServer(
 	schemas []*core.Schema,
 	resourceTypes []*core.ResourceType,
 ) *Server {
-	baseURL := core.Join(externalURL, BasePath)
+	baseURL := Join(externalURL, BasePath)
 
 	limits := protocol.DefaultLimits
 	return &Server{
-		serviceProviderConfig: core.NewServiceProviderConfig(
+		serviceProviderConfig: NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
 		).Sorting(),

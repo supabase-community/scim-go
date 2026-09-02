@@ -14,17 +14,6 @@ type ServiceProviderConfig struct {
 	Meta                  Meta                    `json:"meta"`
 }
 
-func NewServiceProviderConfig(baseURL string, schemes ...*AuthenticationScheme) *ServiceProviderConfig {
-	if schemes == nil {
-		schemes = []*AuthenticationScheme{}
-	}
-	return &ServiceProviderConfig{
-		Schemas:               []SchemaURI{SchemaServiceProviderConfig},
-		AuthenticationSchemes: schemes,
-		Meta:                  NewMeta(baseURL, KindServiceProviderConfig),
-	}
-}
-
 // Sorting states that this provider honours "sortBy" and "sortOrder", per RFC 7644, Section 3.4.2.3.
 func (c *ServiceProviderConfig) Sorting() *ServiceProviderConfig {
 	c.Sort.Supported = true

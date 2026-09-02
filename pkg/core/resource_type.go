@@ -18,27 +18,11 @@ type ResourceType struct {
 	Meta             Meta              `json:"meta,omitzero"`
 }
 
-func NewResourceType(baseURL string, kind Kind, schema *Schema) *ResourceType {
-	resourceType := &ResourceType{
-		Schemas:     []SchemaURI{SchemaResourceType},
-		ID:          kind.Name,
-		Name:        kind.Name,
-		Description: schema.Description,
-		Endpoint:    kind.Endpoint,
-		Schema:      schema.ID,
-	}
-	resourceType.Meta = NewMeta(baseURL, KindResourceType).For(resourceType)
-
-	return resourceType
-}
-
 func (r *ResourceType) Extend(extensions ...SchemaExtension) *ResourceType {
 	r.SchemaExtensions = append(r.SchemaExtensions, extensions...)
 	return r
 }
 
-func (r ResourceType) Kind() Kind {
-	return Kind{Name: r.Name, Schema: r.Schema, Endpoint: r.Endpoint}
+func (r *ResourceType) ResourceID() string {
+	return string(r.ID)
 }
-
-func (r *ResourceType) ResourceID() string { return string(r.ID) }

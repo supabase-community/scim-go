@@ -24,7 +24,7 @@ func TestGroup(t *testing.T) {
 			},
 		},
 		Meta: Meta{
-			ResourceType: KindGroup.Name,
+			ResourceType: "Group",
 			Created:      created,
 			LastModified: lastModified,
 			Location:     "http://example.com/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",

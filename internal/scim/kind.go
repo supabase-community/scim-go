@@ -1,38 +1,42 @@
-package core
+package scim
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/supabase-community/go-scim/pkg/core"
+)
 
 // TODO:: remove this
 type Kind struct {
-	Name     ResourceTypeName
-	Schema   SchemaURI
+	Name     core.ResourceTypeName
+	Schema   core.SchemaURI
 	Endpoint string
 }
 
 var (
 	KindGroup = Kind{
 		Name:     "Group",
-		Schema:   SchemaGroup,
+		Schema:   core.SchemaGroup,
 		Endpoint: "/Groups",
 	}
 	KindResourceType = Kind{
 		Name:     "ResourceType",
-		Schema:   SchemaResourceType,
+		Schema:   core.SchemaResourceType,
 		Endpoint: "/ResourceTypes",
 	}
 	KindSchema = Kind{
 		Name:     "Schema",
-		Schema:   SchemaSchema,
+		Schema:   core.SchemaSchema,
 		Endpoint: "/Schemas",
 	}
 	KindServiceProviderConfig = Kind{
 		Name:     "ServiceProviderConfig",
-		Schema:   SchemaServiceProviderConfig,
+		Schema:   core.SchemaServiceProviderConfig,
 		Endpoint: "/ServiceProviderConfig",
 	}
 	KindUser = Kind{
 		Name:     "User",
-		Schema:   SchemaUser,
+		Schema:   core.SchemaUser,
 		Endpoint: "/Users",
 	}
 )
@@ -41,6 +45,7 @@ func (k Kind) Location(baseURL string) string {
 	return Join(baseURL, k.Endpoint)
 }
 
+// TODO:: find a better home for this.
 func Join(base, segment string) string {
 	return strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(segment, "/")
 }

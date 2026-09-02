@@ -10,17 +10,6 @@ type Schema struct {
 	Meta        Meta             `json:"meta"`
 }
 
-func NewSchema(baseURL string, kind Kind) *Schema {
-	schema := &Schema{
-		Schemas: []SchemaURI{SchemaSchema},
-		ID:      kind.Schema,
-		Name:    kind.Name,
-	}
-	schema.Meta = NewMeta(baseURL, KindSchema).For(schema)
-
-	return schema
-}
-
 func (s *Schema) Describe(description string) *Schema {
 	s.Description = description
 	return s
@@ -31,4 +20,6 @@ func (s *Schema) With(attributes ...*Attribute) *Schema {
 	return s
 }
 
-func (s *Schema) ResourceID() string { return string(s.ID) }
+func (s *Schema) ResourceID() string {
+	return string(s.ID)
+}
