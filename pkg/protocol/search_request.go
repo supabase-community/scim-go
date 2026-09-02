@@ -26,12 +26,6 @@ type SearchRequest struct {
 	SortOrder          SortOrder        `json:"sortOrder,omitempty"`
 	StartIndex         int              `json:"startIndex,omitempty"`
 	Count              int              `json:"count,omitempty"`
-
-	filter Filter
-}
-
-func (s *SearchRequest) ParsedFilter() Filter {
-	return s.filter
 }
 
 // Offset is the zero-based start index, per Table 6 of RFC 7644, Section 3.4.2.4.
@@ -71,22 +65,15 @@ func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {
 		return nil, err
 	}
 
-	filterExpr := values.Get("filter")
-	filter, err := ParseFilter(filterExpr)
-	if err != nil {
-		return nil, err
-	}
-
 	return &SearchRequest{
 		Schemas:            []core.SchemaURI{SchemaSearchRequest},
 		Attributes:         listParam(values, "attributes"),
 		ExcludedAttributes: listParam(values, "excludedAttributes"),
-		Filter:             filterExpr,
+		Filter:             values.Get("filter"),
 		SortBy:             values.Get("sortBy"),
 		SortOrder:          sortOrder,
 		StartIndex:         max(startIndex, 1),
 		Count:              min(max(count, 0), l.MaxCount),
-		filter:             filter,
 	}, nil
 }
 

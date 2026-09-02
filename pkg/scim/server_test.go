@@ -39,12 +39,6 @@ func (r *fakeUserRepo) List(ctx context.Context, query *protocol.SearchRequest) 
 
 	var all []*core.User
 	for _, item := range r.items {
-		if filter := query.ParsedFilter(); filter != nil {
-			ok, err := protocol.Matches(filter, item)
-			if err != nil || !ok {
-				continue
-			}
-		}
 		all = append(all, item)
 	}
 	return all, len(all), nil
@@ -223,25 +217,6 @@ func TestServerUsers(t *testing.T) {
 		gone := doRequest(t, srv.UserByID, http.MethodGet, "/Users/"+user.ID, user.ID, "")
 		require.Equal(t, http.StatusNotFound, gone.Code)
 	})
-
-	t.Run("filters the list through the repository", func(t *testing.T) {
-		srv, _, _ := newTestServer()
-
-		doRequest(t, srv.CreateUser, http.MethodPost, "/Users", "", `{
-			"schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"], "userName": "alice"
-		}`)
-		doRequest(t, srv.CreateUser, http.MethodPost, "/Users", "", `{
-			"schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"], "userName": "bob"
-		}`)
-
-		w := doRequest(t, srv.Users, http.MethodGet, `/Users?filter=userName+eq+"alice"`, "", "")
-		require.Equal(t, http.StatusOK, w.Code)
-
-		var list protocol.ListResponse[core.User]
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
-		require.Equal(t, 1, list.TotalResults)
-		require.Equal(t, "alice", list.Resources[0].UserName)
-	})
 }
 
 func TestServerGroups(t *testing.T) {
@@ -289,5 +264,5 @@ func TestServerServiceProviderConfig(t *testing.T) {
 	w := doRequest(t, srv.ServiceProviderConfig, http.MethodGet, "/ServiceProviderConfig", "", "")
 
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), `"filter":{"supported":true`)
+	require.Contains(t, w.Body.String(), `"filter":{"supported":false`)
 }

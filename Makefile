@@ -4,54 +4,50 @@ BINARY := scim-server
 CMD := ./cmd/server
 COVERAGE := coverage.out
 
+.PHONY: clean
+clean:
+	rm -rf bin $(COVERAGE)
+
 .PHONY: build
-build: ## Build the reference server binary
+build:
 	go build -o bin/$(BINARY) $(CMD)
 
 .PHONY: run
-run: ## Run the reference server
+run:
 	go run $(CMD)
 
 .PHONY: test
-test: ## Run tests with the race detector
+test:
 	go test -race ./...
 
 .PHONY: cover
-cover: ## Run tests and report coverage
+cover:
 	go test -race -coverprofile=$(COVERAGE) ./...
 	go tool cover -func=$(COVERAGE)
 
-.PHONY: generate
-generate: ## Regenerate generated source files (e.g. the filter grammar parser)
-	go generate ./...
-
 .PHONY: fmt
-fmt: ## Format source files
+fmt:
 	gofmt -l -w .
 	go tool goimports -w .
 
 .PHONY: vet
-vet: ## Run go vet
+vet:
 	go vet ./...
 
 .PHONY: lint
-lint: vet ## Run golangci-lint
+lint: vet
 	golangci-lint run
 
 .PHONY: vulncheck
-vulncheck: ## Check dependencies for known vulnerabilities
+vulncheck:
 	go tool govulncheck ./...
 
 .PHONY: tidy
-tidy: ## Tidy go.mod and go.sum
+tidy:
 	go mod tidy
 
 .PHONY: check
-check: generate tidy fmt lint vulncheck test ## Run the full suite of checks
-
-.PHONY: clean
-clean: ## Remove build artifacts
-	rm -rf bin $(COVERAGE)
+check: generate tidy fmt lint vulncheck test
 
 .PHONY: help
 help: ## List available targets

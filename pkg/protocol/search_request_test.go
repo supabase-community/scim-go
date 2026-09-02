@@ -76,16 +76,6 @@ func TestParseSearchRequest(t *testing.T) {
 			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount, SortOrder: SortDescending},
 		},
 		{
-			name:  "carries the filter through for the server to interpret",
-			query: "filter=" + url.QueryEscape(`userName eq "bjensen"`),
-			want: SearchRequest{
-				StartIndex: 1,
-				Count:      DefaultLimits.DefaultCount,
-				Filter:     `userName eq "bjensen"`,
-				filter:     &AttrExpr{Path: AttrPath{Attribute: "userName"}, Op: OpEqual, Value: "bjensen"},
-			},
-		},
-		{
 			name:  "reads the attribute lists as the comma separated values they are",
 			query: "attributes=userName,active&excludedAttributes=meta,groups",
 			want: SearchRequest{

@@ -43,16 +43,6 @@ func (r *memoryUserRepository) List(ctx context.Context, query *protocol.SearchR
 	}
 	slices.SortFunc(all, func(a, b *core.User) int { return strings.Compare(a.ID, b.ID) })
 
-	if filter := query.ParsedFilter(); filter != nil {
-		filtered := all[:0:0]
-		for _, item := range all {
-			if ok, err := protocol.Matches(filter, item); err == nil && ok {
-				filtered = append(filtered, item)
-			}
-		}
-		all = filtered
-	}
-
 	total := len(all)
 	start := min(query.Offset(), total)
 	end := min(start+query.Count, total)
@@ -123,16 +113,6 @@ func (r *memoryGroupRepository) List(ctx context.Context, query *protocol.Search
 		all = append(all, item)
 	}
 	slices.SortFunc(all, func(a, b *core.Group) int { return strings.Compare(a.ID, b.ID) })
-
-	if filter := query.ParsedFilter(); filter != nil {
-		filtered := all[:0:0]
-		for _, item := range all {
-			if ok, err := protocol.Matches(filter, item); err == nil && ok {
-				filtered = append(filtered, item)
-			}
-		}
-		all = filtered
-	}
 
 	total := len(all)
 	start := min(query.Offset(), total)

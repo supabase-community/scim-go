@@ -32,7 +32,7 @@ func NewServer(
 		serviceProviderConfig: core.NewServiceProviderConfig(
 			baseURL,
 			core.NewOAuthBearerToken().AsPrimary(),
-		).Sorting().Filtering(limits.MaxCount),
+		).Sorting(),
 		resourceTypes: resourceTypes,
 		schemas:       schemas,
 		users: resourceServer[*core.User]{
