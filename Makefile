@@ -47,7 +47,7 @@ tidy:
 	go mod tidy
 
 .PHONY: check
-check: generate tidy fmt lint vulncheck test
+check: tidy fmt lint vulncheck test
 
 .PHONY: help
 help: ## List available targets
