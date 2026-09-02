@@ -6,7 +6,17 @@ import (
 )
 
 func NewUserSchema(baseURL string) *core.Schema {
-	return scim.NewSchema(baseURL, scim.KindUser).
+	schema := &core.Schema{
+		Schemas: []core.SchemaURI{core.SchemaSchema},
+		ID:      core.SchemaUser,
+		Name:    "User",
+		Meta: core.Meta{
+			ResourceType: "User",
+			Location:     scim.Join(baseURL, "/Users"),
+		},
+	}
+
+	return schema.
 		Describe("User Account").
 		With(
 			core.NewAttribute("userName", core.TypeString, "Unique identifier for the User").
@@ -30,7 +40,16 @@ func NewUserSchema(baseURL string) *core.Schema {
 }
 
 func NewGroupSchema(baseURL string) *core.Schema {
-	return scim.NewSchema(baseURL, scim.KindGroup).
+	schema := &core.Schema{
+		Schemas: []core.SchemaURI{core.SchemaSchema},
+		ID:      core.SchemaGroup,
+		Name:    "Group",
+		Meta: core.Meta{
+			ResourceType: "Group",
+			Location:     scim.Join(baseURL, "/Groups"),
+		},
+	}
+	return schema.
 		Describe("Group").
 		With(
 			core.NewAttribute("displayName", core.TypeString, "A human-readable name for the Group.").
@@ -38,16 +57,10 @@ func NewGroupSchema(baseURL string) *core.Schema {
 			core.NewAttribute("members", core.TypeComplex, "A list of members of the Group.").
 				AsMultiValued().
 				With(
-					core.NewAttribute("value", core.TypeString, "The identifier of a member of this Group.").
-						AsImmutable(),
-					core.NewAttribute("$ref", core.TypeReference, "The URI of the User or Group that is a member of this Group.").
-						AsImmutable().
-						Referencing(scim.KindUser.Name.Reference(), scim.KindGroup.Name.Reference()),
-					core.NewAttribute("type", core.TypeString, "A label indicating the type of resource, e.g. 'User' or 'Group'.").
-						AsImmutable().
-						Suggesting(string(scim.KindUser.Name), string(scim.KindGroup.Name)),
-					core.NewAttribute("display", core.TypeString, "A human-readable name for the member.").
-						AsImmutable(),
+					core.NewAttribute("value", core.TypeString, "The identifier of a member of this Group.").AsImmutable(),
+					core.NewAttribute("$ref", core.TypeReference, "The URI of the User or Group that is a member of this Group.").AsImmutable().Referencing("User", "Group"),
+					core.NewAttribute("type", core.TypeString, "A label indicating the type of resource, e.g. 'User' or 'Group'.").AsImmutable().Suggesting("User", "Group"),
+					core.NewAttribute("display", core.TypeString, "A human-readable name for the member.").AsImmutable(),
 				),
 		)
 }

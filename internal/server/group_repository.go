@@ -28,7 +28,7 @@ func (r *memoryGroupRepository) Get(ctx context.Context, id string) (*core.Group
 
 	item, ok := r.items[id]
 	if !ok {
-		return nil, scim.ErrNotFound
+		return nil, ErrNotFound
 	}
 	return item, nil
 }
@@ -63,7 +63,7 @@ func (r *memoryGroupRepository) Replace(ctx context.Context, id string, group *c
 	defer r.mu.Unlock()
 
 	if _, ok := r.items[id]; !ok {
-		return nil, scim.ErrNotFound
+		return nil, ErrNotFound
 	}
 	group.ID = id
 	r.items[id] = group
@@ -75,7 +75,7 @@ func (r *memoryGroupRepository) Delete(ctx context.Context, id string) error {
 	defer r.mu.Unlock()
 
 	if _, ok := r.items[id]; !ok {
-		return scim.ErrNotFound
+		return ErrNotFound
 	}
 	delete(r.items, id)
 	return nil

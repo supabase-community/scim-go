@@ -15,8 +15,31 @@ func main() {
 
 	userSchema := server.NewUserSchema(baseURL)
 	groupSchema := server.NewGroupSchema(baseURL)
-	userType := scim.NewResourceType(baseURL, scim.KindUser, userSchema)
-	groupType := scim.NewResourceType(baseURL, scim.KindGroup, groupSchema)
+	userType := &core.ResourceType{
+		Schemas:     []core.SchemaURI{core.SchemaResourceType},
+		ID:          "User",
+		Name:        "User",
+		Description: userSchema.Description,
+		Endpoint:    "/Users",
+		Schema:      userSchema.ID,
+		Meta: core.Meta{
+			ResourceType: "User",
+			Location:     scim.Join(baseURL, "/Users"),
+		},
+	}
+
+	groupType := &core.ResourceType{
+		Schemas:     []core.SchemaURI{core.SchemaResourceType},
+		ID:          "Group",
+		Name:        "Group",
+		Description: groupSchema.Description,
+		Endpoint:    "/Groups",
+		Schema:      groupSchema.ID,
+		Meta: core.Meta{
+			ResourceType: "Group",
+			Location:     scim.Join(baseURL, "/Groups"),
+		},
+	}
 
 	users := server.NewMemoryUserRepository(baseURL)
 	groups := server.NewMemoryGroupRepository(baseURL)

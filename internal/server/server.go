@@ -10,6 +10,8 @@ import (
 	"github.com/supabase-community/go-scim/pkg/protocol"
 )
 
+var ErrNotFound = errors.New("scim: resource not found")
+
 type Server struct {
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
@@ -137,7 +139,7 @@ func (s *resourceServer[T]) list(w http.ResponseWriter, r *http.Request) error {
 func (s *resourceServer[T]) byID(w http.ResponseWriter, r *http.Request) error {
 	item, err := s.repo.Get(r.Context(), urlParam(r, "id"))
 	if err != nil {
-		if errors.Is(err, scim.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			return notFound(w)
 		}
 		return protocol.SendError(w, err)
@@ -176,7 +178,7 @@ func (s *resourceServer[T]) replace(w http.ResponseWriter, r *http.Request) erro
 
 	replaced, err := s.repo.Replace(r.Context(), id, item)
 	if err != nil {
-		if errors.Is(err, scim.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			return notFound(w)
 		}
 		return protocol.SendError(w, err)
@@ -186,7 +188,7 @@ func (s *resourceServer[T]) replace(w http.ResponseWriter, r *http.Request) erro
 
 func (s *resourceServer[T]) delete(w http.ResponseWriter, r *http.Request) error {
 	if err := s.repo.Delete(r.Context(), urlParam(r, "id")); err != nil {
-		if errors.Is(err, scim.ErrNotFound) {
+		if errors.Is(err, ErrNotFound) {
 			return notFound(w)
 		}
 		return protocol.SendError(w, err)

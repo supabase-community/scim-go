@@ -10,8 +10,8 @@ func NewServiceProviderConfig(baseURL string, schemes ...*core.AuthenticationSch
 		Schemas:               []core.SchemaURI{core.SchemaServiceProviderConfig},
 		AuthenticationSchemes: schemes,
 		Meta: core.Meta{
-			ResourceType: KindServiceProviderConfig.Name,
-			Location:     KindServiceProviderConfig.Location(baseURL),
+			ResourceType: "ServiceProviderConfig",
+			Location:     Join(baseURL, "/ServiceProviderConfig"),
 		},
 	}
 }

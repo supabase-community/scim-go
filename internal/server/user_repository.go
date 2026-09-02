@@ -28,7 +28,7 @@ func (r *UserRepository) Get(ctx context.Context, id string) (*core.User, error)
 
 	item, ok := r.items[id]
 	if !ok {
-		return nil, scim.ErrNotFound
+		return nil, ErrNotFound
 	}
 	return item, nil
 }
@@ -63,7 +63,7 @@ func (r *UserRepository) Replace(ctx context.Context, id string, user *core.User
 	defer r.mu.Unlock()
 
 	if _, ok := r.items[id]; !ok {
-		return nil, scim.ErrNotFound
+		return nil, ErrNotFound
 	}
 	user.ID = id
 	r.items[id] = user
@@ -75,7 +75,7 @@ func (r *UserRepository) Delete(ctx context.Context, id string) error {
 	defer r.mu.Unlock()
 
 	if _, ok := r.items[id]; !ok {
-		return scim.ErrNotFound
+		return ErrNotFound
 	}
 	delete(r.items, id)
 	return nil
