@@ -2,6 +2,7 @@ package core
 
 import "strings"
 
+// TODO:: remove this
 type Kind struct {
 	Name     ResourceTypeName
 	Schema   SchemaURI

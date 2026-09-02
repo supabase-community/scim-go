@@ -11,6 +11,7 @@ type Meta struct {
 	Version      string           `json:"version,omitempty"`
 }
 
+// TODO:: Remove this
 func NewMeta(baseURL string, kind Kind) Meta {
 	return Meta{
 		ResourceType: kind.Name,
@@ -18,6 +19,7 @@ func NewMeta(baseURL string, kind Kind) Meta {
 	}
 }
 
+// TODO:: Remove this
 func (m Meta) For(resource Resource) Meta {
 	m.Location = Join(m.Location, resource.ResourceID())
 	return m
