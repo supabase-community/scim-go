@@ -14,49 +14,25 @@ func TestRFC7643(t *testing.T) {
 		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643MinimalUser, &User{}))
 	})
 
+	// password is writeOnly per RFC 7643, Section 7, so it is accepted on input but never returned.
+	t.Run("carries the full User of Section 8.2 whole except writeOnly password", func(t *testing.T) {
+		assert.Equal(t, []string{"password"}, scimtest.RoundTripDiff(t, scimtest.RFC7643FullUser, &User{}))
+	})
+
+	t.Run("carries the enterprise extension of Section 8.3 whole except writeOnly password", func(t *testing.T) {
+		assert.Equal(t, []string{"password"}, scimtest.RoundTripDiff(t, scimtest.RFC7643EnterpriseUser, &User{}))
+	})
+
 	t.Run("carries the Group of Section 8.4 whole", func(t *testing.T) {
 		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643Group, &Group{}))
 	})
 
+	t.Run("carries the service provider configuration of Section 8.5 whole", func(t *testing.T) {
+		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643ServiceProviderConfiguration, &ServiceProviderConfig{}))
+	})
+
 	t.Run("carries the resource types of Section 8.6 whole", func(t *testing.T) {
 		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643ResourceTypes, &[]ResourceType{}))
-	})
-
-	t.Run("does not yet carry the full User of Section 8.2", func(t *testing.T) {
-		assert.Equal(t, []string{
-			"addresses",
-			"displayName",
-			"emails[0].type",
-			"emails[1].primary",
-			"emails[1].type",
-			"groups",
-			"ims",
-			"locale",
-			"name.honorificPrefix",
-			"name.honorificSuffix",
-			"nickName",
-			"password",
-			"phoneNumbers",
-			"photos",
-			"preferredLanguage",
-			"profileUrl",
-			"timezone",
-			"title",
-			"userType",
-			"x509Certificates",
-		}, scimtest.RoundTripDiff(t, scimtest.RFC7643FullUser, &User{}))
-	})
-
-	t.Run("does not yet carry the enterprise extension of Section 8.3", func(t *testing.T) {
-		assert.Contains(t,
-			scimtest.RoundTripDiff(t, scimtest.RFC7643EnterpriseUser, &User{}),
-			string(SchemaEnterpriseUser))
-	})
-
-	t.Run("states a primary scheme where the configuration of Section 8.5 leaves it unsaid", func(t *testing.T) {
-		assert.Equal(t,
-			[]string{"authenticationSchemes[1].primary"},
-			scimtest.RoundTripDiff(t, scimtest.RFC7643ServiceProviderConfiguration, &ServiceProviderConfig{}))
 	})
 
 	// RFC 7643, Section 7 states an attribute characteristic only where it bears on the attribute.
@@ -65,8 +41,8 @@ func TestRFC7643(t *testing.T) {
 			name  string
 			stray []string
 		}{
-			{scimtest.RFC7643ResourceSchemas, []string{"canonicalValues", "caseExact", "schemas", "uniqueness"}},
-			{scimtest.RFC7643ServiceProviderSchemas, []string{"caseExact", "meta", "schemas", "uniqueness"}},
+			{scimtest.RFC7643ResourceSchemas, []string{"canonicalValues", "caseExact", "uniqueness"}},
+			{scimtest.RFC7643ServiceProviderSchemas, []string{"caseExact", "uniqueness"}},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				assert.Equal(t, tc.stray, leaves(scimtest.RoundTripDiff(t, tc.name, &[]Schema{})))

@@ -3,12 +3,13 @@ package scimtest
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-func AssertJSON(t TB, name string, value any) bool {
+func AssertJSON(t TB, name string, value any, ignore ...string) bool {
 	t.Helper()
 
 	want, err := decode(Golden(t, name))
@@ -23,13 +24,27 @@ func AssertJSON(t TB, name string, value any) bool {
 		return false
 	}
 
-	differences := diff("", want, got)
+	differences := without(diff("", want, got), ignore)
 	if len(differences) == 0 {
 		return true
 	}
 
 	t.Errorf("scimtest: %T does not match %s:\n%s", value, name, join(differences))
 	return false
+}
+
+func without(paths, ignore []string) []string {
+	if len(ignore) == 0 {
+		return paths
+	}
+
+	kept := paths[:0]
+	for _, path := range paths {
+		if !slices.Contains(ignore, path) {
+			kept = append(kept, path)
+		}
+	}
+	return kept
 }
 
 func RoundTripDiff(t TB, name string, value any) []string {

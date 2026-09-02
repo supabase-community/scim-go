@@ -1,5 +1,20 @@
 package core
 
+type SupportedFeature struct {
+	Supported bool `json:"supported"`
+}
+
+type BulkFeature struct {
+	Supported      bool `json:"supported"`
+	MaxOperations  int  `json:"maxOperations"`
+	MaxPayloadSize int  `json:"maxPayloadSize"`
+}
+
+type FilterFeature struct {
+	Supported  bool `json:"supported"`
+	MaxResults int  `json:"maxResults"`
+}
+
 // ServiceProviderConfig is the schema defined in RFC 7643, Section 5.
 type ServiceProviderConfig struct {
 	Schemas               []SchemaURI             `json:"schemas"`

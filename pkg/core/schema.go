@@ -2,12 +2,12 @@ package core
 
 // Schema is the schema definition resource of RFC 7643, Section 7.
 type Schema struct {
-	Schemas     []SchemaURI      `json:"schemas"`
+	Schemas     []SchemaURI      `json:"schemas,omitempty"`
 	ID          SchemaURI        `json:"id"`
 	Name        ResourceTypeName `json:"name"`
 	Description string           `json:"description"`
 	Attributes  []*Attribute     `json:"attributes"`
-	Meta        Meta             `json:"meta"`
+	Meta        Meta             `json:"meta,omitzero"`
 }
 
 func (s *Schema) Describe(description string) *Schema {

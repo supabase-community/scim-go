@@ -17,7 +17,7 @@ type AuthenticationScheme struct {
 	Description      string                   `json:"description"`
 	SpecURI          string                   `json:"specUri,omitempty"`
 	DocumentationURI string                   `json:"documentationUri,omitempty"`
-	Primary          bool                     `json:"primary"`
+	Primary          bool                     `json:"primary,omitempty"`
 }
 
 func NewOAuthBearerToken() *AuthenticationScheme {

@@ -10,7 +10,7 @@ type Member struct {
 
 // Group is the core Group resource defined in RFC 7643, Section 4.2.
 type Group struct {
-	Entity
+	CommonAttributes
 	ExternalID  string   `json:"externalId,omitempty"`
 	DisplayName string   `json:"displayName"`
 	Members     []Member `json:"members,omitempty"`

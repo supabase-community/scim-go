@@ -18,7 +18,7 @@ func TestUser(t *testing.T) {
 		ExternalID: "701984",
 		UserName:   "bjensen@example.com",
 		Name:       Name{Formatted: "Ms. Barbara J Jensen", FamilyName: "Jensen", GivenName: "Barbara"},
-		Emails:     []Email{{Value: "bjensen@example.com", Primary: true}},
+		Emails:     []Email{{Value: "bjensen@example.com", Primary: new(true)}},
 		Active:     new(true),
 		Meta: Meta{
 			ResourceType: "User",
@@ -57,5 +57,17 @@ func TestUser(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Contains(t, string(body), `"active":false`)
+	})
+
+	t.Run("accepts password on input but never serializes it", func(t *testing.T) {
+		var decoded User
+		require.NoError(t, json.Unmarshal([]byte(`{"userName":"bjensen","password":"t1meMa$heen"}`), &decoded))
+		require.Equal(t, "t1meMa$heen", decoded.Password)
+
+		body, err := json.Marshal(&decoded)
+
+		require.NoError(t, err)
+		require.NotContains(t, string(body), "password")
+		require.NotContains(t, string(body), "t1meMa$heen")
 	})
 }

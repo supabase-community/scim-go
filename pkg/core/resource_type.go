@@ -13,7 +13,7 @@ type ResourceType struct {
 	Name             ResourceTypeName  `json:"name"`
 	Description      string            `json:"description,omitempty"`
 	Endpoint         string            `json:"endpoint"`
-	Schema           SchemaURI         `json:"schema,omitempty"`
+	Schema           SchemaURI         `json:"schema"`
 	SchemaExtensions []SchemaExtension `json:"schemaExtensions,omitempty"`
 	Meta             Meta              `json:"meta,omitzero"`
 }

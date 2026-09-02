@@ -3,15 +3,11 @@ package core
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestGroup(t *testing.T) {
-	created := time.Date(2010, 1, 23, 4, 56, 22, 0, time.UTC)
-	lastModified := time.Date(2011, 05, 13, 4, 42, 34, 0, time.UTC)
-
 	group := Group{
 		Schemas:     []SchemaURI{SchemaGroup},
 		ID:          "e9e30dba-f08f-4109-8486-d5c6a331660a",
@@ -25,8 +21,8 @@ func TestGroup(t *testing.T) {
 		},
 		Meta: Meta{
 			ResourceType: "Group",
-			Created:      created,
-			LastModified: lastModified,
+			Created:      createdAt,
+			LastModified: updatedAt,
 			Location:     "http://example.com/scim/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
 		},
 	}

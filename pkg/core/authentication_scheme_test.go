@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,5 +24,27 @@ func TestAuthenticationScheme(t *testing.T) {
 
 		require.Same(t, scheme, scheme.AsPrimary())
 		assert.True(t, scheme.Primary)
+	})
+
+	t.Run("serializes to JSON correctly", func(t *testing.T) {
+		scheme := NewOAuthBearerToken().AsPrimary()
+
+		body, err := json.Marshal(scheme)
+
+		require.NoError(t, err)
+		require.JSONEq(t, `{
+			"type": "oauthbearertoken",
+			"name": "OAuth Bearer Token",
+			"description": "Authentication scheme using the OAuth Bearer Token Standard",
+			"specUri": "http://www.rfc-editor.org/info/rfc6750",
+			"primary": true
+		}`, string(body))
+	})
+
+	t.Run("omits the primary flag when the scheme is not primary", func(t *testing.T) {
+		body, err := json.Marshal(NewOAuthBearerToken())
+
+		require.NoError(t, err)
+		assert.NotContains(t, string(body), "primary")
 	})
 }
