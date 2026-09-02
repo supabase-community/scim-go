@@ -1,7 +1,5 @@
 package core
 
-import "time"
-
 type Email struct {
 	Value   string `json:"value"`
 	Primary bool   `json:"primary"`
@@ -17,24 +15,20 @@ type Name struct {
 
 // User is the core User resource defined in RFC 7643, Section 4.1.
 type User struct {
-	Schemas    []SchemaURI `json:"schemas"`
-	ID         string      `json:"id"`
-	ExternalID string      `json:"externalId,omitempty"`
-	UserName   string      `json:"userName"`
-	Name       Name        `json:"name,omitzero"`
-	Emails     []Email     `json:"emails,omitempty"`
-	Active     *bool       `json:"active,omitempty"`
-	Meta       Meta        `json:"meta"`
+	Entity
+	ExternalID string  `json:"externalId,omitempty"`
+	UserName   string  `json:"userName"`
+	Name       Name    `json:"name,omitzero"`
+	Emails     []Email `json:"emails,omitempty"`
+	Active     *bool   `json:"active,omitempty"`
 }
 
+// TODO:: Remove this
 func (u *User) ResourceID() string {
 	return u.ID
 }
 
+// TODO:: Remove this
 func (u *User) Location() string {
 	return u.Meta.Location
-}
-
-func (u *User) Timestamps() (created, updated time.Time) {
-	return u.Meta.Created, u.Meta.LastModified
 }

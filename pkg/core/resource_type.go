@@ -1,7 +1,5 @@
 package core
 
-import "time"
-
 // SchemaExtension is a schema that extends a resource type, per RFC 7643, Section 6.
 type SchemaExtension struct {
 	Schema   SchemaURI `json:"schema"`
@@ -44,5 +42,3 @@ func (r ResourceType) Kind() Kind {
 }
 
 func (r *ResourceType) ResourceID() string { return string(r.ID) }
-
-func (r *ResourceType) Timestamps() (created, updated time.Time) { return }

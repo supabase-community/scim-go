@@ -1,7 +1,5 @@
 package core
 
-import "time"
-
 // Schema is the schema definition resource of RFC 7643, Section 7.
 type Schema struct {
 	Schemas     []SchemaURI      `json:"schemas"`
@@ -34,5 +32,3 @@ func (s *Schema) With(attributes ...*Attribute) *Schema {
 }
 
 func (s *Schema) ResourceID() string { return string(s.ID) }
-
-func (s *Schema) Timestamps() (created, updated time.Time) { return }

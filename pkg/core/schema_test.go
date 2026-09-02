@@ -24,15 +24,6 @@ func TestSchema(t *testing.T) {
 			require.Equal(t, KindSchema.Name, schema.Meta.ResourceType)
 			require.Equal(t, baseURL+"/Schemas/urn:ietf:params:scim:schemas:core:2.0:User", schema.Meta.Location)
 		})
-
-		t.Run("carries no timestamps because a schema never changes", func(t *testing.T) {
-			created, updated := schema.Timestamps()
-
-			require.Zero(t, created)
-			require.Zero(t, updated)
-			require.Zero(t, schema.Meta.Created)
-			require.Zero(t, schema.Meta.LastModified)
-		})
 	})
 
 	t.Run("Describe", func(t *testing.T) {

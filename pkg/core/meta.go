@@ -19,8 +19,6 @@ func NewMeta(baseURL string, kind Kind) Meta {
 }
 
 func (m Meta) For(resource Resource) Meta {
-	created, updated := resource.Timestamps()
 	m.Location = Join(m.Location, resource.ResourceID())
-	m.Created, m.LastModified = created.UTC(), updated.UTC()
 	return m
 }

@@ -1,7 +1,5 @@
 package core
 
-import "time"
-
 // Member is one member reference of a Group, per RFC 7643, Section 4.2.
 type Member struct {
 	Value   string           `json:"value,omitempty"`
@@ -12,12 +10,10 @@ type Member struct {
 
 // Group is the core Group resource defined in RFC 7643, Section 4.2.
 type Group struct {
-	Schemas     []SchemaURI `json:"schemas"`
-	ID          string      `json:"id"`
-	ExternalID  string      `json:"externalId,omitempty"`
-	DisplayName string      `json:"displayName"`
-	Members     []Member    `json:"members,omitempty"`
-	Meta        Meta        `json:"meta"`
+	Entity
+	ExternalID  string   `json:"externalId,omitempty"`
+	DisplayName string   `json:"displayName"`
+	Members     []Member `json:"members,omitempty"`
 }
 
 func (g *Group) ResourceID() string {
@@ -26,8 +22,4 @@ func (g *Group) ResourceID() string {
 
 func (g *Group) Location() string {
 	return g.Meta.Location
-}
-
-func (g *Group) Timestamps() (created, updated time.Time) {
-	return g.Meta.Created, g.Meta.LastModified
 }
