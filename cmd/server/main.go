@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -24,7 +23,6 @@ func main() {
 	baseURL := scim.Join(externalURL, scim.BasePath)
 
 	userSchema := NewUserSchema(baseURL)
-	groupSchema := NewGroupSchema(baseURL)
 	userType := &core.ResourceType{
 		Schemas:     []core.SchemaURI{core.SchemaResourceType},
 		ID:          "User",
@@ -38,28 +36,13 @@ func main() {
 		},
 	}
 
-	groupType := &core.ResourceType{
-		Schemas:     []core.SchemaURI{core.SchemaResourceType},
-		ID:          "Group",
-		Name:        "Group",
-		Description: groupSchema.Description,
-		Endpoint:    "/Groups",
-		Schema:      groupSchema.ID,
-		Meta: core.Meta{
-			ResourceType: "Group",
-			Location:     scim.Join(baseURL, "/Groups"),
-		},
-	}
-
 	users := NewMemoryUserRepository(baseURL)
-	groups := NewMemoryGroupRepository(baseURL)
 
 	srv := NewServer(
 		externalURL,
 		users,
-		groups,
-		[]*core.Schema{userSchema, groupSchema},
-		[]*core.ResourceType{userType, groupType},
+		[]*core.Schema{userSchema},
+		[]*core.ResourceType{userType},
 	)
 
 	mux := http.NewServeMux()
@@ -77,12 +60,6 @@ func main() {
 	mux.Handle("POST "+scim.BasePath+"/Users", adapt(srv.CreateUser))
 	mux.Handle("PUT "+scim.BasePath+"/Users/{id}", adapt(srv.ReplaceUser))
 	mux.Handle("DELETE "+scim.BasePath+"/Users/{id}", adapt(srv.DeleteUser))
-
-	mux.Handle("GET "+scim.BasePath+"/Groups", adapt(srv.Groups))
-	mux.Handle("GET "+scim.BasePath+"/Groups/{id}", adapt(srv.GroupByID))
-	mux.Handle("POST "+scim.BasePath+"/Groups", adapt(srv.CreateGroup))
-	mux.Handle("PUT "+scim.BasePath+"/Groups/{id}", adapt(srv.ReplaceGroup))
-	mux.Handle("DELETE "+scim.BasePath+"/Groups/{id}", adapt(srv.DeleteGroup))
 
 	mux.Handle("/", adapt(srv.NotFound))
 
@@ -120,40 +97,6 @@ func decodeUser(r *http.Request) (*core.User, error) {
 		return nil, protocol.ErrInvalidSyntax("request body is not a valid User")
 	}
 	return user, nil
-}
-
-func validateGroup(group *core.Group) *protocol.Error {
-	if group.DisplayName == "" {
-		return protocol.ErrInvalidValue(`"displayName" is required`)
-	}
-	if !slices.Contains(group.Schemas, core.SchemaGroup) {
-		return protocol.ErrInvalidValue(`"schemas" must include the Group schema URN`)
-	}
-	return nil
-}
-
-func decodeGroup(r *http.Request) (*core.Group, error) {
-	body, err := readBody(r)
-	if err != nil {
-		return nil, err
-	}
-
-	group := new(core.Group)
-	if err := json.Unmarshal(body, group); err != nil {
-		return nil, protocol.ErrInvalidSyntax("request body is not a valid Group")
-	}
-	return group, nil
-}
-
-func readBody(r *http.Request) ([]byte, error) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return nil, protocol.ErrTooLarge("the request body is too large")
-		}
-		return nil, protocol.ErrInvalidSyntax("could not read the request body")
-	}
-	return body, nil
 }
 
 type UserRepository struct {
@@ -232,13 +175,11 @@ type Server struct {
 	resourceTypes         []*core.ResourceType
 	schemas               []*core.Schema
 	users                 resourceServer[*core.User]
-	groups                resourceServer[*core.Group]
 }
 
 func NewServer(
 	externalURL string,
 	users scim.Repository[*core.User],
-	groups scim.Repository[*core.Group],
 	schemas []*core.Schema,
 	resourceTypes []*core.ResourceType,
 ) *Server {
@@ -254,9 +195,6 @@ func NewServer(
 		schemas:       schemas,
 		users: resourceServer[*core.User]{
 			limits: limits, repo: users, validate: validateUser, decode: decodeUser,
-		},
-		groups: resourceServer[*core.Group]{
-			limits: limits, repo: groups, validate: validateGroup, decode: decodeGroup,
 		},
 	}
 }
@@ -293,20 +231,6 @@ func (srv *Server) ReplaceUser(w http.ResponseWriter, r *http.Request) error {
 }
 func (srv *Server) DeleteUser(w http.ResponseWriter, r *http.Request) error {
 	return srv.users.delete(w, r)
-}
-
-func (srv *Server) Groups(w http.ResponseWriter, r *http.Request) error { return srv.groups.list(w, r) }
-func (srv *Server) GroupByID(w http.ResponseWriter, r *http.Request) error {
-	return srv.groups.byID(w, r)
-}
-func (srv *Server) CreateGroup(w http.ResponseWriter, r *http.Request) error {
-	return srv.groups.create(w, r)
-}
-func (srv *Server) ReplaceGroup(w http.ResponseWriter, r *http.Request) error {
-	return srv.groups.replace(w, r)
-}
-func (srv *Server) DeleteGroup(w http.ResponseWriter, r *http.Request) error {
-	return srv.groups.delete(w, r)
 }
 
 func (srv *Server) NotFound(w http.ResponseWriter, r *http.Request) error {
@@ -470,99 +394,4 @@ func NewUserSchema(baseURL string) *core.Schema {
 				),
 			core.NewAttribute("active", core.TypeBoolean, ""),
 		)
-}
-
-func NewGroupSchema(baseURL string) *core.Schema {
-	schema := &core.Schema{
-		Schemas: []core.SchemaURI{core.SchemaSchema},
-		ID:      core.SchemaGroup,
-		Name:    "Group",
-		Meta: core.Meta{
-			ResourceType: "Group",
-			Location:     scim.Join(baseURL, "/Groups"),
-		},
-	}
-	return schema.
-		Describe("Group").
-		With(
-			core.NewAttribute("displayName", core.TypeString, "A human-readable name for the Group.").
-				AsRequired(),
-			core.NewAttribute("members", core.TypeComplex, "A list of members of the Group.").
-				AsMultiValued().
-				With(
-					core.NewAttribute("value", core.TypeString, "The identifier of a member of this Group.").AsImmutable(),
-					core.NewAttribute("$ref", core.TypeReference, "The URI of the User or Group that is a member of this Group.").AsImmutable().Referencing("User", "Group"),
-					core.NewAttribute("type", core.TypeString, "A label indicating the type of resource, e.g. 'User' or 'Group'.").AsImmutable().Suggesting("User", "Group"),
-					core.NewAttribute("display", core.TypeString, "A human-readable name for the member.").AsImmutable(),
-				),
-		)
-}
-
-type memoryGroupRepository struct {
-	mu      sync.RWMutex
-	baseURL string
-	items   map[string]*core.Group
-}
-
-func NewMemoryGroupRepository(baseURL string) scim.Repository[*core.Group] {
-	return &memoryGroupRepository{baseURL: baseURL, items: make(map[string]*core.Group)}
-}
-
-func (r *memoryGroupRepository) Get(ctx context.Context, id string) (*core.Group, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	item, ok := r.items[id]
-	if !ok {
-		return nil, ErrNotFound
-	}
-	return item, nil
-}
-
-func (r *memoryGroupRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.Group, int, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	all := make([]*core.Group, 0, len(r.items))
-	for _, item := range r.items {
-		all = append(all, item)
-	}
-	slices.SortFunc(all, func(a, b *core.Group) int { return strings.Compare(a.ID, b.ID) })
-
-	total := len(all)
-	start := min(query.Offset(), total)
-	end := min(start+query.Count, total)
-	return all[start:end], total, nil
-}
-
-func (r *memoryGroupRepository) Create(ctx context.Context, group *core.Group) (*core.Group, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	group.ID = uuid.Must(uuid.NewV4()).String()
-	r.items[group.ID] = group
-	return group, nil
-}
-
-func (r *memoryGroupRepository) Replace(ctx context.Context, id string, group *core.Group) (*core.Group, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, ok := r.items[id]; !ok {
-		return nil, ErrNotFound
-	}
-	group.ID = id
-	r.items[id] = group
-	return group, nil
-}
-
-func (r *memoryGroupRepository) Delete(ctx context.Context, id string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, ok := r.items[id]; !ok {
-		return ErrNotFound
-	}
-	delete(r.items, id)
-	return nil
 }
