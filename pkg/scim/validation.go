@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"slices"
 
-	"mokhan.ca/go/scim/pkg/core"
-	"mokhan.ca/go/scim/pkg/protocol"
+	"github.com/supabase-community/go-scim/pkg/core"
+	"github.com/supabase-community/go-scim/pkg/protocol"
 )
 
 func validateUser(user *core.User) *protocol.Error {

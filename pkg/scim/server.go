@@ -3,8 +3,8 @@ package scim
 import (
 	"net/http"
 
-	"mokhan.ca/go/scim/pkg/core"
-	"mokhan.ca/go/scim/pkg/protocol"
+	"github.com/supabase-community/go-scim/pkg/core"
+	"github.com/supabase-community/go-scim/pkg/protocol"
 )
 
 // BasePath is the mount point of the SCIM service, per RFC 7644, Section 3.2.

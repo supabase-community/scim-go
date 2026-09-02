@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"mokhan.ca/go/scim/pkg/core"
-	"mokhan.ca/go/scim/pkg/protocol"
+	"github.com/supabase-community/go-scim/pkg/core"
+	"github.com/supabase-community/go-scim/pkg/protocol"
 )
 
 type fakeUserRepo struct {

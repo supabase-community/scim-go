@@ -1,6 +1,6 @@
 package server
 
-import "mokhan.ca/go/scim/pkg/core"
+import "github.com/supabase-community/go-scim/pkg/core"
 
 // NewUserSchema builds the User schema document, per RFC 7643, Section 4.1.
 func NewUserSchema(baseURL string) *core.Schema {

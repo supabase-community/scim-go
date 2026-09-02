@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"mokhan.ca/go/scim/pkg/core"
+	"github.com/supabase-community/go-scim/pkg/core"
 )
 
 func TestNewError(t *testing.T) {

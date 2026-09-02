@@ -1,4 +1,4 @@
-module mokhan.ca/go/scim
+module github.com/supabase-community/go-scim
 
 go 1.27.0
 

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"mokhan.ca/go/scim/pkg/core"
+	"github.com/supabase-community/go-scim/pkg/core"
 )
 
 // ErrorType is a detail error keyword from RFC 7644, Table 9.

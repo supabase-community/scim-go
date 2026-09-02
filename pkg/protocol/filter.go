@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"mokhan.ca/go/scim/pkg/core"
+	"github.com/supabase-community/go-scim/pkg/core"
 )
 
 // FilterOp is a comparison or presence operator, per RFC 7644, Section 3.4.2.2.

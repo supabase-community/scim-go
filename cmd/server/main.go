@@ -4,9 +4,9 @@ import (
 	"log"
 	"net/http"
 
-	"mokhan.ca/go/scim/internal/server"
-	"mokhan.ca/go/scim/pkg/core"
-	"mokhan.ca/go/scim/pkg/scim"
+	"github.com/supabase-community/go-scim/internal/server"
+	"github.com/supabase-community/go-scim/pkg/core"
+	"github.com/supabase-community/go-scim/pkg/scim"
 )
 
 func main() {

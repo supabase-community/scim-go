@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"mokhan.ca/go/scim/pkg/core"
-	"mokhan.ca/go/scim/pkg/protocol"
+	"github.com/supabase-community/go-scim/pkg/core"
+	"github.com/supabase-community/go-scim/pkg/protocol"
 )
 
 type resourceServer[T core.Resource] struct {

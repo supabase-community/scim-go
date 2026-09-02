@@ -7,9 +7,9 @@ import (
 	"sync"
 
 	"github.com/gofrs/uuid"
-	"mokhan.ca/go/scim/pkg/core"
-	"mokhan.ca/go/scim/pkg/protocol"
-	"mokhan.ca/go/scim/pkg/scim"
+	"github.com/supabase-community/go-scim/pkg/core"
+	"github.com/supabase-community/go-scim/pkg/protocol"
+	"github.com/supabase-community/go-scim/pkg/scim"
 )
 
 type memoryUserRepository struct {
