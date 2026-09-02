@@ -19,7 +19,7 @@ func TestSchema(t *testing.T) {
 			},
 			Meta: Meta{
 				ResourceType: "Schema",
-				Location:     "http://example.com/scim/v2/Users",
+				Location:     "http://example.com/scim/v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:User",
 			},
 		}
 

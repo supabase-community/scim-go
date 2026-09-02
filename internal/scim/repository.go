@@ -1,4 +1,3 @@
-// Package scim implements the SCIM 2.0 protocol defined in RFC 7644.
 package scim
 
 import (

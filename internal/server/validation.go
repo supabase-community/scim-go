@@ -1,4 +1,4 @@
-package scim
+package server
 
 import (
 	"encoding/json"

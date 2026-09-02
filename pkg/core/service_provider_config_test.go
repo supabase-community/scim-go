@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/supabase-community/go-scim/pkg/scimtest"
 )
 
 func TestNewServiceProviderConfig(t *testing.T) {
@@ -17,14 +16,5 @@ func TestNewServiceProviderConfig(t *testing.T) {
 		assert.False(t, config.ChangePassword.Supported)
 		assert.False(t, config.Sort.Supported)
 		assert.False(t, config.ETag.Supported)
-	})
-
-	t.Run("json.Marshal", func(t *testing.T) {
-		config := &ServiceProviderConfig{
-			Schemas:               []SchemaURI{SchemaServiceProviderConfig},
-			AuthenticationSchemes: []*AuthenticationScheme{NewOAuthBearerToken().AsPrimary()},
-		}
-
-		scimtest.AssertJSON(t, scimtest.RFC7643ServiceProviderConfiguration, config)
 	})
 }

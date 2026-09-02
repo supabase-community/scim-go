@@ -18,11 +18,3 @@ func NewResourceType(baseURL string, kind Kind, schema *core.Schema) *core.Resou
 
 	return resourceType
 }
-
-// func (r core.ResourceType) Kind() Kind {
-// 	return Kind{
-// 		Name:     r.Name,
-// 		Schema:   r.Schema,
-// 		Endpoint: r.Endpoint,
-// 	}
-// }

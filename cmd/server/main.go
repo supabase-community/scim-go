@@ -21,7 +21,7 @@ func main() {
 	users := server.NewMemoryUserRepository(baseURL)
 	groups := server.NewMemoryGroupRepository(baseURL)
 
-	srv := scim.NewServer(
+	srv := server.NewServer(
 		externalURL,
 		users,
 		groups,

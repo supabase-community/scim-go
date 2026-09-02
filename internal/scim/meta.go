@@ -8,8 +8,3 @@ func NewMeta(baseURL string, kind Kind) core.Meta {
 		Location:     kind.Location(baseURL),
 	}
 }
-
-// func (m core.Meta) For(resource core.Resource) core.Meta {
-// 	m.Location = core.Join(m.Location, resource.ResourceID())
-// 	return m
-// }
