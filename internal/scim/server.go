@@ -80,6 +80,15 @@ func (r *UserRepository) List(ctx context.Context, query *protocol.SearchRequest
 	for _, item := range r.items {
 		all = append(all, item)
 	}
+
+	if query.Filter != "" {
+		matched, err := filterResources(all, query.Filter)
+		if err != nil {
+			return nil, 0, err
+		}
+		all = matched
+	}
+
 	slices.SortFunc(all, func(a, b *core.User) int { return strings.Compare(a.ID, b.ID) })
 
 	total := len(all)
