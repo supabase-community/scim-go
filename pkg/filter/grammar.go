@@ -62,7 +62,7 @@ func (g *Grammar) Parse(text string) (*Node, error) {
 	if err != nil {
 		return nil, &ParseError{Input: text, Position: ctx.Position()}
 	}
-	peg.Space()(ctx)
+	_, _ = peg.Space()(ctx)
 	if ctx.Position() != len(text) {
 		return nil, &ParseError{Input: text, Position: ctx.Position()}
 	}
@@ -236,12 +236,12 @@ func binExpr(left, op peg.Parser, name string, right peg.Parser) peg.Parser {
 			return nil, err
 		}
 		start := c.Position()
-		peg.Space()(c)
+		_, _ = peg.Space()(c)
 		if _, err := op(c); err != nil {
 			c.Seek(start)
 			return l, nil
 		}
-		peg.Space()(c)
+		_, _ = peg.Space()(c)
 		r, err := right(c)
 		if err != nil {
 			c.Seek(start)

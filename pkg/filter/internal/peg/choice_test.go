@@ -72,7 +72,7 @@ func TestChoiceNoMatch(t *testing.T) {
 		{stream: "abc"},
 	}
 	for _, expected := range tt {
-		t.Run(fmt.Sprintf("%s", expected.stream), func(t *testing.T) {
+		t.Run(expected.stream, func(t *testing.T) {
 			ctx := &Context{stream: expected.stream}
 			result, err := atom(ctx)
 
