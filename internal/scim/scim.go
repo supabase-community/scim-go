@@ -3,7 +3,7 @@ package scim
 import (
 	"strings"
 
-	"github.com/supabase-community/go-scim/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 // BasePath is the mount point of the SCIM service, per RFC 7644, Section 3.2.

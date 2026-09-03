@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/supabase-community/go-scim/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 // SortOrder is the direction a sort runs in, per RFC 7644, Section 3.4.2.3.

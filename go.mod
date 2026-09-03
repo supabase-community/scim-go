@@ -1,4 +1,4 @@
-module github.com/supabase-community/go-scim
+module github.com/supabase-community/scim-go
 
 go 1.27
 

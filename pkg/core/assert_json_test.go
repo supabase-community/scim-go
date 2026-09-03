@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/supabase-community/go-scim/pkg/scimtest"
+	"github.com/supabase-community/scim-go/pkg/scimtest"
 )
 
 var (

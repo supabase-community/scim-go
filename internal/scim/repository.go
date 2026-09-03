@@ -3,8 +3,8 @@ package scim
 import (
 	"context"
 
-	"github.com/supabase-community/go-scim/pkg/core"
-	"github.com/supabase-community/go-scim/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
 type Repository[T core.Resource] interface {

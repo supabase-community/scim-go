@@ -1,6 +1,6 @@
 package protocol
 
-import "github.com/supabase-community/go-scim/pkg/core"
+import "github.com/supabase-community/scim-go/pkg/core"
 
 // ListResponse is the query response of RFC 7644, Section 3.4.2.
 type ListResponse[T any] struct {

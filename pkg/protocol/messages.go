@@ -1,6 +1,6 @@
 package protocol
 
-import "github.com/supabase-community/go-scim/pkg/core"
+import "github.com/supabase-community/scim-go/pkg/core"
 
 const (
 	messagesRoot = "urn:ietf:params:scim:api:messages:2.0"

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/supabase-community/go-scim/pkg/scimtest"
+	"github.com/supabase-community/scim-go/pkg/scimtest"
 )
 
 func TestRFC7643(t *testing.T) {

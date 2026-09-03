@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/supabase-community/go-scim/internal/scim"
-	"github.com/supabase-community/go-scim/pkg/core"
+	"github.com/supabase-community/scim-go/internal/scim"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 func main() {
