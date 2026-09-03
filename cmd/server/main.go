@@ -4,6 +4,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/supabase-community/go-scim/internal/scim"
 	"github.com/supabase-community/go-scim/pkg/core"
@@ -55,8 +56,17 @@ func main() {
 	mux.Handle("/", adapt(srv.NotFound))
 
 	const addr = ":8080"
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
 	log.Printf("scim: listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(httpServer.ListenAndServe())
 }
 
 func adapt(h func(w http.ResponseWriter, r *http.Request) error) http.Handler {
