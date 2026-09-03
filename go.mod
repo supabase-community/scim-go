@@ -1,6 +1,6 @@
 module github.com/supabase-community/go-scim
 
-go 1.27.1
+go 1.27
 
 require (
 	github.com/gofrs/uuid v4.4.0+incompatible
