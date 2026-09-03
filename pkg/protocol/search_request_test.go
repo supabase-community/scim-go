@@ -61,6 +61,11 @@ func TestParseSearchRequest(t *testing.T) {
 			want:  SearchRequest{StartIndex: 1, Count: 0},
 		},
 		{
+			name:  "leaves the order empty when attribute is empty",
+			query: "sortBy=",
+			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount, SortBy: "", SortOrder: ""},
+		},
+		{
 			name:  "sorts ascending by default once an attribute is named",
 			query: "sortBy=userName",
 			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount, SortBy: "userName", SortOrder: SortAscending},
