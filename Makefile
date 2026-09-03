@@ -3,6 +3,8 @@
 BINARY := scim-server
 CMD := ./cmd/server
 COVERAGE := coverage.out
+COVER_MIN := 80
+COVER_EXCLUDE := /pkg/scimtest/|/internal/|/cmd/
 
 .PHONY: clean
 clean:
@@ -23,7 +25,15 @@ test:
 .PHONY: cover
 cover:
 	go test -race -coverprofile=$(COVERAGE) ./...
+	grep -Ev '$(COVER_EXCLUDE)' $(COVERAGE) > $(COVERAGE).tmp && mv $(COVERAGE).tmp $(COVERAGE)
 	go tool cover -func=$(COVERAGE)
+
+.PHONY: cover-check
+cover-check: cover
+	@go tool cover -func=$(COVERAGE) | awk -v min=$(COVER_MIN) '/^total:/ { \
+	  gsub(/%/, "", $$3); \
+	  if ($$3 + 0 < min) { printf "coverage %.1f%% is below minimum %d%%\n", $$3, min; exit 1 } \
+	}'
 
 .PHONY: fmt
 fmt:
@@ -46,8 +56,8 @@ vulncheck:
 tidy:
 	go mod tidy
 
-.PHONY: check
-check: tidy fmt lint vulncheck test
+.PHONY: ci
+ci: tidy fmt lint vulncheck cover-check
 
 .PHONY: help
 help: ## List available targets
