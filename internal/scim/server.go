@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"uuid"
 
-	"github.com/gofrs/uuid"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
@@ -92,7 +92,7 @@ func (r *UserRepository) Create(ctx context.Context, user *core.User) (*core.Use
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	user.ID = uuid.Must(uuid.NewV4()).String()
+	user.ID = uuid.NewV7().String()
 	r.items[user.ID] = user
 	return user, nil
 }
