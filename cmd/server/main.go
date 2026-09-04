@@ -28,32 +28,15 @@ func main() {
 		},
 	}
 
-	users := scim.NewMemoryUserRepository(baseURL)
-
 	srv := scim.NewServer(
 		externalURL,
-		users,
+		scim.NewMemoryUserRepository(baseURL),
 		[]*core.Schema{userSchema},
 		[]*core.ResourceType{userType},
 	)
 
 	mux := http.NewServeMux()
-
-	mux.Handle("GET "+scim.BasePath+"/ServiceProviderConfig", adapt(srv.ServiceProviderConfig))
-
-	mux.Handle("GET "+scim.BasePath+"/ResourceTypes", adapt(srv.ResourceTypes))
-	mux.Handle("GET "+scim.BasePath+"/ResourceTypes/{id}", adapt(srv.ResourceTypeByID))
-
-	mux.Handle("GET "+scim.BasePath+"/Schemas", adapt(srv.Schemas))
-	mux.Handle("GET "+scim.BasePath+"/Schemas/{id}", adapt(srv.SchemaByID))
-
-	mux.Handle("GET "+scim.BasePath+"/Users", adapt(srv.Users))
-	mux.Handle("GET "+scim.BasePath+"/Users/{id}", adapt(srv.UserByID))
-	mux.Handle("POST "+scim.BasePath+"/Users", adapt(srv.CreateUser))
-	mux.Handle("PUT "+scim.BasePath+"/Users/{id}", adapt(srv.ReplaceUser))
-	mux.Handle("DELETE "+scim.BasePath+"/Users/{id}", adapt(srv.DeleteUser))
-
-	mux.Handle("/", adapt(srv.NotFound))
+	srv.RegisterRoutes(mux)
 
 	const addr = ":8080"
 	httpServer := &http.Server{
@@ -67,12 +50,4 @@ func main() {
 
 	log.Printf("scim: listening on %s", addr)
 	log.Fatal(httpServer.ListenAndServe())
-}
-
-func adapt(h func(w http.ResponseWriter, r *http.Request) error) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := h(w, r); err != nil {
-			log.Printf("scim: %v", err)
-		}
-	})
 }
