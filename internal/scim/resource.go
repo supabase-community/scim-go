@@ -31,8 +31,8 @@ func newResourceServer[T core.Resource](
 	repo Repository[T],
 	validate func(T) *protocol.Error,
 	decode func(*http.Request) (T, error),
-) resourceServer[T] {
-	return resourceServer[T]{
+) *resourceServer[T] {
+	return &resourceServer[T]{
 		limits:   limits,
 		repo:     repo,
 		validate: validate,

@@ -34,7 +34,7 @@ type Server struct {
 	serviceProviderConfig *core.ServiceProviderConfig
 	resourceTypes         []*core.ResourceType
 	schemas               []*core.Schema
-	users                 resourceServer[*core.User]
+	users                 *resourceServer[*core.User]
 }
 
 func NewServer(
