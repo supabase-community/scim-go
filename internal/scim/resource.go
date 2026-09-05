@@ -26,12 +26,17 @@ type resourceServer[T core.Resource] struct {
 	decode   func(*http.Request) (T, error)
 }
 
-func newResourceServer[T core.Resource](limits, repo, validate, decode) *resourceServer {
-	return resourceServer[core.Resource]{
+func newResourceServer[T core.Resource](
+	limits protocol.Limits,
+	repo Repository[T],
+	validate func(T) *protocol.Error,
+	decode func(*http.Request) (T, error),
+) resourceServer[T] {
+	return resourceServer[T]{
 		limits:   limits,
 		repo:     repo,
-		validate: validateUser,
-		decode:   decodeUser,
+		validate: validate,
+		decode:   decode,
 	}
 }
 

@@ -53,9 +53,7 @@ func NewServer(
 		).Sorting(),
 		resourceTypes: resourceTypes,
 		schemas:       schemas,
-		users: resourceServer[*core.User]{
-			limits: limits, repo: users, validate: validateUser, decode: decodeUser,
-		},
+		users: newResourceServer(limits, users, validateUser, decodeUser),
 	}
 }
 
