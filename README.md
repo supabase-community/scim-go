@@ -2,7 +2,8 @@
 
 This package implements the SCIM IETF [RFC-7643][1] and [RFC-7644][2] specifications.
 
-> [!WARNING] Pre-1.0. The public API may still change between minor versions.
+> [!WARNING] 
+> Pre-1.0. The public API may still change between minor versions.
 
 ## Install
 
