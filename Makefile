@@ -1,22 +1,12 @@
 .DEFAULT_GOAL := build
 
-BINARY := scim-server
-CMD := ./cmd/server
 COVERAGE := coverage.out
 COVER_MIN := 80
-COVER_EXCLUDE := /pkg/scimtest/|/internal/|/cmd/
+COVER_EXCLUDE := /pkg/scimtest/|/internal/
 
 .PHONY: clean
 clean:
-	rm -rf bin $(COVERAGE)
-
-.PHONY: build
-build:
-	go build -o bin/$(BINARY) $(CMD)
-
-.PHONY: run
-run:
-	go run $(CMD)
+	rm -rf $(COVERAGE)
 
 .PHONY: test
 test:
