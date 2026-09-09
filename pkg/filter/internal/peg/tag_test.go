@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTag(t *testing.T) {
@@ -19,7 +20,7 @@ func TestTag(t *testing.T) {
 		ctx := NewContext(`userName eq "bjensen"`)
 		result, err := atom(ctx)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 21, ctx.position)
 		assert.Equal(t, Token{"filter": []ASTNode{"userName", "eq", `"bjensen"`}}, result)
 	})
@@ -29,7 +30,7 @@ func TestTag(t *testing.T) {
 		ctx := &Context{stream: `userName eq "bjensen"`}
 		result, err := atom(ctx)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, result)
 		assert.Equal(t, 0, ctx.position)
 	})

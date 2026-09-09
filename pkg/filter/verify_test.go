@@ -25,7 +25,7 @@ func TestConcurrentParse(t *testing.T) {
 		`not (a eq "1" or b pr) and urn:ietf:params:scim:schemas:core:2.0:User:x eq "q"`,
 	}
 	var wg sync.WaitGroup
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

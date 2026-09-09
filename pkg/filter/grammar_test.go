@@ -176,7 +176,7 @@ func TestGrammarParensAndNot(t *testing.T) {
 	t.Run("not without parens is rejected", func(t *testing.T) {
 		_, err := g.Parse(`not userName pr`)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -189,7 +189,7 @@ func TestGrammarValuePath(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, node.HasPath())
 		assert.Equal(t, "emails", node.Path())
-		assert.Equal(t, "", node.SubAttribute())
+		assert.Empty(t, node.SubAttribute())
 		assert.Equal(t, "type", node.ValueFilter().Attribute())
 		assert.Equal(t, "work", node.ValueFilter().Value())
 	})
@@ -217,7 +217,7 @@ func TestGrammarRejectsTrailingGarbage(t *testing.T) {
 	g := &Grammar{}
 	_, err := g.Parse(`userName eq "bjensen" garbage`)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestParseRejectsOversizedInput(t *testing.T) {
@@ -309,13 +309,13 @@ func TestGrammarJSONLiteralsAreCaseSensitive(t *testing.T) {
 	for _, good := range []string{`active eq true`, `active eq false`, `nickName eq null`} {
 		t.Run("accepts "+good, func(t *testing.T) {
 			_, err := g.Parse(good)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		})
 	}
 	for _, bad := range []string{`active eq TRUE`, `active eq False`, `nickName eq Null`} {
 		t.Run("rejects "+bad, func(t *testing.T) {
 			_, err := g.Parse(bad)
-			assert.Error(t, err)
+			require.Error(t, err)
 		})
 	}
 }
@@ -357,7 +357,7 @@ func TestGrammarRejectsMalformed(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := g.Parse(tc.input)
-			assert.ErrorIs(t, err, ErrInvalidFilter)
+			require.ErrorIs(t, err, ErrInvalidFilter)
 		})
 	}
 }
@@ -368,7 +368,7 @@ func TestGrammarValueFilterRejectsNestedValuePath(t *testing.T) {
 
 	t.Run("nested value path is rejected", func(t *testing.T) {
 		_, err := g.Parse(`emails[members[type eq "work"]]`)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("not-group inside brackets is accepted", func(t *testing.T) {

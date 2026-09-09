@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSequence(t *testing.T) {
@@ -19,7 +20,7 @@ func TestSequence(t *testing.T) {
 		ctx := NewContext(`userName eq "bjensen"`)
 		result, err := atom(ctx)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 21, ctx.position)
 		assert.Equal(t, []ASTNode{"userName", "eq", `"bjensen"`}, result)
 	})
@@ -33,7 +34,7 @@ func TestSequence(t *testing.T) {
 		ctx := &Context{stream: `userName eq "bjensen"`}
 		result, err := atom(ctx)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, result)
 		assert.Equal(t, 0, ctx.position)
 	})
@@ -47,7 +48,7 @@ func TestSequence(t *testing.T) {
 		ctx := &Context{stream: "a b"}
 		result, err := atom(ctx)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 3, ctx.position)
 		assert.Equal(t, []ASTNode{"a", "b"}, result)
 	})
@@ -61,7 +62,7 @@ func TestSequence(t *testing.T) {
 		ctx := NewContext("x,y")
 		result, err := atom(ctx)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, Token{"a": "x", "b": "y"}, result)
 	})
 
@@ -76,7 +77,7 @@ func TestSequence(t *testing.T) {
 		ctx := NewContext("( userName )")
 		result, err := atom(ctx)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, Token{"attribute": "userName"}, result)
 	})
 }

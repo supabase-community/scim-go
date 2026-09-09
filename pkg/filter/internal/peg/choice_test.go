@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestChoice(t *testing.T) {
@@ -76,7 +77,7 @@ func TestChoiceNoMatch(t *testing.T) {
 			ctx := &Context{stream: expected.stream}
 			result, err := atom(ctx)
 
-			assert.Error(t, err)
+			require.Error(t, err)
 			assert.Nil(t, result)
 			assert.Equal(t, 0, ctx.position)
 		})

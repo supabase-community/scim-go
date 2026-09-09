@@ -86,7 +86,7 @@ func TestVisitDispatch(t *testing.T) {
 	t.Run("nil node is an error, not a panic", func(t *testing.T) {
 		_, err := Visit[int](countingVisitor{}, nil)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 

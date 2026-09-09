@@ -15,16 +15,14 @@ var (
 func TestAssertJSON(t *testing.T) {
 	t.Run("builds the minimal User of Section 8.1", func(t *testing.T) {
 		user := &User{
-			CommonAttributes: CommonAttributes{
-				Schemas: []SchemaURI{SchemaUser},
-				ID:      "2819c223-7f76-453a-919d-413861904646",
-				Meta: Meta{
-					ResourceType: "User",
-					Created:      createdAt,
-					LastModified: updatedAt,
-					Version:      `W/"3694e05e9dff590"`,
-					Location:     "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
-				},
+			Schemas: []SchemaURI{SchemaUser},
+			ID:      "2819c223-7f76-453a-919d-413861904646",
+			Meta: Meta{
+				ResourceType: "User",
+				Created:      createdAt,
+				LastModified: updatedAt,
+				Version:      `W/"3694e05e9dff590"`,
+				Location:     "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
 			},
 			UserName: "bjensen@example.com",
 		}
@@ -79,16 +77,14 @@ func TestAssertJSON(t *testing.T) {
 
 	t.Run("builds the Group of Section 8.4", func(t *testing.T) {
 		group := &Group{
-			CommonAttributes: CommonAttributes{
-				Schemas: []SchemaURI{SchemaGroup},
-				ID:      "e9e30dba-f08f-4109-8486-d5c6a331660a",
-				Meta: Meta{
-					ResourceType: "Group",
-					Created:      createdAt,
-					LastModified: updatedAt,
-					Version:      `W/"3694e05e9dff592"`,
-					Location:     "https://example.com/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
-				},
+			Schemas: []SchemaURI{SchemaGroup},
+			ID:      "e9e30dba-f08f-4109-8486-d5c6a331660a",
+			Meta: Meta{
+				ResourceType: "Group",
+				Created:      createdAt,
+				LastModified: updatedAt,
+				Version:      `W/"3694e05e9dff592"`,
+				Location:     "https://example.com/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
 			},
 			DisplayName: "Tour Guides",
 			Members: []Member{
@@ -163,16 +159,14 @@ func TestAssertJSON(t *testing.T) {
 
 func fullUser() *User {
 	return &User{
-		CommonAttributes: CommonAttributes{
-			Schemas: []SchemaURI{SchemaUser},
-			ID:      "2819c223-7f76-453a-919d-413861904646",
-			Meta: Meta{
-				ResourceType: "User",
-				Created:      createdAt,
-				LastModified: updatedAt,
-				Version:      `W/"a330bc54f0671c9"`,
-				Location:     "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
-			},
+		Schemas: []SchemaURI{SchemaUser},
+		ID:      "2819c223-7f76-453a-919d-413861904646",
+		Meta: Meta{
+			ResourceType: "User",
+			Created:      createdAt,
+			LastModified: updatedAt,
+			Version:      `W/"a330bc54f0671c9"`,
+			Location:     "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
 		},
 		ExternalID: "701984",
 		UserName:   "bjensen@example.com",

@@ -30,7 +30,7 @@ func TestSpace(t *testing.T) {
 
 			require.Nil(t, item)
 			assert.Equal(t, expected.position, ctx.position)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		})
 	}
 }

@@ -3,4 +3,48 @@ version: "2"
 linters:
   default: standard
   enable:
+    - dupl
+    - errname
+    - errorlint
+    - funlen
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
     - gosec
+    - modernize
+    - musttag
+    - nestif
+    - revive
+    - testifylint
+  settings:
+    dupl:
+      threshold: 150
+    funlen:
+      lines: 60
+      statements: 40
+      ignore-comments: true
+    gocognit:
+      min-complexity: 15
+    gocyclo:
+      min-complexity: 15
+    nestif:
+      min-complexity: 4
+    revive:
+      rules:
+        - name: argument-limit
+          arguments: [4]
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - dupl
+          - funlen
+          - goconst
+          - revive
+      - linters:
+          - revive
+        text: "should have comment or be unexported"
+      - linters:
+          - revive
+        text: "comment on exported .* should be of the form"

@@ -66,7 +66,7 @@ func TestNode(t *testing.T) {
 		valueFilter := peg.Token{"attribute": "type", "operator": "eq", "value": "work"}
 		n := newNode(peg.Token{"path": "emails", "value_filter": valueFilter})
 
-		assert.Equal(t, "", n.SubAttribute())
+		assert.Empty(t, n.SubAttribute())
 	})
 
 	t.Run("newNode returns nil for a non-Token value", func(t *testing.T) {

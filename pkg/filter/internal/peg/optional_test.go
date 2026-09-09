@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOptional(t *testing.T) {
@@ -12,7 +13,7 @@ func TestOptional(t *testing.T) {
 		ctx := NewContext("foobar")
 		result, err := atom(ctx)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "foo", result)
 		assert.Equal(t, 3, ctx.position)
 	})
@@ -22,7 +23,7 @@ func TestOptional(t *testing.T) {
 		ctx := NewContext("barfoo")
 		result, err := atom(ctx)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, result)
 		assert.Equal(t, 0, ctx.position)
 	})
@@ -32,7 +33,7 @@ func TestOptional(t *testing.T) {
 		ctx := NewContext("ac")
 		result, err := atom(ctx)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []ASTNode{"a", "c"}, result)
 	})
 }

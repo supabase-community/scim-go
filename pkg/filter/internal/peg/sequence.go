@@ -1,5 +1,7 @@
 package peg
 
+import "maps"
+
 func Sequence(parslets ...Parser) Parser {
 	return func(c *Context) (ASTNode, error) {
 		start := c.position
@@ -14,22 +16,24 @@ func Sequence(parslets ...Parser) Parser {
 				results = append(results, val)
 			}
 		}
-		var merged Token
-		for _, r := range results {
-			token, ok := r.(Token)
-			if !ok {
-				continue
-			}
-			if merged == nil {
-				merged = Token{}
-			}
-			for k, v := range token {
-				merged[k] = v
-			}
+		if merged := mergeTokens(results); merged != nil {
+			return merged, nil
+		}
+		return results, nil
+	}
+}
+
+func mergeTokens(results []ASTNode) Token {
+	var merged Token
+	for _, r := range results {
+		token, ok := r.(Token)
+		if !ok {
+			continue
 		}
 		if merged == nil {
-			return results, nil
+			merged = Token{}
 		}
-		return merged, nil
+		maps.Copy(merged, token)
 	}
+	return merged
 }
