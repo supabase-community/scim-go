@@ -21,6 +21,7 @@ const (
 	TypeDecimal   AttributeType = "decimal"
 	TypeInteger   AttributeType = "integer"
 	TypeDateTime  AttributeType = "dateTime"
+	TypeBinary    AttributeType = "binary"
 	TypeReference AttributeType = "reference"
 	TypeComplex   AttributeType = "complex"
 )
