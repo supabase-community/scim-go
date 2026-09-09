@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,4 +37,8 @@ func TestFilterConformance(t *testing.T) {
 		_, err := Parse(f)
 		require.ErrorIs(t, err, ErrInvalidFilter, f)
 	}
+
+	long := `userName eq "` + strings.Repeat("a", DefaultGrammar.MaxInputBytes) + `"`
+	_, err := Parse(long)
+	require.ErrorIs(t, err, ErrInputTooLarge, long)
 }
