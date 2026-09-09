@@ -19,6 +19,7 @@ func FuzzParse(f *testing.F) {
 		``,
 		`(((`,
 		`userName EQ "x" AND active PR`,
+		`name..familyName`,
 	}
 	for _, s := range seeds {
 		f.Add(s)
