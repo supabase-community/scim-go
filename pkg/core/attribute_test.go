@@ -183,6 +183,18 @@ func TestAttribute(t *testing.T) {
 		)
 		assert.Nil(t, emails.SubAttribute("missing"))
 	})
+
+	t.Run("sets mutability to immutable", func(t *testing.T) {
+		attribute := NewAttribute("id", TypeString, "")
+		require.Same(t, attribute, attribute.AsImmutable())
+		assert.Equal(t, MutabilityImmutable, attribute.Mutability)
+	})
+
+	t.Run("sets mutability to writeOnly", func(t *testing.T) {
+		attribute := NewAttribute("password", TypeString, "")
+		require.Same(t, attribute, attribute.AsWriteOnly())
+		assert.Equal(t, MutabilityWriteOnly, attribute.Mutability)
+	})
 }
 
 func TestAttributeCoerce(t *testing.T) {
@@ -271,6 +283,21 @@ func TestAttributeCoerce(t *testing.T) {
 
 	t.Run("rejects a scalar compared to a complex attribute", func(t *testing.T) {
 		_, ok := NewAttribute("name", TypeComplex, "").Coerce("mo")
+		require.False(t, ok)
+	})
+
+	t.Run("rejects a non-string value for a binary attribute", func(t *testing.T) {
+		_, ok := NewAttribute("cert", TypeBinary, "").Coerce(123)
+		require.False(t, ok)
+	})
+
+	t.Run("rejects a non-numeric value for a decimal attribute", func(t *testing.T) {
+		_, ok := NewAttribute("score", TypeDecimal, "").Coerce("high")
+		require.False(t, ok)
+	})
+
+	t.Run("rejects a non-numeric value for an integer attribute", func(t *testing.T) {
+		_, ok := NewAttribute("count", TypeInteger, "").Coerce("many")
 		require.False(t, ok)
 	})
 }

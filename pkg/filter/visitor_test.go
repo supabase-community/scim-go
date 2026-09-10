@@ -10,8 +10,15 @@ import (
 func TestStringifyVisitorRoundTrip(t *testing.T) {
 	tt := []string{
 		`userName eq "bjensen"`,
+		`userName ne "bjensen"`,
+		`userName co "jen"`,
+		`userName sw "bj"`,
+		`userName ew "sen"`,
 		`userName pr`,
 		`age gt 21`,
+		`age ge 21`,
+		`age lt 21`,
+		`age le 21`,
 		`active eq true`,
 		`nickName eq null`,
 		`userName eq "bjensen" and active eq true`,

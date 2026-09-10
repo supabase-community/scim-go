@@ -108,6 +108,56 @@ func TestFilter(t *testing.T) {
 		}
 	})
 
+	t.Run("renders ne, co, sw, ew comparisons", func(t *testing.T) {
+		cases := map[string]string{
+			`userName ne "bob"`: "username <> bob",
+			`userName co "ob"`:  "username co ob",
+			`userName sw "bo"`:  "username sw bo",
+			`userName ew "ob"`:  "username ew ob",
+		}
+		for text, want := range cases {
+			out, err := Filter[string](schemas, text, sqlEvaluator{})
+			require.NoError(t, err, text)
+			assert.Equal(t, want, out)
+		}
+	})
+
+	// RFC 7644 Section 3.4.2.2: co, sw, ew apply only to string or reference attributes.
+	t.Run("rejects a substring operator on a non-string attribute", func(t *testing.T) {
+		_, err := Filter[string](schemas, `active co "x"`, sqlEvaluator{})
+		require.ErrorIs(t, err, ErrInvalidFilter(""))
+	})
+
+	t.Run("resolves presence of an unknown attribute to invalidFilter", func(t *testing.T) {
+		_, err := Filter[string](schemas, `nickName pr`, sqlEvaluator{})
+		require.ErrorIs(t, err, ErrInvalidFilter(""))
+	})
+
+	t.Run("rejects a value path on a non-multivalued attribute", func(t *testing.T) {
+		_, err := Filter[string](schemas, `userName[type eq "work"]`, sqlEvaluator{})
+		require.ErrorIs(t, err, ErrInvalidFilter(""))
+	})
+
+	t.Run("rejects a value path targeting an unknown attribute", func(t *testing.T) {
+		_, err := Filter[string](schemas, `unknown[type eq "work"]`, sqlEvaluator{})
+		require.ErrorIs(t, err, ErrInvalidFilter(""))
+	})
+
+	t.Run("rejects an unknown sub-attribute within a value path", func(t *testing.T) {
+		_, err := Filter[string](schemas, `emails[unknownSub eq "work"]`, sqlEvaluator{})
+		require.ErrorIs(t, err, ErrInvalidFilter(""))
+	})
+
+	t.Run("rejects an unknown sub-attribute of a known attribute", func(t *testing.T) {
+		_, err := Filter[string](schemas, `emails.unknownSub eq "work"`, sqlEvaluator{})
+		require.ErrorIs(t, err, ErrInvalidFilter(""))
+	})
+
+	t.Run("rejects any attribute when no schemas are configured", func(t *testing.T) {
+		_, err := Filter[string]([]*core.Schema{}, `userName eq "bob"`, sqlEvaluator{})
+		require.ErrorIs(t, err, ErrInvalidFilter(""))
+	})
+
 	t.Run("maps an unknown attribute to invalidFilter", func(t *testing.T) {
 		_, err := Filter[string](schemas, `nickName eq "x"`, sqlEvaluator{})
 		require.ErrorIs(t, err, ErrInvalidFilter(""))
@@ -137,6 +187,9 @@ func TestFilter(t *testing.T) {
 var sqlOperators = map[filter.Operator]string{
 	filter.OpEquals:            "=",
 	filter.OpNotEquals:         "<>",
+	filter.OpContains:          "co",
+	filter.OpStartsWith:        "sw",
+	filter.OpEndsWith:          "ew",
 	filter.OpGreaterThan:       ">",
 	filter.OpGreaterThanEquals: ">=",
 	filter.OpLessThan:          "<",
