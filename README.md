@@ -14,7 +14,8 @@ go get github.com/supabase-community/scim-go
 ## Packages
 
 - `pkg/core`: SCIM 2.0 core schema types (RFC 7643): attributes, schemas, resource types.
-- `pkg/protocol`: SCIM 2.0 protocol types (RFC 7644): errors, list responses, and helpers for writing SCIM shaped HTTP responses.
+- `pkg/filter`: SCIM 2.0 filter grammar and parser (RFC 7644 3.4.2.2).
+- `pkg/protocol`: SCIM 2.0 protocol types (RFC 7644): errors, list responses, filters, and helpers for writing SCIM shaped HTTP responses.
 - `pkg/scimtest`: checks a SCIM implementation against the JSON examples in RFC 7643.
 
 [1]: https://datatracker.ietf.org/doc/html/rfc7643
