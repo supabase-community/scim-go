@@ -119,18 +119,25 @@ func TestFilter(t *testing.T) {
 		}
 	})
 
-	t.Run("renders ne, co, sw, ew comparisons", func(t *testing.T) {
-		cases := map[string]string{
-			`userName ne "bob"`: "username <> ?",
-			`userName co "ob"`:  "username co ?",
-			`userName sw "bo"`:  "username sw ?",
-			`userName ew "ob"`:  "username ew ?",
+	t.Run("renders a ne comparison", func(t *testing.T) {
+		out, err := Filter[clause](schemas, `userName ne "bob"`, sqlEvaluator{})
+		require.NoError(t, err)
+		assert.Equal(t, "username <> ?", out.sql)
+		assert.Equal(t, []any{"bob"}, out.args)
+	})
+
+	// RFC 7644 Section 3.4.2.2: co, sw, ew match substrings, rendered here as bound LIKE patterns.
+	t.Run("renders co, sw, ew as bound LIKE patterns", func(t *testing.T) {
+		cases := map[string][]any{
+			`userName co "ob"`: {"%ob%"},
+			`userName sw "bo"`: {"bo%"},
+			`userName ew "ob"`: {"%ob"},
 		}
-		for text, want := range cases {
+		for text, wantArgs := range cases {
 			out, err := Filter[clause](schemas, text, sqlEvaluator{})
 			require.NoError(t, err, text)
-			assert.Equal(t, want, out.sql)
-			assert.Len(t, out.args, 1)
+			assert.Equal(t, "username LIKE ?", out.sql, text)
+			assert.Equal(t, wantArgs, out.args, text)
 		}
 	})
 
@@ -199,9 +206,6 @@ func TestFilter(t *testing.T) {
 var sqlOperators = map[filter.Operator]string{
 	filter.OpEquals:            "=",
 	filter.OpNotEquals:         "<>",
-	filter.OpContains:          "co",
-	filter.OpStartsWith:        "sw",
-	filter.OpEndsWith:          "ew",
 	filter.OpGreaterThan:       ">",
 	filter.OpGreaterThanEquals: ">=",
 	filter.OpLessThan:          "<",
@@ -216,6 +220,14 @@ type clause struct {
 type sqlEvaluator struct{}
 
 func (sqlEvaluator) Compare(_ *core.Attribute, key string, op filter.Operator, value any) (clause, error) {
+	switch op {
+	case filter.OpContains:
+		return clause{sql: key + " LIKE ?", args: []any{"%" + value.(string) + "%"}}, nil
+	case filter.OpStartsWith:
+		return clause{sql: key + " LIKE ?", args: []any{value.(string) + "%"}}, nil
+	case filter.OpEndsWith:
+		return clause{sql: key + " LIKE ?", args: []any{"%" + value.(string)}}, nil
+	}
 	symbol, ok := sqlOperators[op]
 	if !ok {
 		return clause{}, ErrInvalidFilter(fmt.Sprintf("operator %q is not supported", op))
