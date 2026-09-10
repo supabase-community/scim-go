@@ -67,14 +67,34 @@ func TestFilter(t *testing.T) {
 		assert.Equal(t, "department = eng", out)
 	})
 
-	t.Run("maps an unknown attribute to invalidPath", func(t *testing.T) {
-		_, err := Filter[string](schemas, `nickName eq "x"`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidPath(""))
+	t.Run("renders gt, ge, lt, le comparisons", func(t *testing.T) {
+		cases := map[string]string{
+			`userName gt "a"`: "username > a",
+			`userName ge "a"`: "username >= a",
+			`userName lt "z"`: "username < z",
+			`userName le "z"`: "username <= z",
+		}
+		for text, want := range cases {
+			out, err := Filter[string](schemas, text, sqlEvaluator{})
+			require.NoError(t, err)
+			assert.Equal(t, want, out)
+		}
 	})
 
-	t.Run("maps an unknown schema URI to invalidPath", func(t *testing.T) {
+	t.Run("composes or", func(t *testing.T) {
+		out, err := Filter[string](schemas, `userName eq "bob" or active eq true`, sqlEvaluator{})
+		require.NoError(t, err)
+		assert.Equal(t, "(username = bob OR active = true)", out)
+	})
+
+	t.Run("maps an unknown attribute to invalidFilter", func(t *testing.T) {
+		_, err := Filter[string](schemas, `nickName eq "x"`, sqlEvaluator{})
+		require.ErrorIs(t, err, ErrInvalidFilter(""))
+	})
+
+	t.Run("maps an unknown schema URI to invalidFilter", func(t *testing.T) {
 		_, err := Filter[string](schemas, `urn:example:Widget:color eq "red"`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidPath(""))
+		require.ErrorIs(t, err, ErrInvalidFilter(""))
 	})
 
 	t.Run("maps a mistyped value to invalidValue", func(t *testing.T) {

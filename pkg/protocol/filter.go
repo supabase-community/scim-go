@@ -86,7 +86,7 @@ func (r *resolvingVisitor[T]) VisitValuePath(path filter.AttrPath, subAttribute 
 		return zero, err
 	}
 	if !attribute.MultiValued || subAttribute != "" {
-		return zero, ErrInvalidPath(fmt.Sprintf("%q is not a value-path target", path.String()))
+		return zero, ErrInvalidFilter(fmt.Sprintf("%q is not a value-path target", path.String()))
 	}
 	return r.inner.ValuePath(attribute, path.Key(), r.scoped(attribute, valueFilter))
 }
@@ -107,16 +107,16 @@ func (r *resolvingVisitor[T]) resolve(path filter.AttrPath) (*core.Attribute, er
 	}
 	schema, ok := r.selectSchema(path.URI)
 	if !ok {
-		return nil, ErrInvalidPath(fmt.Sprintf("%q is not a known attribute", path.String()))
+		return nil, ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
 	}
 	attribute, ok := schema.Resolve(path.Name)
 	if !ok {
-		return nil, ErrInvalidPath(fmt.Sprintf("%q is not a known attribute", path.String()))
+		return nil, ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
 	}
 	if path.SubAttribute != "" {
 		attribute = attribute.SubAttribute(path.SubAttribute)
 		if attribute == nil {
-			return nil, ErrInvalidPath(fmt.Sprintf("%q is not a known attribute", path.String()))
+			return nil, ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
 		}
 	}
 	return attribute, nil
@@ -125,7 +125,7 @@ func (r *resolvingVisitor[T]) resolve(path filter.AttrPath) (*core.Attribute, er
 func (r *resolvingVisitor[T]) resolveWithin(path filter.AttrPath) (*core.Attribute, error) {
 	attribute := r.scope.SubAttribute(path.Name)
 	if attribute == nil || path.SubAttribute != "" {
-		return nil, ErrInvalidPath(fmt.Sprintf("%q is not a known attribute", path.String()))
+		return nil, ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
 	}
 	return attribute, nil
 }
@@ -133,7 +133,7 @@ func (r *resolvingVisitor[T]) resolveWithin(path filter.AttrPath) (*core.Attribu
 func (r *resolvingVisitor[T]) selectSchema(uri string) (*core.Schema, bool) {
 	if uri == "" {
 		if len(r.schemas) == 0 {
-			return nil, true
+			return nil, false
 		}
 		return r.schemas[0], true
 	}
