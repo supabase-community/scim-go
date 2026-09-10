@@ -100,6 +100,14 @@ func TestFilter(t *testing.T) {
 		assert.Equal(t, "age = 9007199254740993", out)
 	})
 
+	// RFC 7643 Section 2.3.4: an integer MUST NOT contain fractional or exponent parts.
+	t.Run("rejects a fractional or exponent integer literal", func(t *testing.T) {
+		for _, text := range []string{`age eq 21.0`, `age eq 2e3`, `age eq 21.5`} {
+			_, err := Filter[string](schemas, text, sqlEvaluator{})
+			require.ErrorIs(t, err, ErrInvalidValue(""), text)
+		}
+	})
+
 	t.Run("maps an unknown attribute to invalidFilter", func(t *testing.T) {
 		_, err := Filter[string](schemas, `nickName eq "x"`, sqlEvaluator{})
 		require.ErrorIs(t, err, ErrInvalidFilter(""))
