@@ -14,6 +14,7 @@ func TestFilter(t *testing.T) {
 	schema := (&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
 		core.NewAttribute("userName", core.TypeString, ""),
 		core.NewAttribute("active", core.TypeBoolean, ""),
+		core.NewAttribute("age", core.TypeInteger, ""),
 		core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
 			core.NewAttribute("type", core.TypeString, ""),
 			core.NewAttribute("value", core.TypeString, ""),
@@ -85,6 +86,18 @@ func TestFilter(t *testing.T) {
 		out, err := Filter[string](schemas, `userName eq "bob" or active eq true`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "(username = bob OR active = true)", out)
+	})
+
+	t.Run("renders an integer comparison", func(t *testing.T) {
+		out, err := Filter[string](schemas, `age gt 21`, sqlEvaluator{})
+		require.NoError(t, err)
+		assert.Equal(t, "age > 21", out)
+	})
+
+	t.Run("preserves an integer beyond float64 precision", func(t *testing.T) {
+		out, err := Filter[string](schemas, `age eq 9007199254740993`, sqlEvaluator{})
+		require.NoError(t, err)
+		assert.Equal(t, "age = 9007199254740993", out)
 	})
 
 	t.Run("maps an unknown attribute to invalidFilter", func(t *testing.T) {

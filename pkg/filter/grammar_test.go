@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -52,12 +53,12 @@ func TestGrammarComparisonOperatorsAndLiterals(t *testing.T) {
 		{`userName co "jen"`, "userName", "co", "jen"},
 		{`userName sw "bjen"`, "userName", "sw", "bjen"},
 		{`userName ew "sen"`, "userName", "ew", "sen"},
-		{`age gt 21`, "age", "gt", 21.0},
-		{`age ge 21`, "age", "ge", 21.0},
-		{`age lt 21`, "age", "lt", 21.0},
-		{`age le 21`, "age", "le", 21.0},
-		{`salary ge 1.5e4`, "salary", "ge", 1.5e4},
-		{`salary ge -3.5`, "salary", "ge", -3.5},
+		{`age gt 21`, "age", "gt", json.Number("21")},
+		{`age ge 21`, "age", "ge", json.Number("21")},
+		{`age lt 21`, "age", "lt", json.Number("21")},
+		{`age le 21`, "age", "le", json.Number("21")},
+		{`salary ge 1.5e4`, "salary", "ge", json.Number("1.5e4")},
+		{`salary ge -3.5`, "salary", "ge", json.Number("-3.5")},
 		{`active eq true`, "active", "eq", true},
 		{`active eq false`, "active", "eq", false},
 		{`nickName eq null`, "nickName", "eq", nil},
@@ -74,6 +75,14 @@ func TestGrammarComparisonOperatorsAndLiterals(t *testing.T) {
 			assert.Equal(t, tc.value, node.Value())
 		})
 	}
+}
+
+func TestGrammarPreservesNumericLiteralForCoercion(t *testing.T) {
+	g := &Grammar{}
+	node, err := g.Parse(`id eq 9007199254740993`)
+
+	require.NoError(t, err)
+	assert.Equal(t, json.Number("9007199254740993"), node.Value())
 }
 
 func TestGrammarPresence(t *testing.T) {
@@ -349,7 +358,6 @@ func TestGrammarRejectsMalformed(t *testing.T) {
 		{"dangling and", `userName eq "a" and`},
 		{"dangling or", `userName eq "a" or`},
 		{"invalid string escape", `userName eq "\x"`},
-		{"number out of range", `age gt 1e400`},
 		{"unclosed paren", `not (userName eq "a"`},
 		{"unopened paren", `userName eq "a")`},
 	}

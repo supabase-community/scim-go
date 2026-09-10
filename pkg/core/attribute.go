@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"math"
 	"time"
 )
@@ -124,11 +125,25 @@ func coerce(attributeType AttributeType, value any) (any, bool) {
 		b, ok := value.(bool)
 		return b, ok
 	case TypeDecimal:
-		f, ok := value.(float64)
-		return f, ok
+		switch n := value.(type) {
+		case json.Number:
+			f, err := n.Float64()
+			return f, err == nil
+		case float64:
+			return n, true
+		}
+		return nil, false
 	case TypeInteger:
-		f, ok := value.(float64)
-		return int64(f), ok && f == math.Trunc(f)
+		switch n := value.(type) {
+		case json.Number:
+			i, err := n.Int64()
+			return i, err == nil
+		case int64:
+			return n, true
+		case float64:
+			return int64(n), n == math.Trunc(n)
+		}
+		return nil, false
 	case TypeDateTime:
 		s, ok := value.(string)
 		if !ok {

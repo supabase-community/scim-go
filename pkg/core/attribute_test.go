@@ -224,6 +224,35 @@ func TestAttributeCoerce(t *testing.T) {
 		require.False(t, ok)
 	})
 
+	t.Run("parses an integer attribute from a json.Number", func(t *testing.T) {
+		i, ok := NewAttribute("count", TypeInteger, "").Coerce(json.Number("3"))
+		require.True(t, ok)
+		assert.Equal(t, int64(3), i)
+	})
+
+	t.Run("preserves an integer beyond float64 precision", func(t *testing.T) {
+		i, ok := NewAttribute("id", TypeInteger, "").Coerce(json.Number("9007199254740993"))
+		require.True(t, ok)
+		assert.Equal(t, int64(9007199254740993), i)
+	})
+
+	t.Run("rejects a non-integral json.Number for an integer attribute", func(t *testing.T) {
+		_, ok := NewAttribute("count", TypeInteger, "").Coerce(json.Number("1.5"))
+		require.False(t, ok)
+	})
+
+	t.Run("parses a decimal attribute from a json.Number", func(t *testing.T) {
+		d, ok := NewAttribute("score", TypeDecimal, "").Coerce(json.Number("1.5"))
+		require.True(t, ok)
+		assert.InDelta(t, 1.5, d, 0)
+	})
+
+	t.Run("accepts an int64 for an integer attribute", func(t *testing.T) {
+		i, ok := NewAttribute("count", TypeInteger, "").Coerce(int64(7))
+		require.True(t, ok)
+		assert.Equal(t, int64(7), i)
+	})
+
 	t.Run("rejects a malformed dateTime", func(t *testing.T) {
 		_, ok := NewAttribute("created", TypeDateTime, "").Coerce("yesterday")
 		require.False(t, ok)

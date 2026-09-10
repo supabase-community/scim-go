@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
 	"sync"
 
 	"github.com/supabase-community/scim-go/pkg/filter/internal/peg"
@@ -172,7 +171,7 @@ func (g *Grammar) comparisonValue() peg.Parser {
 		constant("null", nil),
 		constant("true", true),
 		convert(peg.Match(reNumber), func(s string) (peg.ASTNode, error) {
-			return strconv.ParseFloat(s, 64)
+			return json.Number(s), nil
 		}),
 		convert(peg.Match(reString), func(s string) (peg.ASTNode, error) {
 			var out string

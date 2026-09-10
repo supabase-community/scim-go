@@ -82,8 +82,8 @@ func stringifyValue(value any) string {
 		return string(b)
 	case bool:
 		return strconv.FormatBool(v)
-	case float64:
-		return strconv.FormatFloat(v, 'g', -1, 64)
+	case json.Number:
+		return v.String()
 	case nil:
 		return "null"
 	default:
