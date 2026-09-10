@@ -270,6 +270,11 @@ func TestAttributeCoerce(t *testing.T) {
 		require.False(t, ok)
 	})
 
+	t.Run("rejects a non-string value for a dateTime attribute", func(t *testing.T) {
+		_, ok := NewAttribute("created", TypeDateTime, "").Coerce(123)
+		require.False(t, ok)
+	})
+
 	t.Run("accepts a base64 value for a binary attribute", func(t *testing.T) {
 		b, ok := NewAttribute("cert", TypeBinary, "").Coerce("aGVsbG8=")
 		require.True(t, ok)

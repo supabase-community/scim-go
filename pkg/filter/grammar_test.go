@@ -77,6 +77,15 @@ func TestGrammarComparisonOperatorsAndLiterals(t *testing.T) {
 	}
 }
 
+func TestParseErrorMessage(t *testing.T) {
+	g := &Grammar{}
+	_, err := g.Parse(`userName eq`)
+
+	var perr *ParseError
+	require.ErrorAs(t, err, &perr)
+	assert.Contains(t, perr.Error(), "scim: invalid filter at position")
+}
+
 func TestGrammarPreservesNumericLiteralForCoercion(t *testing.T) {
 	g := &Grammar{}
 	node, err := g.Parse(`id eq 9007199254740993`)

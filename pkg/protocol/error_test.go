@@ -104,6 +104,7 @@ func TestErrorConstructors(t *testing.T) {
 	}{
 		{"ErrInvalidFilter", ErrInvalidFilter(""), http.StatusBadRequest, ScimTypeInvalidFilter, "Section 3.4.2.2, Table 3"},
 		{"ErrTooMany", ErrTooMany(""), http.StatusBadRequest, ScimTypeTooMany, "Section 3.4.2"},
+		{"ErrTooLarge", ErrTooLarge(""), http.StatusRequestEntityTooLarge, "", "Section 3.12"},
 		{"ErrInvalidSyntax", ErrInvalidSyntax(""), http.StatusBadRequest, ScimTypeInvalidSyntax, "Section 3.12"},
 		{"ErrInvalidPath", ErrInvalidPath(""), http.StatusBadRequest, ScimTypeInvalidPath, "Section 3.5.2"},
 		{"ErrNoTarget", ErrNoTarget(""), http.StatusBadRequest, ScimTypeNoTarget, "Section 3.5.2"},

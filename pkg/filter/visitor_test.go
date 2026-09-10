@@ -48,6 +48,39 @@ func TestStringifyVisitorRoundTrip(t *testing.T) {
 	}
 }
 
+type failingVisitor struct {
+	StringifyVisitor
+	failOn string
+}
+
+func (f failingVisitor) VisitEquals(attr AttrPath, value any) (string, error) {
+	if attr.Key() == f.failOn {
+		return "", assert.AnError
+	}
+	return f.StringifyVisitor.VisitEquals(attr, value)
+}
+
+func TestVisitPropagatesErrors(t *testing.T) {
+	g := &Grammar{}
+	cases := map[string]struct {
+		input  string
+		failOn string
+	}{
+		"from a not operand":       {`not (a eq "1")`, "a"},
+		"from a binary left":       {`a eq "1" and b eq "2"`, "a"},
+		"from a binary right":      {`a eq "1" and b eq "2"`, "b"},
+		"from a value path filter": {`emails[type eq "work"]`, "type"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			node, err := g.Parse(tc.input)
+			require.NoError(t, err)
+			_, err = Visit[string](failingVisitor{failOn: tc.failOn}, node)
+			require.Error(t, err)
+		})
+	}
+}
+
 type countingVisitor struct{}
 
 func (countingVisitor) VisitAnd(left, right int) (int, error)             { return left + right, nil }
