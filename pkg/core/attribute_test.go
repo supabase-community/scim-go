@@ -229,6 +229,17 @@ func TestAttributeCoerce(t *testing.T) {
 		require.False(t, ok)
 	})
 
+	t.Run("accepts a base64 value for a binary attribute", func(t *testing.T) {
+		b, ok := NewAttribute("cert", TypeBinary, "").Coerce("aGVsbG8=")
+		require.True(t, ok)
+		assert.Equal(t, "aGVsbG8=", b)
+	})
+
+	t.Run("rejects a non-base64 value for a binary attribute", func(t *testing.T) {
+		_, ok := NewAttribute("cert", TypeBinary, "").Coerce("not base64!")
+		require.False(t, ok)
+	})
+
 	t.Run("rejects a scalar compared to a complex attribute", func(t *testing.T) {
 		_, ok := NewAttribute("name", TypeComplex, "").Coerce("mo")
 		require.False(t, ok)

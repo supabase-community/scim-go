@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/base64"
 	"math"
 	"time"
 )
@@ -106,9 +107,19 @@ func (a *Attribute) Coerce(value any) (any, bool) {
 
 func coerce(attributeType AttributeType, value any) (any, bool) {
 	switch attributeType {
-	case TypeString, TypeReference, TypeBinary:
+	case TypeString, TypeReference:
 		s, ok := value.(string)
 		return s, ok
+	case TypeBinary:
+		s, ok := value.(string)
+		if !ok {
+			return nil, false
+		}
+		// RFC 7643 Section 2.3.6: binary values are base64 encoded.
+		if _, err := base64.StdEncoding.DecodeString(s); err != nil {
+			return nil, false
+		}
+		return s, true
 	case TypeBoolean:
 		b, ok := value.(bool)
 		return b, ok
