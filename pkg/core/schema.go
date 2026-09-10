@@ -6,8 +6,16 @@ type Schema struct {
 	ID          SchemaURI        `json:"id"`
 	Name        ResourceTypeName `json:"name"`
 	Description string           `json:"description"`
-	Attributes  []*Attribute     `json:"attributes"`
+	Attributes  Attributes       `json:"attributes"`
 	Meta        Meta             `json:"meta,omitzero"`
+}
+
+func (s *Schema) Resolve(name string) (*Attribute, bool) {
+	attribute := commonAttributes.Lookup(name)
+	if attribute == nil && s != nil {
+		attribute = s.Attributes.Lookup(name)
+	}
+	return attribute, attribute != nil
 }
 
 func (s *Schema) Describe(description string) *Schema {

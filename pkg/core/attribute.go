@@ -1,5 +1,10 @@
 package core
 
+import (
+	"math"
+	"time"
+)
+
 // Attribute describes one attribute of a schema, per RFC 7643, Section 7.
 type Attribute struct {
 	Name            string          `json:"name"`
@@ -13,7 +18,7 @@ type Attribute struct {
 	Returned        Returned        `json:"returned"`
 	Uniqueness      Uniqueness      `json:"uniqueness"`
 	ReferenceTypes  []ReferenceType `json:"referenceTypes,omitempty"`
-	SubAttributes   []*Attribute    `json:"subAttributes,omitempty"`
+	SubAttributes   Attributes      `json:"subAttributes,omitempty"`
 }
 
 func NewAttribute(name string, attributeType AttributeType, description string) *Attribute {
@@ -86,4 +91,40 @@ func (a *Attribute) UniqueOn(uniqueness Uniqueness) *Attribute {
 func (a *Attribute) With(subAttributes ...*Attribute) *Attribute {
 	a.SubAttributes = subAttributes
 	return a
+}
+
+func (a *Attribute) SubAttribute(name string) *Attribute {
+	return a.SubAttributes.Lookup(name)
+}
+
+func (a *Attribute) Coerce(value any) (any, bool) {
+	if value == nil {
+		return nil, true
+	}
+	return coerce(a.Type, value)
+}
+
+func coerce(attributeType AttributeType, value any) (any, bool) {
+	switch attributeType {
+	case TypeString, TypeReference, TypeBinary:
+		s, ok := value.(string)
+		return s, ok
+	case TypeBoolean:
+		b, ok := value.(bool)
+		return b, ok
+	case TypeDecimal:
+		f, ok := value.(float64)
+		return f, ok
+	case TypeInteger:
+		f, ok := value.(float64)
+		return int64(f), ok && f == math.Trunc(f)
+	case TypeDateTime:
+		s, ok := value.(string)
+		if !ok {
+			return nil, false
+		}
+		t, err := time.Parse(time.RFC3339, s)
+		return t, err == nil
+	}
+	return nil, false
 }

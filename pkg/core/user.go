@@ -70,8 +70,7 @@ type EnterpriseUser struct {
 
 // User is the core User resource defined in RFC 7643, Section 4.1.
 type User struct {
-	CommonAttributes
-	ExternalID        string            `json:"externalId,omitempty"`
+	Base
 	UserName          string            `json:"userName"`
 	Name              Name              `json:"name,omitzero"`
 	DisplayName       string            `json:"displayName,omitempty"`
@@ -106,8 +105,4 @@ func (u User) MarshalJSON() ([]byte, error) {
 
 func (u *User) ResourceID() string {
 	return u.ID
-}
-
-func (u *User) Location() string {
-	return u.Meta.Location
 }

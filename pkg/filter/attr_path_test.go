@@ -13,12 +13,12 @@ func TestNodeAttrPathSplitsParts(t *testing.T) {
 		want  AttrPath
 	}{
 		{`userName eq "x"`, AttrPath{Name: "userName"}},
-		{`name.familyName eq "x"`, AttrPath{Name: "name", Sub: "familyName"}},
+		{`name.familyName eq "x"`, AttrPath{Name: "name", SubAttribute: "familyName"}},
 		{
 			`urn:ietf:params:scim:schemas:core:2.0:User:userName eq "x"`, AttrPath{URI: "urn:ietf:params:scim:schemas:core:2.0:User", Name: "userName"},
 		},
 		{
-			`urn:ietf:params:scim:schemas:core:2.0:User:name.familyName eq "x"`, AttrPath{URI: "urn:ietf:params:scim:schemas:core:2.0:User", Name: "name", Sub: "familyName"},
+			`urn:ietf:params:scim:schemas:core:2.0:User:name.familyName eq "x"`, AttrPath{URI: "urn:ietf:params:scim:schemas:core:2.0:User", Name: "name", SubAttribute: "familyName"},
 		},
 	}
 	g := &Grammar{}
@@ -31,6 +31,22 @@ func TestNodeAttrPathSplitsParts(t *testing.T) {
 
 			assert.Equal(t, tc.want, got)
 			assert.Equal(t, node.Attribute(), got.String())
+		})
+	}
+}
+
+func TestAttrPathKey(t *testing.T) {
+	tt := []struct {
+		path AttrPath
+		want string
+	}{
+		{AttrPath{Name: "userName"}, "username"},
+		{AttrPath{Name: "meta", SubAttribute: "lastModified"}, "meta.lastmodified"},
+		{AttrPath{URI: "urn:ietf:params:scim:schemas:core:2.0:User", Name: "userName"}, "username"},
+	}
+	for _, tc := range tt {
+		t.Run(tc.want, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.path.Key())
 		})
 	}
 }

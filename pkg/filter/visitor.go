@@ -47,28 +47,28 @@ func dispatch[T any](v Visitor[T], n *Node) (T, error) {
 	}
 
 	attr := n.AttrPath()
-	switch strings.ToLower(n.Operator()) {
+	switch Operator(strings.ToLower(n.Operator())) {
 	case "and":
 		return visitBinary(v, n, v.VisitAnd)
 	case "or":
 		return visitBinary(v, n, v.VisitOr)
-	case "eq":
+	case OpEquals:
 		return v.VisitEquals(attr, n.Value())
-	case "ne":
+	case OpNotEquals:
 		return v.VisitNotEquals(attr, n.Value())
-	case "co":
+	case OpContains:
 		return v.VisitContains(attr, n.Value())
-	case "sw":
+	case OpStartsWith:
 		return v.VisitStartsWith(attr, n.Value())
-	case "ew":
+	case OpEndsWith:
 		return v.VisitEndsWith(attr, n.Value())
-	case "gt":
+	case OpGreaterThan:
 		return v.VisitGreaterThan(attr, n.Value())
-	case "ge":
+	case OpGreaterThanEquals:
 		return v.VisitGreaterThanEquals(attr, n.Value())
-	case "lt":
+	case OpLessThan:
 		return v.VisitLessThan(attr, n.Value())
-	case "le":
+	case OpLessThanEquals:
 		return v.VisitLessThanEquals(attr, n.Value())
 	case "pr":
 		return v.VisitPresence(attr)

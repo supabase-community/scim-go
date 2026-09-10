@@ -10,16 +10,11 @@ type Member struct {
 
 // Group is the core Group resource defined in RFC 7643, Section 4.2.
 type Group struct {
-	CommonAttributes
-	ExternalID  string   `json:"externalId,omitempty"`
+	Base
 	DisplayName string   `json:"displayName"`
 	Members     []Member `json:"members,omitempty"`
 }
 
 func (g *Group) ResourceID() string {
 	return g.ID
-}
-
-func (g *Group) Location() string {
-	return g.Meta.Location
 }

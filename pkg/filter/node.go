@@ -24,8 +24,6 @@ func (n *Node) Attribute() string {
 	return s
 }
 
-// AttrPath returns the structured attribute path this node targets: the leaf
-// attribute of a comparison, or the path of a value path.
 func (n *Node) AttrPath() AttrPath {
 	if n.HasPath() {
 		return parseAttrPath(n.Path())

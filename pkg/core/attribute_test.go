@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,7 +107,7 @@ func TestAttribute(t *testing.T) {
 		name := NewAttribute("name", TypeComplex, "The components of the user's name.")
 
 		require.Same(t, name, name.With(givenName))
-		require.Equal(t, []*Attribute{givenName}, name.SubAttributes)
+		require.Equal(t, Attributes{givenName}, name.SubAttributes)
 
 		body, err := json.Marshal(name)
 
@@ -167,5 +168,69 @@ func TestAttribute(t *testing.T) {
 		require.NoError(t, err)
 		require.Contains(t, string(body), `"mutability":"writeOnly"`)
 		require.Contains(t, string(body), `"returned":"never"`)
+	})
+
+	t.Run("finds a sub-attribute case-insensitively", func(t *testing.T) {
+		emails := NewAttribute("emails", TypeComplex, "").AsMultiValued().With(
+			NewAttribute("value", TypeString, ""),
+		)
+		assert.Equal(t, "value", emails.SubAttribute("VALUE").Name)
+	})
+
+	t.Run("returns nil for an absent sub-attribute", func(t *testing.T) {
+		emails := NewAttribute("emails", TypeComplex, "").AsMultiValued().With(
+			NewAttribute("value", TypeString, ""),
+		)
+		assert.Nil(t, emails.SubAttribute("missing"))
+	})
+}
+
+func TestAttributeCoerce(t *testing.T) {
+	t.Run("returns matching values as their typed form", func(t *testing.T) {
+		s, ok := NewAttribute("userName", TypeString, "").Coerce("mo")
+		require.True(t, ok)
+		assert.Equal(t, "mo", s)
+
+		b, ok := NewAttribute("active", TypeBoolean, "").Coerce(true)
+		require.True(t, ok)
+		assert.Equal(t, true, b)
+
+		d, ok := NewAttribute("score", TypeDecimal, "").Coerce(1.5)
+		require.True(t, ok)
+		assert.InDelta(t, 1.5, d, 0)
+
+		i, ok := NewAttribute("count", TypeInteger, "").Coerce(float64(3))
+		require.True(t, ok)
+		assert.Equal(t, int64(3), i)
+
+		ts, ok := NewAttribute("created", TypeDateTime, "").Coerce("2026-09-10T00:00:00Z")
+		require.True(t, ok)
+		assert.Equal(t, time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC), ts)
+	})
+
+	t.Run("passes a null value through unchanged", func(t *testing.T) {
+		v, ok := NewAttribute("active", TypeBoolean, "").Coerce(nil)
+		require.True(t, ok)
+		assert.Nil(t, v)
+	})
+
+	t.Run("rejects a value whose type does not match", func(t *testing.T) {
+		_, ok := NewAttribute("active", TypeBoolean, "").Coerce("yes")
+		require.False(t, ok)
+	})
+
+	t.Run("rejects a non-integral value for an integer attribute", func(t *testing.T) {
+		_, ok := NewAttribute("count", TypeInteger, "").Coerce(1.5)
+		require.False(t, ok)
+	})
+
+	t.Run("rejects a malformed dateTime", func(t *testing.T) {
+		_, ok := NewAttribute("created", TypeDateTime, "").Coerce("yesterday")
+		require.False(t, ok)
+	})
+
+	t.Run("rejects a scalar compared to a complex attribute", func(t *testing.T) {
+		_, ok := NewAttribute("name", TypeComplex, "").Coerce("mo")
+		require.False(t, ok)
 	})
 }
