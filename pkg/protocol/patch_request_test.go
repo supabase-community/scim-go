@@ -9,47 +9,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-func request(ops ...PatchOperation) *PatchRequest {
-	return &PatchRequest{
-		Schemas:    []core.SchemaURI{SchemaPatchOp},
-		Operations: ops,
-	}
-}
-
-func operation(kind PatchOp, path, value string) PatchOperation {
-	if value != "" {
-		return PatchOperation{
-			Op:    kind,
-			Path:  path,
-			Value: json.RawMessage(value),
-		}
-	}
-	return PatchOperation{
-		Op:   kind,
-		Path: path,
-	}
-}
-
-func userSchemas() []*core.Schema {
-	return []*core.Schema{
-		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("userName", core.TypeString, ""),
-			core.NewAttribute("displayName", core.TypeString, ""),
-			core.NewAttribute("employeeNumber", core.TypeString, "").AsImmutable(),
-			core.NewAttribute("groups", core.TypeComplex, "").AsMultiValued().AsReadOnly().With(
-				core.NewAttribute("value", core.TypeString, ""),
-			),
-			core.NewAttribute("name", core.TypeComplex, "").With(
-				core.NewAttribute("familyName", core.TypeString, ""),
-			),
-			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-				core.NewAttribute("type", core.TypeString, ""),
-				core.NewAttribute("value", core.TypeString, ""),
-			),
-		),
-	}
-}
-
 func TestApplyTopLevel(t *testing.T) {
 	item := map[string]any{"userName": "old"}
 	patch := request(
@@ -61,6 +20,27 @@ func TestApplyTopLevel(t *testing.T) {
 
 	assert.Equal(t, "new", item["userName"])
 	assert.Equal(t, "Babs", item["displayName"])
+}
+
+func TestApplyTopLevelUser(t *testing.T) {
+	item := &core.User{UserName: "old"}
+	patch := request(
+		operation(PatchOpReplace, "userName", `"new"`),
+		operation(PatchOpAdd, "displayName", `"Babs"`),
+	)
+
+	require.NoError(t, patch.Apply(item, nil))
+
+	assert.Equal(t, "new", item.UserName)
+	assert.Equal(t, "Babs", item.DisplayName)
+}
+
+func TestApplyTopLevelGroup(t *testing.T) {
+	item := &core.Group{DisplayName: "Tour Guides"}
+	patch := request(operation(PatchOpAdd, "displayName", `"Example"`))
+
+	require.NoError(t, patch.Apply(item, nil))
+	assert.Equal(t, "Example", item.DisplayName)
 }
 
 func TestApplyNoPathMerge(t *testing.T) {
@@ -397,4 +377,45 @@ func TestApplyTypedUserRemoveClearsField(t *testing.T) {
 	require.NoError(t, patch.Apply(user, nil))
 	assert.Empty(t, user.DisplayName)
 	assert.Equal(t, "bjensen", user.UserName)
+}
+
+func request(ops ...PatchOperation) *PatchRequest {
+	return &PatchRequest{
+		Schemas:    []core.SchemaURI{SchemaPatchOp},
+		Operations: ops,
+	}
+}
+
+func operation(kind PatchOp, path, value string) PatchOperation {
+	if value != "" {
+		return PatchOperation{
+			Op:    kind,
+			Path:  path,
+			Value: json.RawMessage(value),
+		}
+	}
+	return PatchOperation{
+		Op:   kind,
+		Path: path,
+	}
+}
+
+func userSchemas() []*core.Schema {
+	return []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("userName", core.TypeString, ""),
+			core.NewAttribute("displayName", core.TypeString, ""),
+			core.NewAttribute("employeeNumber", core.TypeString, "").AsImmutable(),
+			core.NewAttribute("groups", core.TypeComplex, "").AsMultiValued().AsReadOnly().With(
+				core.NewAttribute("value", core.TypeString, ""),
+			),
+			core.NewAttribute("name", core.TypeComplex, "").With(
+				core.NewAttribute("familyName", core.TypeString, ""),
+			),
+			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
+				core.NewAttribute("type", core.TypeString, ""),
+				core.NewAttribute("value", core.TypeString, ""),
+			),
+		),
+	}
 }
