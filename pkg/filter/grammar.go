@@ -110,12 +110,12 @@ func (g *Grammar) build() {
 
 // logExp = FILTER SP "or" SP FILTER (loosest precedence, right-associative).
 func (g *Grammar) or(left, filter peg.Parser) peg.Parser {
-	return binExpr(left, peg.Fold("or"), "or", filter)
+	return binaryExpression(left, peg.Fold("or"), "or", filter)
 }
 
 // logExp = FILTER SP "and" SP FILTER (binds tighter than "or").
 func (g *Grammar) and(atom, self peg.Parser) peg.Parser {
-	return binExpr(atom, peg.Fold("and"), "and", self)
+	return binaryExpression(atom, peg.Fold("and"), "and", self)
 }
 
 // *1"not" "(" sub ")": an optional negation around a parenthesized sub-filter.
@@ -251,7 +251,7 @@ func (g *Grammar) schemaURI() peg.Parser {
 	})
 }
 
-func binExpr(left, op peg.Parser, name string, right peg.Parser) peg.Parser {
+func binaryExpression(left, op peg.Parser, name string, right peg.Parser) peg.Parser {
 	return func(c *peg.Context) (peg.ASTNode, error) {
 		l, err := left(c)
 		if err != nil {
