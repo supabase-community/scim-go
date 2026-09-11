@@ -1,4 +1,4 @@
-package protocol_test
+package protocol
 
 import (
 	"encoding/json"
@@ -7,18 +7,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
-func patch(ops ...protocol.PatchOperation) *protocol.PatchRequest {
-	return &protocol.PatchRequest{
-		Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+func patch(ops ...PatchOperation) *PatchRequest {
+	return &PatchRequest{
+		Schemas:    []core.SchemaURI{SchemaPatchOp},
 		Operations: ops,
 	}
 }
 
-func op(kind protocol.PatchOp, path, value string) protocol.PatchOperation {
-	o := protocol.PatchOperation{Op: kind, Path: path}
+func op(kind PatchOp, path, value string) PatchOperation {
+	o := PatchOperation{Op: kind, Path: path}
 	if value != "" {
 		o.Value = json.RawMessage(value)
 	}
@@ -47,8 +46,8 @@ func userSchemas() []*core.Schema {
 func TestApplyTopLevel(t *testing.T) {
 	doc := map[string]any{"userName": "old"}
 	err := patch(
-		op(protocol.PatchOpReplace, "userName", `"new"`),
-		op(protocol.PatchOpAdd, "displayName", `"Babs"`),
+		op(PatchOpReplace, "userName", `"new"`),
+		op(PatchOpAdd, "displayName", `"Babs"`),
 	).Apply(doc, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "new", doc["userName"])
@@ -57,8 +56,8 @@ func TestApplyTopLevel(t *testing.T) {
 
 func TestApplyNoPathMerge(t *testing.T) {
 	doc := map[string]any{}
-	err := patch(protocol.PatchOperation{
-		Op:    protocol.PatchOpAdd,
+	err := patch(PatchOperation{
+		Op:    PatchOpAdd,
 		Value: json.RawMessage(`{"nickName":"Babs","title":"Eng"}`),
 	}).Apply(doc, nil)
 	require.NoError(t, err)
@@ -68,14 +67,14 @@ func TestApplyNoPathMerge(t *testing.T) {
 
 func TestApplyAddAppendsAndIsCaseInsensitive(t *testing.T) {
 	doc := map[string]any{"emails": []any{map[string]any{"value": "a@b.com"}}}
-	err := patch(op(protocol.PatchOp("Add"), "emails", `[{"value":"c@d.com"}]`)).Apply(doc, nil)
+	err := patch(op(PatchOp("Add"), "emails", `[{"value":"c@d.com"}]`)).Apply(doc, nil)
 	require.NoError(t, err)
 	assert.Len(t, doc["emails"], 2)
 }
 
 func TestApplyAddSingleValueAppendsToArray(t *testing.T) {
 	doc := map[string]any{"emails": []any{map[string]any{"value": "a@b.com"}}}
-	err := patch(op(protocol.PatchOpAdd, "emails", `{"value":"c@d.com"}`)).Apply(doc, nil)
+	err := patch(op(PatchOpAdd, "emails", `{"value":"c@d.com"}`)).Apply(doc, nil)
 	require.NoError(t, err)
 	emails := doc["emails"].([]any)
 	require.Len(t, emails, 2)
@@ -84,32 +83,32 @@ func TestApplyAddSingleValueAppendsToArray(t *testing.T) {
 }
 
 func TestApplyMissingValueRejected(t *testing.T) {
-	err := patch(protocol.PatchOperation{Op: protocol.PatchOpReplace, Path: "userName"}).Apply(map[string]any{}, nil)
-	var scimErr *protocol.Error
+	err := patch(PatchOperation{Op: PatchOpReplace, Path: "userName"}).Apply(map[string]any{}, nil)
+	var scimErr *Error
 	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, protocol.ScimTypeInvalidValue, scimErr.ScimType)
+	assert.Equal(t, ScimTypeInvalidValue, scimErr.ScimType)
 }
 
 func TestApplySubAttribute(t *testing.T) {
 	doc := map[string]any{"name": map[string]any{"familyName": "Old"}}
-	err := patch(op(protocol.PatchOpReplace, "name.familyName", `"Jensen"`)).Apply(doc, nil)
+	err := patch(op(PatchOpReplace, "name.familyName", `"Jensen"`)).Apply(doc, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "Jensen", doc["name"].(map[string]any)["familyName"])
 }
 
 func TestApplyRemoveAttribute(t *testing.T) {
 	doc := map[string]any{"nickName": "Babs"}
-	err := patch(op(protocol.PatchOpRemove, "nickName", "")).Apply(doc, nil)
+	err := patch(op(PatchOpRemove, "nickName", "")).Apply(doc, nil)
 	require.NoError(t, err)
 	_, ok := doc["nickName"]
 	assert.False(t, ok)
 }
 
 func TestRemoveWithoutPathIsNoTarget(t *testing.T) {
-	err := patch(protocol.PatchOperation{Op: protocol.PatchOpRemove}).Apply(map[string]any{}, nil)
-	var scimErr *protocol.Error
+	err := patch(PatchOperation{Op: PatchOpRemove}).Apply(map[string]any{}, nil)
+	var scimErr *Error
 	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, protocol.ScimTypeNoTarget, scimErr.ScimType)
+	assert.Equal(t, ScimTypeNoTarget, scimErr.ScimType)
 }
 
 func TestApplyValuePathReplaceSub(t *testing.T) {
@@ -117,7 +116,7 @@ func TestApplyValuePathReplaceSub(t *testing.T) {
 		map[string]any{"type": "work", "value": "old@x"},
 		map[string]any{"type": "home", "value": "h@x"},
 	}}
-	err := patch(op(protocol.PatchOpReplace, `emails[type eq "work"].value`, `"new@x"`)).Apply(doc, nil)
+	err := patch(op(PatchOpReplace, `emails[type eq "work"].value`, `"new@x"`)).Apply(doc, nil)
 	require.NoError(t, err)
 	emails := doc["emails"].([]any)
 	assert.Equal(t, "new@x", emails[0].(map[string]any)["value"])
@@ -129,7 +128,7 @@ func TestApplyValuePathRemoveElement(t *testing.T) {
 		map[string]any{"type": "work", "value": "w@x"},
 		map[string]any{"type": "home", "value": "h@x"},
 	}}
-	err := patch(op(protocol.PatchOpRemove, `emails[type eq "home"]`, "")).Apply(doc, nil)
+	err := patch(op(PatchOpRemove, `emails[type eq "home"]`, "")).Apply(doc, nil)
 	require.NoError(t, err)
 	assert.Len(t, doc["emails"].([]any), 1)
 }
@@ -139,7 +138,7 @@ func TestApplyValuePathRemoveSubAttribute(t *testing.T) {
 		map[string]any{"type": "work", "value": "w@x"},
 		map[string]any{"type": "home", "value": "h@x"},
 	}}
-	err := patch(op(protocol.PatchOpRemove, `emails[type eq "work"].value`, "")).Apply(doc, nil)
+	err := patch(op(PatchOpRemove, `emails[type eq "work"].value`, "")).Apply(doc, nil)
 	require.NoError(t, err)
 	emails := doc["emails"].([]any)
 	assert.Equal(t, map[string]any{"type": "work"}, emails[0])
@@ -148,17 +147,17 @@ func TestApplyValuePathRemoveSubAttribute(t *testing.T) {
 
 func TestApplyValuePathNoMatchIsNoTarget(t *testing.T) {
 	doc := map[string]any{"emails": []any{map[string]any{"type": "work"}}}
-	err := patch(op(protocol.PatchOpReplace, `emails[type eq "home"].value`, `"x"`)).Apply(doc, nil)
-	var scimErr *protocol.Error
+	err := patch(op(PatchOpReplace, `emails[type eq "home"].value`, `"x"`)).Apply(doc, nil)
+	var scimErr *Error
 	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, protocol.ScimTypeNoTarget, scimErr.ScimType)
+	assert.Equal(t, ScimTypeNoTarget, scimErr.ScimType)
 }
 
 func TestReadOnlyIsSkipped(t *testing.T) {
 	doc := map[string]any{"groups": []any{}}
 	err := patch(
-		op(protocol.PatchOpReplace, "groups", `[{"value":"g1"}]`),
-		op(protocol.PatchOpReplace, "userName", `"bjensen"`),
+		op(PatchOpReplace, "groups", `[{"value":"g1"}]`),
+		op(PatchOpReplace, "userName", `"bjensen"`),
 	).Apply(doc, userSchemas())
 	require.NoError(t, err)
 	assert.Empty(t, doc["groups"])
@@ -167,21 +166,21 @@ func TestReadOnlyIsSkipped(t *testing.T) {
 
 func TestIdIsProtected(t *testing.T) {
 	doc := map[string]any{"id": "keep"}
-	err := patch(op(protocol.PatchOpReplace, "id", `"hacked"`)).Apply(doc, userSchemas())
+	err := patch(op(PatchOpReplace, "id", `"hacked"`)).Apply(doc, userSchemas())
 	require.NoError(t, err)
 	assert.Equal(t, "keep", doc["id"])
 }
 
 func TestImmutableAddWhenAbsentAllowed(t *testing.T) {
 	doc := map[string]any{}
-	err := patch(op(protocol.PatchOpAdd, "employeeNumber", `"E1"`)).Apply(doc, userSchemas())
+	err := patch(op(PatchOpAdd, "employeeNumber", `"E1"`)).Apply(doc, userSchemas())
 	require.NoError(t, err)
 	assert.Equal(t, "E1", doc["employeeNumber"])
 }
 
 func TestImmutableReplaceWhenAbsentAllowed(t *testing.T) {
 	doc := map[string]any{}
-	err := patch(op(protocol.PatchOpReplace, "employeeNumber", `"E1"`)).Apply(doc, userSchemas())
+	err := patch(op(PatchOpReplace, "employeeNumber", `"E1"`)).Apply(doc, userSchemas())
 	require.NoError(t, err)
 	assert.Equal(t, "E1", doc["employeeNumber"])
 }
@@ -191,7 +190,7 @@ func TestApplyValuePathRelationalIsCaseInsensitive(t *testing.T) {
 		map[string]any{"type": "Zebra", "value": "z@x"},
 		map[string]any{"type": "ant", "value": "a@x"},
 	}}
-	err := patch(op(protocol.PatchOpRemove, `emails[type gt "M"]`, "")).Apply(doc, nil)
+	err := patch(op(PatchOpRemove, `emails[type gt "M"]`, "")).Apply(doc, nil)
 	require.NoError(t, err)
 	emails := doc["emails"].([]any)
 	require.Len(t, emails, 1)
@@ -200,29 +199,29 @@ func TestApplyValuePathRelationalIsCaseInsensitive(t *testing.T) {
 
 func TestImmutableChangeRejected(t *testing.T) {
 	doc := map[string]any{"employeeNumber": "E1"}
-	err := patch(op(protocol.PatchOpReplace, "employeeNumber", `"E2"`)).Apply(doc, userSchemas())
-	var scimErr *protocol.Error
+	err := patch(op(PatchOpReplace, "employeeNumber", `"E2"`)).Apply(doc, userSchemas())
+	var scimErr *Error
 	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, protocol.ScimTypeMutability, scimErr.ScimType)
+	assert.Equal(t, ScimTypeMutability, scimErr.ScimType)
 }
 
 func TestUnknownAttributeRejected(t *testing.T) {
-	err := patch(op(protocol.PatchOpAdd, "nonsense", `"x"`)).Apply(map[string]any{}, userSchemas())
-	var scimErr *protocol.Error
+	err := patch(op(PatchOpAdd, "nonsense", `"x"`)).Apply(map[string]any{}, userSchemas())
+	var scimErr *Error
 	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, protocol.ScimTypeInvalidPath, scimErr.ScimType)
+	assert.Equal(t, ScimTypeInvalidPath, scimErr.ScimType)
 }
 
 func TestUnknownSchemaURIRejected(t *testing.T) {
-	err := patch(op(protocol.PatchOpReplace, string(core.SchemaUser)+"Bogus:userName", `"x"`)).Apply(map[string]any{}, userSchemas())
-	var scimErr *protocol.Error
+	err := patch(op(PatchOpReplace, string(core.SchemaUser)+"Bogus:userName", `"x"`)).Apply(map[string]any{}, userSchemas())
+	var scimErr *Error
 	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, protocol.ScimTypeInvalidPath, scimErr.ScimType)
+	assert.Equal(t, ScimTypeInvalidPath, scimErr.ScimType)
 }
 
 func TestSchemaURISelectsSchema(t *testing.T) {
 	doc := map[string]any{"userName": "old"}
-	err := patch(op(protocol.PatchOpReplace, string(core.SchemaUser)+":userName", `"new"`)).Apply(doc, userSchemas())
+	err := patch(op(PatchOpReplace, string(core.SchemaUser)+":userName", `"new"`)).Apply(doc, userSchemas())
 	require.NoError(t, err)
 	assert.Equal(t, "new", doc["userName"])
 }
@@ -230,21 +229,21 @@ func TestSchemaURISelectsSchema(t *testing.T) {
 func TestApplyIsAtomicOnFailure(t *testing.T) {
 	doc := map[string]any{"userName": "keep", "employeeNumber": "E1"}
 	err := patch(
-		op(protocol.PatchOpReplace, "userName", `"changed"`),
-		op(protocol.PatchOpReplace, "employeeNumber", `"E2"`),
+		op(PatchOpReplace, "userName", `"changed"`),
+		op(PatchOpReplace, "employeeNumber", `"E2"`),
 	).Apply(doc, userSchemas())
-	var scimErr *protocol.Error
+	var scimErr *Error
 	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, protocol.ScimTypeMutability, scimErr.ScimType)
+	assert.Equal(t, ScimTypeMutability, scimErr.ScimType)
 	assert.Equal(t, "keep", doc["userName"])
 	assert.Equal(t, "E1", doc["employeeNumber"])
 }
 
 func TestInvalidOpRejected(t *testing.T) {
-	err := patch(op(protocol.PatchOp("delete"), "userName", `"x"`)).Apply(map[string]any{}, nil)
-	var scimErr *protocol.Error
+	err := patch(op(PatchOp("delete"), "userName", `"x"`)).Apply(map[string]any{}, nil)
+	var scimErr *Error
 	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, protocol.ScimTypeInvalidSyntax, scimErr.ScimType)
+	assert.Equal(t, ScimTypeInvalidSyntax, scimErr.ScimType)
 }
 
 func TestApplyValuePathAndFilter(t *testing.T) {
@@ -252,7 +251,7 @@ func TestApplyValuePathAndFilter(t *testing.T) {
 		map[string]any{"type": "work", "primary": true, "value": "w@x"},
 		map[string]any{"type": "work", "primary": false, "value": "w2@x"},
 	}}
-	err := patch(op(protocol.PatchOpReplace, `emails[type eq "work" and primary eq true].value`, `"new@x"`)).Apply(doc, nil)
+	err := patch(op(PatchOpReplace, `emails[type eq "work" and primary eq true].value`, `"new@x"`)).Apply(doc, nil)
 	require.NoError(t, err)
 	emails := doc["emails"].([]any)
 	assert.Equal(t, "new@x", emails[0].(map[string]any)["value"])
@@ -265,7 +264,7 @@ func TestApplyValuePathOrFilter(t *testing.T) {
 		map[string]any{"type": "home", "value": "h@x"},
 		map[string]any{"type": "other", "value": "o@x"},
 	}}
-	err := patch(op(protocol.PatchOpRemove, `emails[type eq "work" or type eq "home"]`, "")).Apply(doc, nil)
+	err := patch(op(PatchOpRemove, `emails[type eq "work" or type eq "home"]`, "")).Apply(doc, nil)
 	require.NoError(t, err)
 	emails := doc["emails"].([]any)
 	require.Len(t, emails, 1)
@@ -277,7 +276,7 @@ func TestApplyValuePathNotFilter(t *testing.T) {
 		map[string]any{"type": "work", "value": "w@x"},
 		map[string]any{"type": "home", "value": "h@x"},
 	}}
-	err := patch(op(protocol.PatchOpRemove, `emails[not (type eq "work")]`, "")).Apply(doc, nil)
+	err := patch(op(PatchOpRemove, `emails[not (type eq "work")]`, "")).Apply(doc, nil)
 	require.NoError(t, err)
 	emails := doc["emails"].([]any)
 	require.Len(t, emails, 1)
@@ -289,7 +288,7 @@ func TestApplyValuePathNumericFilter(t *testing.T) {
 		map[string]any{"kind": "a", "n": float64(10)},
 		map[string]any{"kind": "b", "n": float64(2)},
 	}}
-	err := patch(op(protocol.PatchOpRemove, `scores[n gt 5]`, "")).Apply(doc, nil)
+	err := patch(op(PatchOpRemove, `scores[n gt 5]`, "")).Apply(doc, nil)
 	require.NoError(t, err)
 	scores := doc["scores"].([]any)
 	require.Len(t, scores, 1)
@@ -301,7 +300,7 @@ func TestApplyValuePathPresenceFilter(t *testing.T) {
 		map[string]any{"type": "work", "value": "w@x"},
 		map[string]any{"type": "home"},
 	}}
-	err := patch(op(protocol.PatchOpRemove, `emails[value pr]`, "")).Apply(doc, nil)
+	err := patch(op(PatchOpRemove, `emails[value pr]`, "")).Apply(doc, nil)
 	require.NoError(t, err)
 	emails := doc["emails"].([]any)
 	require.Len(t, emails, 1)
@@ -310,7 +309,7 @@ func TestApplyValuePathPresenceFilter(t *testing.T) {
 
 func TestApplyTypedUserPreservesUntouchedFields(t *testing.T) {
 	user := &core.User{UserName: "old", DisplayName: "keep"}
-	err := patch(op(protocol.PatchOpReplace, "userName", `"new"`)).Apply(user, nil)
+	err := patch(op(PatchOpReplace, "userName", `"new"`)).Apply(user, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "new", user.UserName)
 	assert.Equal(t, "keep", user.DisplayName)
@@ -323,7 +322,7 @@ func TestApplyTypedUserValuePath(t *testing.T) {
 		Active:   &active,
 		Emails:   []core.Email{{Type: "work", Value: "old@x"}},
 	}
-	err := patch(op(protocol.PatchOpReplace, `emails[type eq "work"].value`, `"new@x"`)).Apply(user, nil)
+	err := patch(op(PatchOpReplace, `emails[type eq "work"].value`, `"new@x"`)).Apply(user, nil)
 	require.NoError(t, err)
 	require.Len(t, user.Emails, 1)
 	assert.Equal(t, "new@x", user.Emails[0].Value)
@@ -333,7 +332,7 @@ func TestApplyTypedUserValuePath(t *testing.T) {
 
 func TestApplyTypedUserRemoveClearsField(t *testing.T) {
 	user := &core.User{UserName: "bjensen", DisplayName: "Babs"}
-	err := patch(op(protocol.PatchOpRemove, "displayName", "")).Apply(user, nil)
+	err := patch(op(PatchOpRemove, "displayName", "")).Apply(user, nil)
 	require.NoError(t, err)
 	assert.Empty(t, user.DisplayName)
 	assert.Equal(t, "bjensen", user.UserName)
