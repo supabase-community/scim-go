@@ -37,41 +37,39 @@ func New() *Grammar {
 
 // Parse reads a SCIM filter (RFC 7644 3.4.2.2) and returns its AST
 func (g *Grammar) Parse(text string) (*Node, error) {
-	if g.exceedsMax(text) {
-		return nil, ErrInputTooLarge
-	}
 	g.once.Do(g.build)
-	ctx := peg.NewContext(text)
-	raw, err := g.filter(ctx)
+	raw, err := g.run(text, trailingSpace(g.filter))
 	if err != nil {
-		return nil, NewParseError(text, ctx.Position())
-	}
-	_, _ = peg.Space()(ctx)
-	if ctx.Position() != len(text) {
-		return nil, NewParseError(text, ctx.Position())
+		return nil, err
 	}
 	node := newNode(raw)
 	if node == nil {
-		return nil, NewParseError(text, ctx.Position())
+		return nil, NewParseError(text, len(text))
 	}
 	return node, nil
 }
 
-// ParseAttrPath reads a SCIM attrPath (RFC 7644 3.4.2.2)
-func (g *Grammar) ParseAttrPath(text string) (AttrPath, error) {
+func (g *Grammar) run(text string, p peg.Parser) (peg.ASTNode, error) {
 	if g.exceedsMax(text) {
-		return AttrPath{}, ErrInputTooLarge
+		return nil, ErrInputTooLarge
 	}
-	g.once.Do(g.build)
 	ctx := peg.NewContext(text)
-	raw, err := g.attributePath()(ctx)
-	if err != nil {
-		return AttrPath{}, NewParseError(text, ctx.Position())
+	raw, err := p(ctx)
+	if err != nil || ctx.Position() != len(text) {
+		return nil, NewParseError(text, ctx.Position())
 	}
-	if ctx.Position() != len(text) {
-		return AttrPath{}, NewParseError(text, ctx.Position())
+	return raw, nil
+}
+
+func trailingSpace(p peg.Parser) peg.Parser {
+	return func(c *peg.Context) (peg.ASTNode, error) {
+		raw, err := p(c)
+		if err != nil {
+			return nil, err
+		}
+		_, _ = peg.Space()(c)
+		return raw, nil
 	}
-	return newAttrPath(raw.(string)), nil
 }
 
 func (g *Grammar) exceedsMax(text string) bool {
