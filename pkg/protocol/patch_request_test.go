@@ -37,7 +37,7 @@ func TestApplyTopLevelUser(t *testing.T) {
 
 func TestApplyTopLevelGroup(t *testing.T) {
 	item := &core.Group{DisplayName: "Tour Guides"}
-	patch := request(operation(PatchOpAdd, "displayName", `"Example"`))
+	patch := request(operation(PatchOpReplace, "displayName", `"Example"`))
 
 	require.NoError(t, patch.Apply(item, nil))
 	assert.Equal(t, "Example", item.DisplayName)
