@@ -37,7 +37,7 @@ func TestStringifyVisitorRoundTrip(t *testing.T) {
 			original, err := g.Parse(input)
 			require.NoError(t, err)
 
-			text, err := Visit[string](StringifyVisitor{}, original)
+			text, err := Visit[string](Stringify{}, original)
 			require.NoError(t, err)
 
 			reparsed, err := g.Parse(text)
@@ -49,7 +49,7 @@ func TestStringifyVisitorRoundTrip(t *testing.T) {
 }
 
 type failingVisitor struct {
-	StringifyVisitor
+	Stringify
 	failOn string
 }
 
@@ -57,7 +57,7 @@ func (f failingVisitor) VisitEquals(attr AttrPath, value any) (string, error) {
 	if attr.Key() == f.failOn {
 		return "", assert.AnError
 	}
-	return f.StringifyVisitor.VisitEquals(attr, value)
+	return f.Stringify.VisitEquals(attr, value)
 }
 
 func TestVisitPropagatesErrors(t *testing.T) {

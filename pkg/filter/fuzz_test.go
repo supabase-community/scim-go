@@ -38,7 +38,7 @@ func FuzzParse(f *testing.F) {
 			t.Fatalf("nil node with nil error for %q", input)
 		}
 
-		text, err := Visit[string](StringifyVisitor{}, node)
+		text, err := Visit[string](Stringify{}, node)
 		if err != nil {
 			return
 		}

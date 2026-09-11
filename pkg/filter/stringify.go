@@ -6,61 +6,61 @@ import (
 	"strconv"
 )
 
-type StringifyVisitor struct{}
+type Stringify struct{}
 
-func (StringifyVisitor) VisitAnd(left, right string) (string, error) {
+func (Stringify) VisitAnd(left, right string) (string, error) {
 	return fmt.Sprintf("(%s and %s)", left, right), nil
 }
 
-func (StringifyVisitor) VisitOr(left, right string) (string, error) {
+func (Stringify) VisitOr(left, right string) (string, error) {
 	return fmt.Sprintf("(%s or %s)", left, right), nil
 }
 
-func (StringifyVisitor) VisitNot(operand string) (string, error) {
+func (Stringify) VisitNot(operand string) (string, error) {
 	return fmt.Sprintf("not (%s)", operand), nil
 }
 
-func (StringifyVisitor) VisitEquals(attribute AttrPath, value any) (string, error) {
+func (Stringify) VisitEquals(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "eq", value), nil
 }
 
-func (StringifyVisitor) VisitNotEquals(attribute AttrPath, value any) (string, error) {
+func (Stringify) VisitNotEquals(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "ne", value), nil
 }
 
-func (StringifyVisitor) VisitContains(attribute AttrPath, value any) (string, error) {
+func (Stringify) VisitContains(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "co", value), nil
 }
 
-func (StringifyVisitor) VisitStartsWith(attribute AttrPath, value any) (string, error) {
+func (Stringify) VisitStartsWith(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "sw", value), nil
 }
 
-func (StringifyVisitor) VisitEndsWith(attribute AttrPath, value any) (string, error) {
+func (Stringify) VisitEndsWith(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "ew", value), nil
 }
 
-func (StringifyVisitor) VisitGreaterThan(attribute AttrPath, value any) (string, error) {
+func (Stringify) VisitGreaterThan(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "gt", value), nil
 }
 
-func (StringifyVisitor) VisitGreaterThanEquals(attribute AttrPath, value any) (string, error) {
+func (Stringify) VisitGreaterThanEquals(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "ge", value), nil
 }
 
-func (StringifyVisitor) VisitLessThan(attribute AttrPath, value any) (string, error) {
+func (Stringify) VisitLessThan(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "lt", value), nil
 }
 
-func (StringifyVisitor) VisitLessThanEquals(attribute AttrPath, value any) (string, error) {
+func (Stringify) VisitLessThanEquals(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "le", value), nil
 }
 
-func (StringifyVisitor) VisitPresence(attribute AttrPath) (string, error) {
+func (Stringify) VisitPresence(attribute AttrPath) (string, error) {
 	return fmt.Sprintf("%s pr", attribute), nil
 }
 
-func (StringifyVisitor) VisitValuePath(path AttrPath, subAttribute string, valueFilter func() (string, error)) (string, error) {
+func (Stringify) VisitValuePath(path AttrPath, subAttribute string, valueFilter func() (string, error)) (string, error) {
 	vf, err := valueFilter()
 	if err != nil {
 		return "", err
