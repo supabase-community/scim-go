@@ -49,8 +49,45 @@ func TestParsePath(t *testing.T) {
 	})
 
 	t.Run("rejects malformed paths", func(t *testing.T) {
-		for _, text := range []string{"", "123bad", "emails[", `emails[type eq "work"`, "name.", ".name"} {
+		for _, text := range []string{
+			"", "123bad", "emails[", `emails[type eq "work"`, "name.", ".name",
+			"name.familyName.extra", "a_b:name", "foo bar:department", "userName ",
+		} {
 			_, err := filter.ParsePath(text)
+			require.Error(t, err, text)
+		}
+	})
+}
+
+func TestParseAttrPath(t *testing.T) {
+	t.Run("parses a bare attribute", func(t *testing.T) {
+		p, err := filter.ParseAttrPath("userName")
+		require.NoError(t, err)
+		assert.Equal(t, "userName", p.Name)
+		assert.Empty(t, p.URI)
+		assert.Empty(t, p.SubAttribute)
+	})
+
+	t.Run("parses a dotted sub-attribute", func(t *testing.T) {
+		p, err := filter.ParseAttrPath("name.familyName")
+		require.NoError(t, err)
+		assert.Equal(t, "name", p.Name)
+		assert.Equal(t, "familyName", p.SubAttribute)
+	})
+
+	t.Run("parses a multi-colon schema URN", func(t *testing.T) {
+		p, err := filter.ParseAttrPath("urn:ietf:params:scim:schemas:core:2.0:User:userName")
+		require.NoError(t, err)
+		assert.Equal(t, "urn:ietf:params:scim:schemas:core:2.0:User", p.URI)
+		assert.Equal(t, "userName", p.Name)
+	})
+
+	t.Run("rejects malformed attr paths", func(t *testing.T) {
+		for _, text := range []string{
+			"", "123bad", "name.", ".name", "name.familyName.extra",
+			"a_b:name", "foo bar:department", "userName ", `emails[type eq "work"]`,
+		} {
+			_, err := filter.ParseAttrPath(text)
 			require.Error(t, err, text)
 		}
 	})

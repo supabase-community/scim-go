@@ -8,14 +8,12 @@ type Path struct {
 	ValueFilter *Node
 }
 
-// ParsePath parses a SCIM PATCH path, per RFC 7644, Section 3.5.2. A bare
-// attrPath (userName, name.familyName) has a nil ValueFilter; a valuePath
-// (emails[type eq "work"].value) carries the bracketed filter as ValueFilter.
+// ParsePath parses a SCIM PATCH path, per RFC 7644, Section 3.5.2.
 func ParsePath(text string) (Path, error) {
 	if strings.IndexByte(text, '[') < 0 {
-		p := parseAttrPath(text)
-		if !validName(p.Name) || (p.SubAttribute != "" && !validName(p.SubAttribute)) || p.String() != text {
-			return Path{}, &ParseError{Input: text, Position: 0}
+		p, err := ParseAttrPath(text)
+		if err != nil {
+			return Path{}, err
 		}
 		return Path{AttrPath: p}, nil
 	}
@@ -31,8 +29,4 @@ func ParsePath(text string) (Path, error) {
 		p.SubAttribute = sub
 	}
 	return p, nil
-}
-
-func validName(s string) bool {
-	return s != "" && reAttributeName.FindString(s) == s
 }

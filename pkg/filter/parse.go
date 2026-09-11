@@ -9,3 +9,7 @@ var DefaultGrammar = func() *Grammar {
 func Parse(text string) (*Node, error) {
 	return DefaultGrammar.Parse(text)
 }
+
+func ParseAttrPath(text string) (AttrPath, error) {
+	return DefaultGrammar.ParseAttrPath(text)
+}

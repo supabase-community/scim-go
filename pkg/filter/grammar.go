@@ -72,6 +72,23 @@ func (g *Grammar) Parse(text string) (*Node, error) {
 	return node, nil
 }
 
+// ParseAttrPath reads a SCIM attrPath (RFC 7644 3.4.2.2)
+func (g *Grammar) ParseAttrPath(text string) (AttrPath, error) {
+	if g.MaxInputBytes > 0 && len(text) > g.MaxInputBytes {
+		return AttrPath{}, ErrInputTooLarge
+	}
+	g.once.Do(g.build)
+	ctx := peg.NewContext(text)
+	raw, err := g.attributePath()(ctx)
+	if err != nil {
+		return AttrPath{}, &ParseError{Input: text, Position: ctx.Position()}
+	}
+	if ctx.Position() != len(text) {
+		return AttrPath{}, &ParseError{Input: text, Position: ctx.Position()}
+	}
+	return parseAttrPath(raw.(string)), nil
+}
+
 // build wires the grammar once; peg.Ref resolves recursion at parse time.
 func (g *Grammar) build() {
 	filterRef := peg.Ref(&g.filter)
