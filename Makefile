@@ -12,6 +12,10 @@ clean:
 test:
 	CGO_ENABLED=1 go test -race ./...
 
+.PHONY: bench
+bench:
+	go test -run '^$$' -bench=. -benchmem ./...
+
 .PHONY: cover
 cover:
 	go test -race -coverprofile=$(COVERAGE) ./...
