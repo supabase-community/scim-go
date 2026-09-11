@@ -15,10 +15,19 @@ func TestNodeAttrPathSplitsParts(t *testing.T) {
 		{`userName eq "x"`, AttrPath{Name: "userName"}},
 		{`name.familyName eq "x"`, AttrPath{Name: "name", SubAttribute: "familyName"}},
 		{
-			`urn:ietf:params:scim:schemas:core:2.0:User:userName eq "x"`, AttrPath{URI: "urn:ietf:params:scim:schemas:core:2.0:User", Name: "userName"},
+			`urn:ietf:params:scim:schemas:core:2.0:User:userName eq "x"`,
+			AttrPath{
+				URI:  "urn:ietf:params:scim:schemas:core:2.0:User",
+				Name: "userName",
+			},
 		},
 		{
-			`urn:ietf:params:scim:schemas:core:2.0:User:name.familyName eq "x"`, AttrPath{URI: "urn:ietf:params:scim:schemas:core:2.0:User", Name: "name", SubAttribute: "familyName"},
+			`urn:ietf:params:scim:schemas:core:2.0:User:name.familyName eq "x"`,
+			AttrPath{
+				URI:          "urn:ietf:params:scim:schemas:core:2.0:User",
+				Name:         "name",
+				SubAttribute: "familyName",
+			},
 		},
 	}
 	g := newGrammar(0)
