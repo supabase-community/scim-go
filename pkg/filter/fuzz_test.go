@@ -25,7 +25,7 @@ func FuzzParse(f *testing.F) {
 		f.Add(s)
 	}
 
-	g := New()
+	g := New(8192)
 	f.Fuzz(func(t *testing.T, input string) {
 		if len(input) > 4096 {
 			return

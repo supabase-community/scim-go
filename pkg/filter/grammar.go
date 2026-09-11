@@ -29,8 +29,8 @@ type Grammar struct {
 	valueFilter peg.Parser
 }
 
-func New() *Grammar {
-	g := &Grammar{}
+func New(maxInputBytes int) *Grammar {
+	g := &Grammar{MaxInputBytes: maxInputBytes}
 	g.once.Do(g.build)
 	return g
 }

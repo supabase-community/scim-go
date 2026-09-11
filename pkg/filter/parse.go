@@ -1,9 +1,7 @@
 package filter
 
 var DefaultGrammar = func() *Grammar {
-	g := New()
-	g.MaxInputBytes = 8192
-	return g
+	return New(8192)
 }()
 
 func Parse(text string) (*Node, error) {

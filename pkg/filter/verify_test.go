@@ -7,7 +7,7 @@ import (
 )
 
 func TestNestingIsLinearTime(t *testing.T) {
-	g := New()
+	g := New(0)
 	for _, depth := range []int{1000, 2000, 4000, 8000} {
 		in := strings.Repeat("(", depth) + `a eq "1"` + strings.Repeat(")", depth)
 		node, err := g.Parse(in)

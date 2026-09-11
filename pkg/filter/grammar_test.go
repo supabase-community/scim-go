@@ -255,7 +255,7 @@ func TestParseRejectsOversizedInput(t *testing.T) {
 }
 
 func TestParseDefaultIsUnbounded(t *testing.T) {
-	g := New() // MaxInputBytes defaults to 0
+	g := New(0)
 	const depth = 4000
 	input := strings.Repeat("(", depth) + `a eq "1"` + strings.Repeat(")", depth)
 
