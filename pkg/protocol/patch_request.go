@@ -93,7 +93,7 @@ func (r *PatchRequest) applyWrite(doc map[string]any, op PatchOperation, kind Pa
 		return r.applyMerge(doc, op.Value, kind, schemas)
 	}
 
-	path, err := filter.ParsePath(op.Path)
+	path, err := filter.NewPath(op.Path)
 	if err != nil {
 		return ErrInvalidPath(err.Error())
 	}
@@ -143,7 +143,7 @@ func (r *PatchRequest) applyRemove(doc map[string]any, op PatchOperation, schema
 	if op.Path == "" {
 		return ErrNoTarget(`"remove" requires a "path"`)
 	}
-	path, err := filter.ParsePath(op.Path)
+	path, err := filter.NewPath(op.Path)
 	if err != nil {
 		return ErrInvalidPath(err.Error())
 	}

@@ -8,8 +8,8 @@ type Path struct {
 	ValueFilter *Node
 }
 
-// ParsePath parses a SCIM PATCH path, per RFC 7644, Section 3.5.2.
-func ParsePath(text string) (Path, error) {
+// NewPath parses a SCIM PATCH path, per RFC 7644, Section 3.5.2.
+func NewPath(text string) (Path, error) {
 	if strings.IndexByte(text, '[') < 0 {
 		p, err := ParseAttrPath(text)
 		if err != nil {
