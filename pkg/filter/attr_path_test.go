@@ -21,7 +21,7 @@ func TestNodeAttrPathSplitsParts(t *testing.T) {
 			`urn:ietf:params:scim:schemas:core:2.0:User:name.familyName eq "x"`, AttrPath{URI: "urn:ietf:params:scim:schemas:core:2.0:User", Name: "name", SubAttribute: "familyName"},
 		},
 	}
-	g := &Grammar{}
+	g := newGrammar(0)
 	for _, tc := range tt {
 		t.Run(tc.input, func(t *testing.T) {
 			node, err := g.Parse(tc.input)
@@ -52,7 +52,7 @@ func TestAttrPathKey(t *testing.T) {
 }
 
 func TestNodeAttrPathOfValuePath(t *testing.T) {
-	g := &Grammar{}
+	g := newGrammar(0)
 	node, err := g.Parse(`emails[type eq "work"]`)
 	require.NoError(t, err)
 

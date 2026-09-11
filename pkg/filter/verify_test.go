@@ -18,7 +18,7 @@ func TestNestingIsLinearTime(t *testing.T) {
 }
 
 func TestConcurrentParse(t *testing.T) {
-	g := &Grammar{}
+	g := newGrammar(0)
 	inputs := []string{
 		`userName eq "bjensen"`,
 		`emails[type eq "work" and primary eq true].value`,

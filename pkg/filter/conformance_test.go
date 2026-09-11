@@ -38,7 +38,7 @@ func TestFilterConformance(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidFilter, f)
 	}
 
-	long := `userName eq "` + strings.Repeat("a", DefaultGrammar.MaxInputBytes) + `"`
+	long := `userName eq "` + strings.Repeat("a", defaultGrammar.maxInputBytes) + `"`
 	_, err := Parse(long)
 	require.ErrorIs(t, err, ErrInputTooLarge, long)
 }

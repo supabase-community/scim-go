@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
-	"sync"
 
 	"github.com/supabase-community/scim-go/pkg/filter/internal/peg"
 )
 
-var ErrInputTooLarge = errors.New("scim: filter exceeds MaxInputBytes")
+var ErrInputTooLarge = errors.New("scim: filter exceeds the max input size")
 
 var (
 	reAttributeName = regexp.MustCompile(`\A[a-zA-Z][a-zA-Z0-9_\-]*`)
@@ -19,25 +18,44 @@ var (
 	reSchemaURI     = regexp.MustCompile(`\A[A-Za-z][A-Za-z0-9.\-]*(?::[A-Za-z0-9.\-]+)*:`)
 )
 
-type Grammar struct {
-	// MaxInputBytes, when > 0, makes Parse reject filters longer than this many
-	// bytes before parsing (0 = unbounded, the default).
-	MaxInputBytes int
-
-	once        sync.Once
-	filter      peg.Parser
-	valueFilter peg.Parser
+type Grammar interface {
+	Parse(string) (*Node, error)
 }
 
-func New(maxInputBytes int) *Grammar {
-	g := &Grammar{MaxInputBytes: maxInputBytes}
-	g.once.Do(g.build)
+type grammar struct {
+	maxInputBytes int
+	filter        peg.Parser
+	valueFilter   peg.Parser
+}
+
+func New(maxInputBytes int) Grammar {
+	return newGrammar(maxInputBytes)
+}
+
+func newGrammar(maxInputBytes int) *grammar {
+	g := &grammar{maxInputBytes: maxInputBytes}
+
+	filterRef := peg.Ref(&g.filter)
+	valueRef := peg.Ref(&g.valueFilter)
+	attrExp := g.attributeExpression()
+
+	// filterAtom = *1"not" "(" FILTER ")" / attrExp / valuePath
+	filterAtom := peg.Choice(g.parenGroup(filterRef), attrExp, g.valuePath(valueRef))
+	// valFilter atom omits valuePath: RFC forbids a nested value path here.
+	valueAtom := peg.Choice(g.parenGroup(valueRef), attrExp)
+
+	var andFilter, andValue peg.Parser
+	andFilter = g.and(filterAtom, peg.Ref(&andFilter))
+	andValue = g.and(valueAtom, peg.Ref(&andValue))
+
+	g.filter = g.or(andFilter, filterRef)
+	g.valueFilter = g.or(andValue, valueRef)
+
 	return g
 }
 
 // Parse reads a SCIM filter (RFC 7644 3.4.2.2) and returns its AST
-func (g *Grammar) Parse(text string) (*Node, error) {
-	g.once.Do(g.build)
+func (g *grammar) Parse(text string) (*Node, error) {
 	raw, err := g.run(text, trailingSpace(g.filter))
 	if err != nil {
 		return nil, err
@@ -49,7 +67,7 @@ func (g *Grammar) Parse(text string) (*Node, error) {
 	return node, nil
 }
 
-func (g *Grammar) run(text string, p peg.Parser) (peg.ASTNode, error) {
+func (g *grammar) run(text string, p peg.Parser) (peg.ASTNode, error) {
 	if g.exceedsMax(text) {
 		return nil, ErrInputTooLarge
 	}
@@ -72,40 +90,22 @@ func trailingSpace(p peg.Parser) peg.Parser {
 	}
 }
 
-func (g *Grammar) exceedsMax(text string) bool {
-	return g.MaxInputBytes > 0 && len(text) > g.MaxInputBytes
-}
-
-func (g *Grammar) build() {
-	filterRef := peg.Ref(&g.filter)
-	valueRef := peg.Ref(&g.valueFilter)
-	attrExp := g.attributeExpression()
-
-	// filterAtom = *1"not" "(" FILTER ")" / attrExp / valuePath
-	filterAtom := peg.Choice(g.parenGroup(filterRef), attrExp, g.valuePath(valueRef))
-	// valFilter atom omits valuePath: RFC forbids a nested value path here.
-	valueAtom := peg.Choice(g.parenGroup(valueRef), attrExp)
-
-	var andFilter, andValue peg.Parser
-	andFilter = g.and(filterAtom, peg.Ref(&andFilter))
-	andValue = g.and(valueAtom, peg.Ref(&andValue))
-
-	g.filter = g.or(andFilter, filterRef)
-	g.valueFilter = g.or(andValue, valueRef)
+func (g *grammar) exceedsMax(text string) bool {
+	return g.maxInputBytes > 0 && len(text) > g.maxInputBytes
 }
 
 // logExp = FILTER SP "or" SP FILTER (loosest precedence, right-associative).
-func (g *Grammar) or(left, filter peg.Parser) peg.Parser {
+func (g *grammar) or(left, filter peg.Parser) peg.Parser {
 	return binaryExpression(left, peg.Fold("or"), "or", filter)
 }
 
 // logExp = FILTER SP "and" SP FILTER (binds tighter than "or").
-func (g *Grammar) and(atom, self peg.Parser) peg.Parser {
+func (g *grammar) and(atom, self peg.Parser) peg.Parser {
 	return binaryExpression(atom, peg.Fold("and"), "and", self)
 }
 
 // *1"not" "(" sub ")": an optional negation around a parenthesized sub-filter.
-func (g *Grammar) parenGroup(sub peg.Parser) peg.Parser {
+func (g *grammar) parenGroup(sub peg.Parser) peg.Parser {
 	return func(c *peg.Context) (peg.ASTNode, error) {
 		start := c.Position()
 		_, err := peg.Sequence(peg.Fold("not"), peg.Space())(c)
@@ -131,7 +131,7 @@ func (g *Grammar) parenGroup(sub peg.Parser) peg.Parser {
 }
 
 // valuePath = attrPath "[" valFilter "]" [subAttr]
-func (g *Grammar) valuePath(valueFilter peg.Parser) peg.Parser {
+func (g *grammar) valuePath(valueFilter peg.Parser) peg.Parser {
 	return peg.Sequence(
 		peg.Tag("path", g.attributePath()),
 		peg.Str("["),
@@ -142,7 +142,7 @@ func (g *Grammar) valuePath(valueFilter peg.Parser) peg.Parser {
 }
 
 // attrExp = (attrPath SP "pr") / (attrPath SP compareOp SP compValue)
-func (g *Grammar) attributeExpression() peg.Parser {
+func (g *grammar) attributeExpression() peg.Parser {
 	attrPath := g.attributePath()
 	return peg.Choice(
 		peg.Sequence(
@@ -159,7 +159,7 @@ func (g *Grammar) attributeExpression() peg.Parser {
 
 // compareOp = "eq" / "ne" / "co" / "sw" / "ew" / "gt" / "lt" / "ge" / "le"
 // Operators are case-insensitive per RFC 7644.
-func (g *Grammar) comparisonOperator() peg.Parser {
+func (g *grammar) comparisonOperator() peg.Parser {
 	return peg.Choice(
 		peg.Fold("eq"), peg.Fold("ne"), peg.Fold("co"), peg.Fold("sw"), peg.Fold("ew"),
 		peg.Fold("gt"), peg.Fold("lt"), peg.Fold("ge"), peg.Fold("le"),
@@ -168,7 +168,7 @@ func (g *Grammar) comparisonOperator() peg.Parser {
 
 // compValue = false / null / true / number / string (JSON rules, RFC 7159).
 // JSON literals are lowercase-only, unlike the case-insensitive operators.
-func (g *Grammar) comparisonValue() peg.Parser {
+func (g *grammar) comparisonValue() peg.Parser {
 	return peg.Choice(
 		constant("false", false),
 		constant("null", nil),
@@ -185,7 +185,7 @@ func (g *Grammar) comparisonValue() peg.Parser {
 }
 
 // attrPath = [URI ":"] ATTRNAME *1subAttr
-func (g *Grammar) attributePath() peg.Parser {
+func (g *grammar) attributePath() peg.Parser {
 	attrName := g.attributeName()
 	schemaURI := g.schemaURI()
 	subAttr := g.subAttribute()
@@ -209,12 +209,12 @@ func (g *Grammar) attributePath() peg.Parser {
 }
 
 // ATTRNAME = ALPHA *(nameChar)
-func (g *Grammar) attributeName() peg.Parser {
+func (g *grammar) attributeName() peg.Parser {
 	return peg.Match(reAttributeName)
 }
 
 // subAttr = "." ATTRNAME
-func (g *Grammar) subAttribute() peg.Parser {
+func (g *grammar) subAttribute() peg.Parser {
 	attrName := g.attributeName()
 	return func(c *peg.Context) (peg.ASTNode, error) {
 		start := c.Position()
@@ -231,7 +231,7 @@ func (g *Grammar) subAttribute() peg.Parser {
 }
 
 // URI ":" prefix on an attrPath. The trailing ":" is stripped from the value.
-func (g *Grammar) schemaURI() peg.Parser {
+func (g *grammar) schemaURI() peg.Parser {
 	return convert(peg.Match(reSchemaURI), func(s string) (peg.ASTNode, error) {
 		return s[:len(s)-1], nil
 	})

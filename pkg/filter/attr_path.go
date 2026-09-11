@@ -10,7 +10,7 @@ type AttrPath struct {
 }
 
 func NewAttrPath(text string) (AttrPath, error) {
-	raw, err := DefaultGrammar.run(text, DefaultGrammar.attributePath())
+	raw, err := defaultGrammar.run(text, defaultGrammar.attributePath())
 	if err != nil {
 		return AttrPath{}, err
 	}

@@ -15,7 +15,7 @@ func chain(op string, n int) string {
 }
 
 func BenchmarkParseLeaf(b *testing.B) {
-	g := &Grammar{}
+	g := newGrammar(0)
 	input := `userName eq "bjensen"`
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -26,7 +26,7 @@ func BenchmarkParseLeaf(b *testing.B) {
 }
 
 func BenchmarkParseAndChain(b *testing.B) {
-	g := &Grammar{}
+	g := newGrammar(0)
 	input := chain("and", 20)
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -37,7 +37,7 @@ func BenchmarkParseAndChain(b *testing.B) {
 }
 
 func BenchmarkParseOrChain(b *testing.B) {
-	g := &Grammar{}
+	g := newGrammar(0)
 	input := chain("or", 20)
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
@@ -48,7 +48,7 @@ func BenchmarkParseOrChain(b *testing.B) {
 }
 
 func BenchmarkParseNestedParens(b *testing.B) {
-	g := &Grammar{}
+	g := newGrammar(0)
 	const depth = 20
 	input := strings.Repeat("(", depth) + `userName eq "bjensen"` + strings.Repeat(")", depth)
 	b.ReportAllocs()

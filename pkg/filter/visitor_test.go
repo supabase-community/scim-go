@@ -31,7 +31,7 @@ func TestStringifyVisitorRoundTrip(t *testing.T) {
 		`emails[type eq "work" and primary eq true]`,
 	}
 
-	g := &Grammar{}
+	g := newGrammar(0)
 	for _, input := range tt {
 		t.Run(input, func(t *testing.T) {
 			original, err := g.Parse(input)
@@ -61,7 +61,7 @@ func (f failingVisitor) VisitEquals(attr AttrPath, value any) (string, error) {
 }
 
 func TestVisitPropagatesErrors(t *testing.T) {
-	g := &Grammar{}
+	g := newGrammar(0)
 	cases := map[string]struct {
 		input  string
 		failOn string
@@ -101,7 +101,7 @@ func (countingVisitor) VisitValuePath(_ AttrPath, _ string, valueFilter func() (
 }
 
 func TestVisitDispatch(t *testing.T) {
-	g := &Grammar{}
+	g := newGrammar(0)
 
 	t.Run("counts leaves across and/or", func(t *testing.T) {
 		node, err := g.Parse(`a eq "1" and b eq "2" and c eq "3"`)
@@ -169,7 +169,7 @@ func (v *scopeVisitor) VisitValuePath(path AttrPath, _ string, valueFilter func(
 }
 
 func TestVisitValuePathThreadsScope(t *testing.T) {
-	g := &Grammar{}
+	g := newGrammar(0)
 	node, err := g.Parse(`emails[type eq "work" and primary eq true]`)
 	require.NoError(t, err)
 
