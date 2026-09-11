@@ -409,6 +409,17 @@ func TestApplyValuePathReplaceRespectsSubAttributeMutability(t *testing.T) {
 	assert.Equal(t, ScimTypeMutability, err.ScimType)
 }
 
+// RFC 7643 7 - a value-path merge into a readOnly complex attribute must be skipped.
+func TestApplyValuePathMergeRespectsParentMutability(t *testing.T) {
+	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
+	patch := request(operation(PatchOpReplace, `groups[value eq "g1"]`, `{"value":"g2"}`))
+
+	require.NoError(t, patch.Apply(item, userSchemas()))
+
+	groups := item["groups"].([]any)
+	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
+}
+
 // RFC 7644 3.4.2.2 - a value filter on a caseExact attribute must compare case-sensitively.
 func TestApplyValuePathFilterHonorsCaseExact(t *testing.T) {
 	schemas := []*core.Schema{

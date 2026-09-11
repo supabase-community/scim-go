@@ -136,7 +136,7 @@ func (r *PatchRequest) applyRemove(doc map[string]any, op PatchOperation, schema
 	if path.ValueFilter != nil {
 		return r.applyValueRemove(doc, path, schemas)
 	}
-	if err := r.enforce(schemas, path, doc); err != nil {
+	if _, err := r.guard(schemas, path, doc); err != nil {
 		return r.skipOrFail(err)
 	}
 	r.removePath(doc, path)
@@ -163,9 +163,12 @@ func (r *PatchRequest) applyValueWrite(doc map[string]any, w valueWrite, schemas
 	if err != nil {
 		return err
 	}
-	attr, err := r.attrFor(schemas, w.path)
-	if err != nil {
-		return err
+	attr := parent
+	if w.path.SubAttribute != "" {
+		attr, err = r.attrFor(schemas, w.path)
+		if err != nil {
+			return err
+		}
 	}
 
 	key := r.lookupKey(doc, w.path.Name)
@@ -205,6 +208,11 @@ func (r *PatchRequest) writeMember(member map[string]any, w valueWrite, attr *co
 	if !ok {
 		return ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
 	}
+	if attr != nil {
+		if err := r.checkMutability(attr, true); err != nil {
+			return err
+		}
+	}
 	return r.mergeMember(member, object, w.appendMode, attr)
 }
 
@@ -233,7 +241,7 @@ func (r *PatchRequest) applyValueRemove(doc map[string]any, path filter.Path, sc
 	if err != nil {
 		return err
 	}
-	if err := r.enforce(schemas, path, doc); err != nil {
+	if _, err := r.guard(schemas, path, doc); err != nil {
 		return r.skipOrFail(err)
 	}
 
@@ -294,11 +302,6 @@ func (r *PatchRequest) writePath(doc map[string]any, w valueWrite, attr *core.At
 	r.setKey(nested, w.path.SubAttribute, value, w.appendMode)
 	doc[key] = nested
 	return nil
-}
-
-func (r *PatchRequest) enforce(schemas []*core.Schema, path filter.Path, doc map[string]any) error {
-	_, err := r.guard(schemas, path, doc)
-	return err
 }
 
 func (r *PatchRequest) guard(schemas []*core.Schema, path filter.Path, doc map[string]any) (*core.Attribute, error) {
@@ -543,10 +546,10 @@ func (r *PatchRequest) members(value any) []any {
 
 // RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array.
 func (r *PatchRequest) shape(value any, multiValued bool) any {
-	if _, ok := value.([]any); multiValued && !ok {
-		return []any{value}
+	if !multiValued {
+		return value
 	}
-	return value
+	return r.members(value)
 }
 
 func (r *PatchRequest) lookupKey(container map[string]any, key string) string {
