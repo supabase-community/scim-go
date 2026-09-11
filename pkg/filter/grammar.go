@@ -214,10 +214,16 @@ func (g *Grammar) attributeName() peg.Parser {
 func (g *Grammar) subAttribute() peg.Parser {
 	attrName := g.attributeName()
 	return func(c *peg.Context) (peg.ASTNode, error) {
+		start := c.Position()
 		if _, err := peg.Str(".")(c); err != nil {
 			return nil, err
 		}
-		return attrName(c)
+		name, err := attrName(c)
+		if err != nil {
+			c.Seek(start)
+			return nil, err
+		}
+		return name, nil
 	}
 }
 
