@@ -9,6 +9,10 @@ type AttrPath struct {
 	SubAttribute string
 }
 
+func NewAttrPath(text string) (AttrPath, error) {
+	return DefaultGrammar.ParseAttrPath(text)
+}
+
 func newAttrPath(raw string) AttrPath {
 	var path AttrPath
 	if i := strings.LastIndex(raw, ":"); i >= 0 {

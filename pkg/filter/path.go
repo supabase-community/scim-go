@@ -11,7 +11,7 @@ type Path struct {
 // NewPath parses a SCIM PATCH path, per RFC 7644, Section 3.5.2.
 func NewPath(text string) (Path, error) {
 	if strings.IndexByte(text, '[') < 0 {
-		path, err := ParseAttrPath(text)
+		path, err := NewAttrPath(text)
 		if err != nil {
 			return Path{}, err
 		}

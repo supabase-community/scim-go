@@ -4,28 +4,13 @@ package filter
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"regexp"
 	"sync"
 
 	"github.com/supabase-community/scim-go/pkg/filter/internal/peg"
 )
 
-var ErrInvalidFilter = errors.New("scim: invalid filter")
-
 var ErrInputTooLarge = errors.New("scim: filter exceeds MaxInputBytes")
-
-// ParseError reports a filter that does not conform to the RFC 7644 grammar
-type ParseError struct {
-	Input    string
-	Position int
-}
-
-func (e *ParseError) Error() string {
-	return fmt.Sprintf("scim: invalid filter at position %d: %q", e.Position, e.Input)
-}
-
-func (e *ParseError) Unwrap() error { return ErrInvalidFilter }
 
 var (
 	reAttributeName = regexp.MustCompile(`\A[a-zA-Z][a-zA-Z0-9_\-]*`)
@@ -50,46 +35,49 @@ func New() *Grammar {
 	return g
 }
 
-// Parse reads a SCIM filter (RFC 7644 3.4.2.2) and returns its AST, or a *ParseError on malformed input.
+// Parse reads a SCIM filter (RFC 7644 3.4.2.2) and returns its AST
 func (g *Grammar) Parse(text string) (*Node, error) {
-	if g.MaxInputBytes > 0 && len(text) > g.MaxInputBytes {
+	if g.exceedsMax(text) {
 		return nil, ErrInputTooLarge
 	}
 	g.once.Do(g.build)
 	ctx := peg.NewContext(text)
 	raw, err := g.filter(ctx)
 	if err != nil {
-		return nil, &ParseError{Input: text, Position: ctx.Position()}
+		return nil, NewParseError(text, ctx.Position())
 	}
 	_, _ = peg.Space()(ctx)
 	if ctx.Position() != len(text) {
-		return nil, &ParseError{Input: text, Position: ctx.Position()}
+		return nil, NewParseError(text, ctx.Position())
 	}
 	node := newNode(raw)
 	if node == nil {
-		return nil, &ParseError{Input: text, Position: ctx.Position()}
+		return nil, NewParseError(text, ctx.Position())
 	}
 	return node, nil
 }
 
 // ParseAttrPath reads a SCIM attrPath (RFC 7644 3.4.2.2)
 func (g *Grammar) ParseAttrPath(text string) (AttrPath, error) {
-	if g.MaxInputBytes > 0 && len(text) > g.MaxInputBytes {
+	if g.exceedsMax(text) {
 		return AttrPath{}, ErrInputTooLarge
 	}
 	g.once.Do(g.build)
 	ctx := peg.NewContext(text)
 	raw, err := g.attributePath()(ctx)
 	if err != nil {
-		return AttrPath{}, &ParseError{Input: text, Position: ctx.Position()}
+		return AttrPath{}, NewParseError(text, ctx.Position())
 	}
 	if ctx.Position() != len(text) {
-		return AttrPath{}, &ParseError{Input: text, Position: ctx.Position()}
+		return AttrPath{}, NewParseError(text, ctx.Position())
 	}
 	return newAttrPath(raw.(string)), nil
 }
 
-// build wires the grammar once; peg.Ref resolves recursion at parse time.
+func (g *Grammar) exceedsMax(text string) bool {
+	return g.MaxInputBytes > 0 && len(text) > g.MaxInputBytes
+}
+
 func (g *Grammar) build() {
 	filterRef := peg.Ref(&g.filter)
 	valueRef := peg.Ref(&g.valueFilter)
