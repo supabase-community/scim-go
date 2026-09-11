@@ -89,14 +89,15 @@ func (r *PatchRequest) applyWrite(doc map[string]any, op PatchOperation, kind Pa
 		return err
 	}
 
-	appendMode := kind == PatchOpAdd
+	w := valueWrite{path: path, value: value, appendMode: kind == PatchOpAdd}
 	if path.ValueFilter != nil {
-		return r.applyValueWrite(doc, valueWrite{path: path, value: value, appendMode: appendMode}, schemas)
+		return r.applyValueWrite(doc, w, schemas)
 	}
-	if err := r.enforce(schemas, path, doc); err != nil {
+	attr, err := r.guard(schemas, path, doc)
+	if err != nil {
 		return r.skipOrFail(err)
 	}
-	return r.writePath(doc, path, value, appendMode)
+	return r.writePath(doc, w, attr)
 }
 
 func (r *PatchRequest) applyMerge(doc map[string]any, raw json.RawMessage, kind PatchOp, schemas []*core.Schema) error {
@@ -106,13 +107,14 @@ func (r *PatchRequest) applyMerge(doc map[string]any, raw json.RawMessage, kind 
 	}
 	appendMode := kind == PatchOpAdd
 	for key, value := range values {
-		if err := r.enforce(schemas, r.topLevelPath(key), doc); err != nil {
+		attr, err := r.guard(schemas, r.topLevelPath(key), doc)
+		if err != nil {
 			if errors.Is(err, errSkip) {
 				continue
 			}
 			return err
 		}
-		r.setKey(doc, key, value, appendMode)
+		r.setKey(doc, key, r.shape(value, r.isMultiValued(attr)), appendMode)
 	}
 	return nil
 }
@@ -153,11 +155,15 @@ func (r *PatchRequest) removePath(doc map[string]any, path filter.Path) {
 }
 
 func (r *PatchRequest) applyValueWrite(doc map[string]any, w valueWrite, schemas []*core.Schema) error {
-	pred, err := r.compile(w.path.ValueFilter)
+	parent, err := r.parentAttr(schemas, w.path)
 	if err != nil {
 		return err
 	}
-	attr, err := r.valuePathAttr(schemas, w.path)
+	pred, err := r.compile(w.path.ValueFilter, parent)
+	if err != nil {
+		return err
+	}
+	attr, err := r.attrFor(schemas, w.path)
 	if err != nil {
 		return err
 	}
@@ -186,28 +192,44 @@ func (r *PatchRequest) applyValueWrite(doc map[string]any, w valueWrite, schemas
 }
 
 func (r *PatchRequest) writeMember(member map[string]any, w valueWrite, attr *core.Attribute) error {
-	if attr != nil {
-		present := w.path.SubAttribute == "" || r.hasKey(member, w.path.SubAttribute)
-		if err := r.checkMutability(attr, present); err != nil {
-			return err
-		}
-	}
 	if w.path.SubAttribute != "" {
-		r.setKey(member, w.path.SubAttribute, w.value, w.appendMode)
+		if attr != nil {
+			if err := r.checkMutability(attr, r.hasKey(member, w.path.SubAttribute)); err != nil {
+				return err
+			}
+		}
+		r.setKey(member, w.path.SubAttribute, r.shape(w.value, r.isMultiValued(attr)), w.appendMode)
 		return nil
 	}
 	object, ok := w.value.(map[string]any)
 	if !ok {
 		return ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
 	}
-	for k, v := range object {
-		r.setKey(member, k, v, w.appendMode)
+	return r.mergeMember(member, object, w.appendMode, attr)
+}
+
+func (r *PatchRequest) mergeMember(member, object map[string]any, appendMode bool, attr *core.Attribute) error {
+	for key, value := range object {
+		sub := r.subAttr(attr, key)
+		if sub != nil {
+			if err := r.checkMutability(sub, r.hasKey(member, key)); err != nil {
+				if errors.Is(err, errSkip) {
+					continue
+				}
+				return err
+			}
+		}
+		r.setKey(member, key, r.shape(value, r.isMultiValued(sub)), appendMode)
 	}
 	return nil
 }
 
 func (r *PatchRequest) applyValueRemove(doc map[string]any, path filter.Path, schemas []*core.Schema) error {
-	pred, err := r.compile(path.ValueFilter)
+	parent, err := r.parentAttr(schemas, path)
+	if err != nil {
+		return err
+	}
+	pred, err := r.compile(path.ValueFilter, parent)
 	if err != nil {
 		return err
 	}
@@ -255,12 +277,13 @@ func (r *PatchRequest) partition(elements []any, pred predicate) ([]any, int) {
 	return kept, matched
 }
 
-func (r *PatchRequest) writePath(doc map[string]any, path filter.Path, value any, appendMode bool) error {
-	if path.SubAttribute == "" {
-		r.setKey(doc, path.Name, value, appendMode)
+func (r *PatchRequest) writePath(doc map[string]any, w valueWrite, attr *core.Attribute) error {
+	value := r.shape(w.value, r.isMultiValued(attr))
+	if w.path.SubAttribute == "" {
+		r.setKey(doc, w.path.Name, value, w.appendMode)
 		return nil
 	}
-	key := r.lookupKey(doc, path.Name)
+	key := r.lookupKey(doc, w.path.Name)
 	nested, ok := doc[key].(map[string]any)
 	if !ok {
 		if doc[key] != nil {
@@ -268,20 +291,22 @@ func (r *PatchRequest) writePath(doc map[string]any, path filter.Path, value any
 		}
 		nested = map[string]any{}
 	}
-	r.setKey(nested, path.SubAttribute, value, appendMode)
+	r.setKey(nested, w.path.SubAttribute, value, w.appendMode)
 	doc[key] = nested
 	return nil
 }
 
 func (r *PatchRequest) enforce(schemas []*core.Schema, path filter.Path, doc map[string]any) error {
-	if len(schemas) == 0 {
-		return nil
+	_, err := r.guard(schemas, path, doc)
+	return err
+}
+
+func (r *PatchRequest) guard(schemas []*core.Schema, path filter.Path, doc map[string]any) (*core.Attribute, error) {
+	attr, err := r.attrFor(schemas, path)
+	if err != nil || attr == nil {
+		return nil, err
 	}
-	attr, err := r.resolveAttr(schemas, path)
-	if err != nil {
-		return err
-	}
-	return r.checkMutability(attr, r.attrExists(doc, path))
+	return attr, r.checkMutability(attr, r.attrExists(doc, path))
 }
 
 func (r *PatchRequest) checkMutability(attr *core.Attribute, present bool) error {
@@ -296,11 +321,33 @@ func (r *PatchRequest) checkMutability(attr *core.Attribute, present bool) error
 	return nil
 }
 
-func (r *PatchRequest) valuePathAttr(schemas []*core.Schema, path filter.Path) (*core.Attribute, error) {
+func (r *PatchRequest) attrFor(schemas []*core.Schema, path filter.Path) (*core.Attribute, error) {
 	if len(schemas) == 0 {
 		return nil, nil
 	}
 	return r.resolveAttr(schemas, path)
+}
+
+func (r *PatchRequest) parentAttr(schemas []*core.Schema, path filter.Path) (*core.Attribute, error) {
+	base := path
+	base.SubAttribute = ""
+	return r.attrFor(schemas, base)
+}
+
+func (r *PatchRequest) subAttr(attr *core.Attribute, name string) *core.Attribute {
+	if attr == nil {
+		return nil
+	}
+	return attr.SubAttribute(name)
+}
+
+func (r *PatchRequest) isMultiValued(attr *core.Attribute) bool {
+	return attr != nil && attr.MultiValued
+}
+
+func (r *PatchRequest) isCaseExact(attr *core.Attribute, name string) bool {
+	sub := r.subAttr(attr, name)
+	return sub != nil && sub.CaseExact
 }
 
 func (r *PatchRequest) resolveAttr(schemas []*core.Schema, path filter.Path) (*core.Attribute, error) {
@@ -337,33 +384,33 @@ func (r *PatchRequest) selectSchema(schemas []*core.Schema, uri string) *core.Sc
 	return nil
 }
 
-func (r *PatchRequest) compile(node *filter.Node) (predicate, error) {
+func (r *PatchRequest) compile(node *filter.Node, attr *core.Attribute) (predicate, error) {
 	switch {
 	case node == nil:
 		return nil, ErrInvalidPath("empty value filter")
 	case node.Not():
-		return r.compileNot(node)
+		return r.compileNot(node, attr)
 	case node.Left() != nil:
-		return r.compileBinary(node)
+		return r.compileBinary(node, attr)
 	default:
-		return r.compileLeaf(node), nil
+		return r.compileLeaf(node, attr), nil
 	}
 }
 
-func (r *PatchRequest) compileNot(node *filter.Node) (predicate, error) {
-	inner, err := r.compile(node.Operand())
+func (r *PatchRequest) compileNot(node *filter.Node, attr *core.Attribute) (predicate, error) {
+	inner, err := r.compile(node.Operand(), attr)
 	if err != nil {
 		return nil, err
 	}
 	return func(m map[string]any) bool { return !inner(m) }, nil
 }
 
-func (r *PatchRequest) compileBinary(node *filter.Node) (predicate, error) {
-	left, err := r.compile(node.Left())
+func (r *PatchRequest) compileBinary(node *filter.Node, attr *core.Attribute) (predicate, error) {
+	left, err := r.compile(node.Left(), attr)
 	if err != nil {
 		return nil, err
 	}
-	right, err := r.compile(node.Right())
+	right, err := r.compile(node.Right(), attr)
 	if err != nil {
 		return nil, err
 	}
@@ -373,28 +420,31 @@ func (r *PatchRequest) compileBinary(node *filter.Node) (predicate, error) {
 	return func(m map[string]any) bool { return left(m) && right(m) }, nil
 }
 
-func (r *PatchRequest) compileLeaf(node *filter.Node) predicate {
-	key := node.AttrPath().Name
-	op := strings.ToLower(node.Operator())
-	want := node.Value()
-	return func(m map[string]any) bool { return r.matchOne(m, key, op, want) }
+func (r *PatchRequest) compileLeaf(node *filter.Node, attr *core.Attribute) predicate {
+	l := leaf{
+		key:       node.AttrPath().Name,
+		op:        strings.ToLower(node.Operator()),
+		want:      node.Value(),
+		caseExact: r.isCaseExact(attr, node.AttrPath().Name),
+	}
+	return func(m map[string]any) bool { return r.matchOne(m, l) }
 }
 
-func (r *PatchRequest) matchOne(member map[string]any, key, op string, want any) bool {
-	got, ok := r.lookupCI(member, key)
-	if op == "pr" {
+func (r *PatchRequest) matchOne(member map[string]any, l leaf) bool {
+	got, ok := r.lookupCI(member, l.key)
+	if l.op == "pr" {
 		return ok && got != nil
 	}
 	if !ok || got == nil {
 		return false
 	}
-	return r.compareValues(filter.Operator(op), got, want)
+	return r.compareValues(filter.Operator(l.op), got, l.want, l.caseExact)
 }
 
-func (r *PatchRequest) compareValues(op filter.Operator, got, want any) bool {
+func (r *PatchRequest) compareValues(op filter.Operator, got, want any, caseExact bool) bool {
 	if gs, ok := got.(string); ok {
 		ws, ok := want.(string)
-		return ok && r.compareStrings(op, gs, ws)
+		return ok && r.compareStrings(op, gs, ws, caseExact)
 	}
 	if gb, ok := got.(bool); ok {
 		wb, ok := want.(bool)
@@ -405,27 +455,29 @@ func (r *PatchRequest) compareValues(op filter.Operator, got, want any) bool {
 	return gok && wok && r.compareNumbers(op, gf, wf)
 }
 
-func (r *PatchRequest) compareStrings(op filter.Operator, got, want string) bool {
-	lowerGot, lowerWant := strings.ToLower(got), strings.ToLower(want)
+func (r *PatchRequest) compareStrings(op filter.Operator, got, want string, caseExact bool) bool {
+	if !caseExact {
+		got, want = strings.ToLower(got), strings.ToLower(want)
+	}
 	switch op {
 	case filter.OpEquals:
-		return lowerGot == lowerWant
+		return got == want
 	case filter.OpNotEquals:
-		return lowerGot != lowerWant
+		return got != want
 	case filter.OpContains:
-		return strings.Contains(lowerGot, lowerWant)
+		return strings.Contains(got, want)
 	case filter.OpStartsWith:
-		return strings.HasPrefix(lowerGot, lowerWant)
+		return strings.HasPrefix(got, want)
 	case filter.OpEndsWith:
-		return strings.HasSuffix(lowerGot, lowerWant)
+		return strings.HasSuffix(got, want)
 	case filter.OpGreaterThan:
-		return lowerGot > lowerWant
+		return got > want
 	case filter.OpLessThan:
-		return lowerGot < lowerWant
+		return got < want
 	case filter.OpGreaterThanEquals:
-		return lowerGot >= lowerWant
+		return got >= want
 	case filter.OpLessThanEquals:
-		return lowerGot <= lowerWant
+		return got <= want
 	}
 	return false
 }
@@ -475,15 +527,26 @@ func (r *PatchRequest) setKey(container map[string]any, key string, value any, a
 	existing := r.lookupKey(container, key)
 	if appendMode {
 		if before, ok := container[existing].([]any); ok {
-			if after, ok := value.([]any); ok {
-				container[existing] = append(before, after...)
-				return
-			}
-			container[existing] = append(before, value)
+			container[existing] = append(before, r.members(value)...)
 			return
 		}
 	}
 	container[existing] = value
+}
+
+func (r *PatchRequest) members(value any) []any {
+	if list, ok := value.([]any); ok {
+		return list
+	}
+	return []any{value}
+}
+
+// RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array.
+func (r *PatchRequest) shape(value any, multiValued bool) any {
+	if _, ok := value.([]any); multiValued && !ok {
+		return []any{value}
+	}
+	return value
 }
 
 func (r *PatchRequest) lookupKey(container map[string]any, key string) string {

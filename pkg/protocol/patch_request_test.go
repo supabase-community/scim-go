@@ -379,6 +379,53 @@ func TestApplyTypedUserRemoveClearsField(t *testing.T) {
 	assert.Equal(t, "bjensen", user.UserName)
 }
 
+// RFC 7644 3.5.2.1 - adding to an absent multi-valued attribute must produce an array.
+func TestApplyAddToAbsentMultiValuedWrapsInArray(t *testing.T) {
+	item := map[string]any{}
+	patch := request(operation(PatchOpAdd, "emails", `{"value":"a@b.com"}`))
+
+	require.NoError(t, patch.Apply(item, userSchemas()))
+
+	emails, ok := item["emails"].([]any)
+	require.True(t, ok)
+	require.Len(t, emails, 1)
+}
+
+// RFC 7643 7 - a value-path merge must honor each sub-attribute's mutability.
+func TestApplyValuePathReplaceRespectsSubAttributeMutability(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
+				core.NewAttribute("type", core.TypeString, "").AsImmutable(),
+				core.NewAttribute("value", core.TypeString, ""),
+			),
+		),
+	}
+	item := map[string]any{"emails": []any{map[string]any{"type": "work", "value": "a@b.com"}}}
+	patch := request(operation(PatchOpReplace, `emails[value eq "a@b.com"]`, `{"type":"home"}`))
+
+	var err *Error
+	require.ErrorAs(t, patch.Apply(item, schemas), &err)
+	assert.Equal(t, ScimTypeMutability, err.ScimType)
+}
+
+// RFC 7644 3.4.2.2 - a value filter on a caseExact attribute must compare case-sensitively.
+func TestApplyValuePathFilterHonorsCaseExact(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
+				core.NewAttribute("value", core.TypeString, "").AsCaseExact(),
+			),
+		),
+	}
+	item := map[string]any{"emails": []any{map[string]any{"value": "abc@x"}}}
+	patch := request(operation(PatchOpRemove, `emails[value eq "ABC@x"]`, ""))
+
+	var err *Error
+	require.ErrorAs(t, patch.Apply(item, schemas), &err)
+	assert.Equal(t, ScimTypeNoTarget, err.ScimType)
+}
+
 func request(ops ...PatchOperation) *PatchRequest {
 	return &PatchRequest{
 		Schemas:    []core.SchemaURI{SchemaPatchOp},
