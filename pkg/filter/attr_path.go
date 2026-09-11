@@ -9,6 +9,19 @@ type AttrPath struct {
 	SubAttribute string
 }
 
+func newAttrPath(raw string) AttrPath {
+	var path AttrPath
+	if i := strings.LastIndex(raw, ":"); i >= 0 {
+		path.URI, raw = raw[:i], raw[i+1:]
+	}
+	if i := strings.IndexByte(raw, '.'); i >= 0 {
+		path.Name, path.SubAttribute = raw[:i], raw[i+1:]
+	} else {
+		path.Name = raw
+	}
+	return path
+}
+
 func (p AttrPath) String() string {
 	s := p.Name
 	if p.SubAttribute != "" {
@@ -25,17 +38,4 @@ func (p AttrPath) Key() string {
 		return strings.ToLower(p.Name)
 	}
 	return strings.ToLower(p.Name + "." + p.SubAttribute)
-}
-
-func parseAttrPath(s string) AttrPath {
-	var p AttrPath
-	if i := strings.LastIndex(s, ":"); i >= 0 {
-		p.URI, s = s[:i], s[i+1:]
-	}
-	if i := strings.IndexByte(s, '.'); i >= 0 {
-		p.Name, p.SubAttribute = s[:i], s[i+1:]
-	} else {
-		p.Name = s
-	}
-	return p
 }

@@ -86,7 +86,7 @@ func (g *Grammar) ParseAttrPath(text string) (AttrPath, error) {
 	if ctx.Position() != len(text) {
 		return AttrPath{}, &ParseError{Input: text, Position: ctx.Position()}
 	}
-	return parseAttrPath(raw.(string)), nil
+	return newAttrPath(raw.(string)), nil
 }
 
 // build wires the grammar once; peg.Ref resolves recursion at parse time.

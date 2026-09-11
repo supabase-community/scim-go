@@ -11,11 +11,11 @@ type Path struct {
 // NewPath parses a SCIM PATCH path, per RFC 7644, Section 3.5.2.
 func NewPath(text string) (Path, error) {
 	if strings.IndexByte(text, '[') < 0 {
-		p, err := ParseAttrPath(text)
+		path, err := ParseAttrPath(text)
 		if err != nil {
 			return Path{}, err
 		}
-		return Path{AttrPath: p}, nil
+		return Path{AttrPath: path}, nil
 	}
 	node, err := Parse(text)
 	if err != nil {
@@ -24,9 +24,12 @@ func NewPath(text string) (Path, error) {
 	if !node.HasPath() {
 		return Path{}, &ParseError{Input: text, Position: 0}
 	}
-	p := Path{AttrPath: parseAttrPath(node.Path()), ValueFilter: node.ValueFilter()}
-	if sub := node.SubAttribute(); sub != "" {
-		p.SubAttribute = sub
+	path := Path{
+		AttrPath:    newAttrPath(node.Path()),
+		ValueFilter: node.ValueFilter(),
 	}
-	return p, nil
+	if sub := node.SubAttribute(); sub != "" {
+		path.SubAttribute = sub
+	}
+	return path, nil
 }
