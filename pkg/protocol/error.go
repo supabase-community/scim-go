@@ -2,8 +2,6 @@ package protocol
 
 import "github.com/supabase-community/scim-go/pkg/scimerrors"
 
-// Error and its constructors moved to pkg/scimerrors so pkg/patch can raise them
-// without importing pkg/protocol. These aliases preserve the protocol surface.
 type (
 	Error     = scimerrors.Error
 	ErrorType = scimerrors.ErrorType
