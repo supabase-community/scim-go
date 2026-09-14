@@ -13,26 +13,28 @@ import (
 )
 
 type document struct {
-	catalog catalog
+	catalog  catalog
+	resource map[string]any
 }
 
-func newDocument(schemas []*core.Schema) *document {
+func newDocument(schemas []*core.Schema, resource map[string]any) *document {
 	return &document{
-		catalog: catalog{schemas: schemas},
+		catalog:  catalog{schemas: schemas},
+		resource: resource,
 	}
 }
 
-func (r *document) apply(resource map[string]any, ops []Operation) error {
-	working := r.cloneMap(resource)
+func (r *document) applyAll(ops []Operation) error {
+	working := r.cloneMap(r.resource)
 	for _, op := range ops {
 		if err := r.applyOp(working, op); err != nil {
 			return err
 		}
 	}
-	for key := range resource {
-		delete(resource, key)
+	for key := range r.resource {
+		delete(r.resource, key)
 	}
-	maps.Copy(resource, working)
+	maps.Copy(r.resource, working)
 	return nil
 }
 
@@ -352,4 +354,3 @@ func (r *document) members(value any) []any {
 	}
 	return []any{value}
 }
-

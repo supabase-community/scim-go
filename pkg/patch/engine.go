@@ -19,21 +19,21 @@ func newEngine(schemas []*core.Schema) *engine {
 }
 
 func (r *engine) apply(resource any, ops []Operation) error {
-	me := newDocument(r.schemas)
-
 	if doc, ok := resource.(map[string]any); ok {
-		return me.apply(doc, ops)
+		return newDocument(r.schemas, doc).applyAll(ops)
 	}
 
 	raw, err := json.Marshal(resource)
 	if err != nil {
 		return scimerrors.ErrInvalidSyntax("resource cannot be encoded")
 	}
-	doc, err := me.decodeMap(raw)
+	d := newDocument(r.schemas, nil)
+	doc, err := d.decodeMap(raw)
 	if err != nil {
 		return scimerrors.ErrInvalidSyntax("resource is not a JSON object")
 	}
-	if err := me.apply(doc, ops); err != nil {
+	d.resource = doc
+	if err := d.applyAll(ops); err != nil {
 		return err
 	}
 	out, err := json.Marshal(doc)
