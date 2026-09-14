@@ -77,7 +77,7 @@ func TestApplyMissingValueRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, patch.Operation{Op: patch.OpReplace, Path: "userName"}), &err)
 
-	assert.Equal(t, scimerrors.ScimTypeInvalidValue, err.ScimType)
+	assert.Equal(t, scimerrors.InvalidValue, err.ScimType)
 }
 
 func TestApplySubAttribute(t *testing.T) {
@@ -101,7 +101,7 @@ func TestRemoveWithoutPathIsNoTarget(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, patch.Operation{Op: patch.OpRemove}), &err)
 
-	assert.Equal(t, scimerrors.ScimTypeNoTarget, err.ScimType)
+	assert.Equal(t, scimerrors.NoTarget, err.ScimType)
 }
 
 func TestApplyValuePathReplaceSub(t *testing.T) {
@@ -147,7 +147,7 @@ func TestApplyValuePathNoMatchIsNoTarget(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(item, nil, operation(patch.OpReplace, `emails[type eq "home"].value`, `"x"`)), &err)
 
-	assert.Equal(t, scimerrors.ScimTypeNoTarget, err.ScimType)
+	assert.Equal(t, scimerrors.NoTarget, err.ScimType)
 }
 
 func TestReadOnlyIsSkipped(t *testing.T) {
@@ -203,21 +203,21 @@ func TestImmutableChangeRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(item, userSchemas(), operation(patch.OpReplace, "employeeNumber", `"E2"`)), &err)
 
-	assert.Equal(t, scimerrors.ScimTypeMutability, err.ScimType)
+	assert.Equal(t, scimerrors.Mutability, err.ScimType)
 }
 
 func TestUnknownAttributeRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, userSchemas(), operation(patch.OpAdd, "nonsense", `"x"`)), &err)
 
-	assert.Equal(t, scimerrors.ScimTypeInvalidPath, err.ScimType)
+	assert.Equal(t, scimerrors.InvalidPath, err.ScimType)
 }
 
 func TestUnknownSchemaURIRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, userSchemas(), operation(patch.OpReplace, string(core.SchemaUser)+"Bogus:userName", `"x"`)), &err)
 
-	assert.Equal(t, scimerrors.ScimTypeInvalidPath, err.ScimType)
+	assert.Equal(t, scimerrors.InvalidPath, err.ScimType)
 }
 
 func TestSchemaURISelectsSchema(t *testing.T) {
@@ -237,7 +237,7 @@ func TestApplyIsAtomicOnFailure(t *testing.T) {
 		operation(patch.OpReplace, "employeeNumber", `"E2"`),
 	), &err)
 
-	assert.Equal(t, scimerrors.ScimTypeMutability, err.ScimType)
+	assert.Equal(t, scimerrors.Mutability, err.ScimType)
 	assert.Equal(t, "keep", item["userName"])
 	assert.Equal(t, "E1", item["employeeNumber"])
 }
@@ -245,7 +245,7 @@ func TestApplyIsAtomicOnFailure(t *testing.T) {
 func TestInvalidOpRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, operation(patch.Op("delete"), "userName", `"x"`)), &err)
-	assert.Equal(t, scimerrors.ScimTypeInvalidSyntax, err.ScimType)
+	assert.Equal(t, scimerrors.InvalidSyntax, err.ScimType)
 }
 
 func TestApplyValuePathAndFilter(t *testing.T) {
@@ -370,7 +370,7 @@ func TestApplyValuePathReplaceRespectsSubAttributeMutability(t *testing.T) {
 
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(item, schemas, operation(patch.OpReplace, `emails[value eq "a@b.com"]`, `{"type":"home"}`)), &err)
-	assert.Equal(t, scimerrors.ScimTypeMutability, err.ScimType)
+	assert.Equal(t, scimerrors.Mutability, err.ScimType)
 }
 
 // RFC 7643 7 - a value-path merge into a readOnly complex attribute must be skipped.
@@ -416,7 +416,7 @@ func TestApplyValuePathFilterHonorsCaseExact(t *testing.T) {
 
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(item, schemas, operation(patch.OpRemove, `emails[value eq "ABC@x"]`, "")), &err)
-	assert.Equal(t, scimerrors.ScimTypeNoTarget, err.ScimType)
+	assert.Equal(t, scimerrors.NoTarget, err.ScimType)
 }
 
 func apply(resource any, schemas []*core.Schema, ops ...patch.Operation) error {

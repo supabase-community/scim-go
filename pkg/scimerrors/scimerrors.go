@@ -4,47 +4,47 @@ import "net/http"
 
 // ErrInvalidFilter reports a filter this provider cannot honour, per Section 3.4.2.2.
 func ErrInvalidFilter(detail string) *Error {
-	return NewError(http.StatusBadRequest, ScimTypeInvalidFilter, detail)
+	return NewError(http.StatusBadRequest, InvalidFilter, detail)
 }
 
 // ErrTooMany reports a query whose result set is larger than this provider is willing to process, per Section 3.4.2.
 func ErrTooMany(detail string) *Error {
-	return NewError(http.StatusBadRequest, ScimTypeTooMany, detail)
+	return NewError(http.StatusBadRequest, TooMany, detail)
 }
 
 // ErrInvalidSyntax reports a request body that does not conform to the request schema, per Section 3.12.
 func ErrInvalidSyntax(detail string) *Error {
-	return NewError(http.StatusBadRequest, ScimTypeInvalidSyntax, detail)
+	return NewError(http.StatusBadRequest, InvalidSyntax, detail)
 }
 
 // ErrInvalidPath reports a malformed PATCH path, per Section 3.5.2.
 func ErrInvalidPath(detail string) *Error {
-	return NewError(http.StatusBadRequest, ScimTypeInvalidPath, detail)
+	return NewError(http.StatusBadRequest, InvalidPath, detail)
 }
 
 // ErrNoTarget reports a PATCH path that yielded nothing to operate on, per Section 3.5.2.
 func ErrNoTarget(detail string) *Error {
-	return NewError(http.StatusBadRequest, ScimTypeNoTarget, detail)
+	return NewError(http.StatusBadRequest, NoTarget, detail)
 }
 
 // ErrInvalidValue reports a required value that is missing or unacceptable, per Section 3.12.
 func ErrInvalidValue(detail string) *Error {
-	return NewError(http.StatusBadRequest, ScimTypeInvalidValue, detail)
+	return NewError(http.StatusBadRequest, InvalidValue, detail)
 }
 
 // ErrMutability reports a modification the target attribute does not allow, per Section 3.5.2.
 func ErrMutability(detail string) *Error {
-	return NewError(http.StatusBadRequest, ScimTypeMutability, detail)
+	return NewError(http.StatusBadRequest, Mutability, detail)
 }
 
 // ErrUniqueness reports a value already in use, per Section 3.3.
 func ErrUniqueness(detail string) *Error {
-	return NewError(http.StatusConflict, ScimTypeUniqueness, detail)
+	return NewError(http.StatusConflict, Uniqueness, detail)
 }
 
 // ErrSensitive reports a request that would disclose sensitive information in a URI, per Section 7.5.2.
 func ErrSensitive(detail string) *Error {
-	return NewError(http.StatusForbidden, ScimTypeSensitive, detail)
+	return NewError(http.StatusForbidden, Sensitive, detail)
 }
 
 // The errors of Table 8, Section 3.12 that carry no scimType.

@@ -14,16 +14,16 @@ const SchemaError core.SchemaURI = "urn:ietf:params:scim:api:messages:2.0:Error"
 type ErrorType string
 
 const (
-	InvalidFilter         ErrorType = "invalidFilter"
-	ScimTypeInvalidPath   ErrorType = "invalidPath"
-	ScimTypeInvalidSyntax ErrorType = "invalidSyntax"
-	ScimTypeInvalidValue  ErrorType = "invalidValue"
-	ScimTypeInvalidVers   ErrorType = "invalidVers"
-	ScimTypeMutability    ErrorType = "mutability"
-	ScimTypeNoTarget      ErrorType = "noTarget"
-	ScimTypeSensitive     ErrorType = "sensitive"
-	ScimTypeTooMany       ErrorType = "tooMany"
-	ScimTypeUniqueness    ErrorType = "uniqueness"
+	InvalidFilter  ErrorType = "invalidFilter"
+	InvalidPath    ErrorType = "invalidPath"
+	InvalidSyntax  ErrorType = "invalidSyntax"
+	InvalidValue   ErrorType = "invalidValue"
+	InvalidVersion ErrorType = "invalidVers"
+	Mutability     ErrorType = "mutability"
+	NoTarget       ErrorType = "noTarget"
+	Sensitive      ErrorType = "sensitive"
+	TooMany        ErrorType = "tooMany"
+	Uniqueness     ErrorType = "uniqueness"
 )
 
 // Error is the error message form defined in RFC 7644, Section 3.12.

@@ -8,16 +8,16 @@ type (
 )
 
 const (
-	ScimTypeInvalidFilter = scimerrors.ScimTypeInvalidFilter
-	ScimTypeInvalidPath   = scimerrors.ScimTypeInvalidPath
-	ScimTypeInvalidSyntax = scimerrors.ScimTypeInvalidSyntax
-	ScimTypeInvalidValue  = scimerrors.ScimTypeInvalidValue
-	ScimTypeInvalidVers   = scimerrors.ScimTypeInvalidVers
-	ScimTypeMutability    = scimerrors.ScimTypeMutability
-	ScimTypeNoTarget      = scimerrors.ScimTypeNoTarget
-	ScimTypeSensitive     = scimerrors.ScimTypeSensitive
-	ScimTypeTooMany       = scimerrors.ScimTypeTooMany
-	ScimTypeUniqueness    = scimerrors.ScimTypeUniqueness
+	ScimTypeInvalidFilter = scimerrors.InvalidFilter
+	ScimTypeInvalidPath   = scimerrors.InvalidPath
+	ScimTypeInvalidSyntax = scimerrors.InvalidSyntax
+	ScimTypeInvalidValue  = scimerrors.InvalidValue
+	ScimTypeInvalidVers   = scimerrors.InvalidVersion
+	ScimTypeMutability    = scimerrors.Mutability
+	ScimTypeNoTarget      = scimerrors.NoTarget
+	ScimTypeSensitive     = scimerrors.Sensitive
+	ScimTypeTooMany       = scimerrors.TooMany
+	ScimTypeUniqueness    = scimerrors.Uniqueness
 )
 
 var (

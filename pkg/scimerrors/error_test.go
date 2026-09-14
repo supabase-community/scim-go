@@ -90,7 +90,7 @@ func TestErrorIs(t *testing.T) {
 
 		var scimErr *scimerrors.Error
 		require.ErrorAs(t, wrapped, &scimErr)
-		assert.Equal(t, scimerrors.ScimTypeTooMany, scimErr.ScimType)
+		assert.Equal(t, scimerrors.TooMany, scimErr.ScimType)
 		require.ErrorIs(t, wrapped, scimerrors.ErrTooMany(""))
 	})
 }
@@ -103,16 +103,16 @@ func TestErrorConstructors(t *testing.T) {
 		scimType scimerrors.ErrorType
 		cite     string
 	}{
-		{"ErrInvalidFilter", scimerrors.ErrInvalidFilter(""), http.StatusBadRequest, scimerrors.ScimTypeInvalidFilter, "Section 3.4.2.2, Table 3"},
-		{"ErrTooMany", scimerrors.ErrTooMany(""), http.StatusBadRequest, scimerrors.ScimTypeTooMany, "Section 3.4.2"},
+		{"ErrInvalidFilter", scimerrors.ErrInvalidFilter(""), http.StatusBadRequest, scimerrors.InvalidFilter, "Section 3.4.2.2, Table 3"},
+		{"ErrTooMany", scimerrors.ErrTooMany(""), http.StatusBadRequest, scimerrors.TooMany, "Section 3.4.2"},
 		{"ErrTooLarge", scimerrors.ErrTooLarge(""), http.StatusRequestEntityTooLarge, "", "Section 3.12"},
-		{"ErrInvalidSyntax", scimerrors.ErrInvalidSyntax(""), http.StatusBadRequest, scimerrors.ScimTypeInvalidSyntax, "Section 3.12"},
-		{"ErrInvalidPath", scimerrors.ErrInvalidPath(""), http.StatusBadRequest, scimerrors.ScimTypeInvalidPath, "Section 3.5.2"},
-		{"ErrNoTarget", scimerrors.ErrNoTarget(""), http.StatusBadRequest, scimerrors.ScimTypeNoTarget, "Section 3.5.2"},
-		{"ErrInvalidValue", scimerrors.ErrInvalidValue(""), http.StatusBadRequest, scimerrors.ScimTypeInvalidValue, "Section 3.12, Table 8"},
-		{"ErrMutability", scimerrors.ErrMutability(""), http.StatusBadRequest, scimerrors.ScimTypeMutability, "Section 3.5.2"},
-		{"ErrUniqueness", scimerrors.ErrUniqueness(""), http.StatusConflict, scimerrors.ScimTypeUniqueness, "Section 3.3"},
-		{"ErrSensitive", scimerrors.ErrSensitive(""), http.StatusForbidden, scimerrors.ScimTypeSensitive, "Section 7.5.2"},
+		{"ErrInvalidSyntax", scimerrors.ErrInvalidSyntax(""), http.StatusBadRequest, scimerrors.InvalidSyntax, "Section 3.12"},
+		{"ErrInvalidPath", scimerrors.ErrInvalidPath(""), http.StatusBadRequest, scimerrors.InvalidPath, "Section 3.5.2"},
+		{"ErrNoTarget", scimerrors.ErrNoTarget(""), http.StatusBadRequest, scimerrors.NoTarget, "Section 3.5.2"},
+		{"ErrInvalidValue", scimerrors.ErrInvalidValue(""), http.StatusBadRequest, scimerrors.InvalidValue, "Section 3.12, Table 8"},
+		{"ErrMutability", scimerrors.ErrMutability(""), http.StatusBadRequest, scimerrors.Mutability, "Section 3.5.2"},
+		{"ErrUniqueness", scimerrors.ErrUniqueness(""), http.StatusConflict, scimerrors.Uniqueness, "Section 3.3"},
+		{"ErrSensitive", scimerrors.ErrSensitive(""), http.StatusForbidden, scimerrors.Sensitive, "Section 7.5.2"},
 		{"ErrUnauthorized", scimerrors.ErrUnauthorized(""), http.StatusUnauthorized, "", "Section 3.12, Table 8"},
 		{"ErrNotFound", scimerrors.ErrNotFound(""), http.StatusNotFound, "", "Section 3.12, Table 8"},
 		{"ErrForbidden", scimerrors.ErrForbidden(""), http.StatusForbidden, "", "Section 3.12, Table 8"},

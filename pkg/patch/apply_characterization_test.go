@@ -64,7 +64,7 @@ func TestApplyValuePathComparisonMatrix(t *testing.T) {
 			if !tc.match {
 				var scimErr *scimerrors.Error
 				require.ErrorAs(t, err, &scimErr)
-				assert.Equal(t, scimerrors.ScimTypeNoTarget, scimErr.ScimType)
+				assert.Equal(t, scimerrors.NoTarget, scimErr.ScimType)
 				return
 			}
 			require.NoError(t, err)
@@ -97,7 +97,7 @@ func TestApplyImmutableSubAttributeChangeRejectedWhenPresent(t *testing.T) {
 
 	var scimErr *scimerrors.Error
 	require.ErrorAs(t, apply(item, schemas, operation(patch.OpReplace, "name.familyName", `"Smith"`)), &scimErr)
-	assert.Equal(t, scimerrors.ScimTypeMutability, scimErr.ScimType)
+	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
 }
 
 func TestApplyResolvesMixedCaseTopLevelKey(t *testing.T) {
@@ -147,7 +147,7 @@ func TestApplyNoPathMergeRejectsImmutableWhenPresent(t *testing.T) {
 		Op:    patch.OpReplace,
 		Value: json.RawMessage(`{"employeeNumber":"e2"}`),
 	}), &scimErr)
-	assert.Equal(t, scimerrors.ScimTypeMutability, scimErr.ScimType)
+	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
 }
 
 func TestApplySubAttributeOnNonComplexRejected(t *testing.T) {
@@ -155,7 +155,7 @@ func TestApplySubAttributeOnNonComplexRejected(t *testing.T) {
 
 	var scimErr *scimerrors.Error
 	require.ErrorAs(t, apply(item, nil, operation(patch.OpReplace, "userName.foo", `"x"`)), &scimErr)
-	assert.Equal(t, scimerrors.ScimTypeInvalidPath, scimErr.ScimType)
+	assert.Equal(t, scimerrors.InvalidPath, scimErr.ScimType)
 }
 
 func TestApplyRejectsMalformedValueJSON(t *testing.T) {
@@ -165,13 +165,13 @@ func TestApplyRejectsMalformedValueJSON(t *testing.T) {
 		Path:  "userName",
 		Value: json.RawMessage(`{bad`),
 	}), &scimErr)
-	assert.Equal(t, scimerrors.ScimTypeInvalidValue, scimErr.ScimType)
+	assert.Equal(t, scimerrors.InvalidValue, scimErr.ScimType)
 }
 
 func TestApplyRejectsInvalidPath(t *testing.T) {
 	var scimErr *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, operation(patch.OpRemove, `emails[`, "")), &scimErr)
-	assert.Equal(t, scimerrors.ScimTypeInvalidPath, scimErr.ScimType)
+	assert.Equal(t, scimerrors.InvalidPath, scimErr.ScimType)
 }
 
 func comparisonSchemas() []*core.Schema {
