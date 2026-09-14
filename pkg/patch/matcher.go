@@ -9,13 +9,14 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+const opPresent = filter.Operator("pr")
+
 type matcher struct {
-	catalog catalog
-	attr    *core.Attribute
+	attr *core.Attribute
 }
 
-func (m matcher) compile(node *filter.Node, attr *core.Attribute) (predicate, error) {
-	pred, err := filter.Visit[predicate](matcher{catalog: m.catalog, attr: attr}, node)
+func compile(attr *core.Attribute, node *filter.Node) (predicate, error) {
+	pred, err := filter.Visit[predicate](matcher{attr: attr}, node)
 	if err != nil {
 		return nil, scimerrors.ErrInvalidPath(err.Error())
 	}
@@ -71,7 +72,7 @@ func (m matcher) VisitLessThanEquals(attr filter.AttrPath, value any) (predicate
 }
 
 func (m matcher) VisitPresence(attr filter.AttrPath) (predicate, error) {
-	return m.leaf(attr, filter.Operator("pr"), nil), nil
+	return m.leaf(attr, opPresent, nil), nil
 }
 
 // RFC 7644 3.4.2.2 - a value filter cannot itself contain a value path.
@@ -80,24 +81,21 @@ func (m matcher) VisitValuePath(_ filter.AttrPath, _ string, _ func() (predicate
 }
 
 func (m matcher) leaf(attr filter.AttrPath, op filter.Operator, want any) predicate {
-	l := leaf{
-		key:       attr.Name,
-		op:        string(op),
-		want:      want,
-		caseExact: m.catalog.subAttr(m.attr, attr.Name).CaseExact,
+	key := attr.Name
+	caseExact := false
+	if sub := m.attr.SubAttribute(key); sub != nil {
+		caseExact = sub.CaseExact
 	}
-	return func(member map[string]any) bool { return m.matchOne(member, l) }
-}
-
-func (m matcher) matchOne(member map[string]any, l leaf) bool {
-	got, ok := object(member).get(l.key)
-	if l.op == "pr" {
-		return ok && got != nil
+	return func(member map[string]any) bool {
+		got, ok := object(member).get(key)
+		if op == opPresent {
+			return ok && got != nil
+		}
+		if !ok || got == nil {
+			return false
+		}
+		return m.compareValues(op, got, want, caseExact)
 	}
-	if !ok || got == nil {
-		return false
-	}
-	return m.compareValues(filter.Operator(l.op), got, l.want, l.caseExact)
 }
 
 func (m matcher) compareValues(op filter.Operator, got, want any, caseExact bool) bool {
