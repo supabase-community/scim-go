@@ -19,7 +19,7 @@ func newEngine(schemas []*core.Schema) *engine {
 }
 
 func (r *engine) apply(resource any, ops []Operation) error {
-	me := newMapEngine(r.schemas)
+	me := newDocument(r.schemas)
 
 	if doc, ok := resource.(map[string]any); ok {
 		return me.apply(doc, ops)

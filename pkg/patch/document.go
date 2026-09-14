@@ -12,17 +12,17 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-type mapEngine struct {
+type document struct {
 	catalog catalog
 }
 
-func newMapEngine(schemas []*core.Schema) *mapEngine {
-	return &mapEngine{
+func newDocument(schemas []*core.Schema) *document {
+	return &document{
 		catalog: catalog{schemas: schemas},
 	}
 }
 
-func (r *mapEngine) apply(resource map[string]any, ops []Operation) error {
+func (r *document) apply(resource map[string]any, ops []Operation) error {
 	working := r.cloneMap(resource)
 	for _, op := range ops {
 		if err := r.applyOp(working, op); err != nil {
@@ -36,7 +36,7 @@ func (r *mapEngine) apply(resource map[string]any, ops []Operation) error {
 	return nil
 }
 
-func (r *mapEngine) applyOp(resource map[string]any, op Operation) error {
+func (r *document) applyOp(resource map[string]any, op Operation) error {
 	switch Op(strings.ToLower(string(op.Op))) {
 	case OpAdd:
 		return r.applyWrite(resource, op, OpAdd)
@@ -49,7 +49,7 @@ func (r *mapEngine) applyOp(resource map[string]any, op Operation) error {
 	}
 }
 
-func (r *mapEngine) applyWrite(resource map[string]any, op Operation, kind Op) error {
+func (r *document) applyWrite(resource map[string]any, op Operation, kind Op) error {
 	if op.Path == "" {
 		return r.applyMerge(resource, op.Value, kind)
 	}
@@ -77,7 +77,7 @@ func (r *mapEngine) applyWrite(resource map[string]any, op Operation, kind Op) e
 	return r.writePath(resource, w, attr)
 }
 
-func (r *mapEngine) applyRemove(resource map[string]any, op Operation) error {
+func (r *document) applyRemove(resource map[string]any, op Operation) error {
 	if op.Path == "" {
 		return scimerrors.ErrNoTarget(`"remove" requires a "path"`)
 	}
@@ -95,7 +95,7 @@ func (r *mapEngine) applyRemove(resource map[string]any, op Operation) error {
 	return nil
 }
 
-func (r *mapEngine) removePath(resource map[string]any, path filter.Path) {
+func (r *document) removePath(resource map[string]any, path filter.Path) {
 	if path.SubAttribute == "" {
 		object(resource).remove(path.Name)
 		return
@@ -106,7 +106,7 @@ func (r *mapEngine) removePath(resource map[string]any, path filter.Path) {
 	}
 }
 
-func (r *mapEngine) cloneMap(source map[string]any) map[string]any {
+func (r *document) cloneMap(source map[string]any) map[string]any {
 	cloned := make(map[string]any, len(source))
 	for key, value := range source {
 		cloned[key] = r.cloneValue(value)
@@ -114,7 +114,7 @@ func (r *mapEngine) cloneMap(source map[string]any) map[string]any {
 	return cloned
 }
 
-func (r *mapEngine) cloneValue(value any) any {
+func (r *document) cloneValue(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		return r.cloneMap(typed)
@@ -129,7 +129,7 @@ func (r *mapEngine) cloneValue(value any) any {
 	}
 }
 
-func (r *mapEngine) applyMerge(resource map[string]any, raw json.RawMessage, kind Op) error {
+func (r *document) applyMerge(resource map[string]any, raw json.RawMessage, kind Op) error {
 	values, err := r.decodeMap(raw)
 	if err != nil {
 		return scimerrors.ErrInvalidValue(`"value" must be an object when "path" is omitted`)
@@ -148,7 +148,7 @@ func (r *mapEngine) applyMerge(resource map[string]any, raw json.RawMessage, kin
 	return nil
 }
 
-func (r *mapEngine) decodeMap(raw []byte) (map[string]any, error) {
+func (r *document) decodeMap(raw []byte) (map[string]any, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
 	var doc map[string]any
@@ -161,7 +161,7 @@ func (r *mapEngine) decodeMap(raw []byte) (map[string]any, error) {
 	return doc, nil
 }
 
-func (r *mapEngine) decodeValue(raw json.RawMessage) (any, error) {
+func (r *document) decodeValue(raw json.RawMessage) (any, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
@@ -174,7 +174,7 @@ func (r *mapEngine) decodeValue(raw json.RawMessage) (any, error) {
 	return value, nil
 }
 
-func (r *mapEngine) applyValueWrite(resource map[string]any, w valueWrite) error {
+func (r *document) applyValueWrite(resource map[string]any, w valueWrite) error {
 	parent, err := r.guardParent(w.path, resource)
 	if err != nil {
 		return guard{}.skipOrFail(err)
@@ -214,7 +214,7 @@ func (r *mapEngine) applyValueWrite(resource map[string]any, w valueWrite) error
 	return nil
 }
 
-func (r *mapEngine) writeMember(member map[string]any, w valueWrite, attr *core.Attribute) error {
+func (r *document) writeMember(member map[string]any, w valueWrite, attr *core.Attribute) error {
 	if w.path.SubAttribute != "" {
 		if err := (guard{}).permits(attr, object(member).has(w.path.SubAttribute)); err != nil {
 			return err
@@ -229,7 +229,7 @@ func (r *mapEngine) writeMember(member map[string]any, w valueWrite, attr *core.
 	return r.mergeMember(member, values, w.appendMode, attr)
 }
 
-func (r *mapEngine) mergeMember(member, values map[string]any, appendMode bool, attr *core.Attribute) error {
+func (r *document) mergeMember(member, values map[string]any, appendMode bool, attr *core.Attribute) error {
 	for key, value := range values {
 		sub := r.catalog.subAttr(attr, key)
 		if err := (guard{}).permits(sub, object(member).has(key)); err != nil {
@@ -243,7 +243,7 @@ func (r *mapEngine) mergeMember(member, values map[string]any, appendMode bool, 
 	return nil
 }
 
-func (r *mapEngine) applyValueRemove(resource map[string]any, path filter.Path) error {
+func (r *document) applyValueRemove(resource map[string]any, path filter.Path) error {
 	parent, err := r.guardParent(path, resource)
 	if err != nil {
 		return guard{}.skipOrFail(err)
@@ -269,7 +269,7 @@ func (r *mapEngine) applyValueRemove(resource map[string]any, path filter.Path) 
 	return nil
 }
 
-func (r *mapEngine) partition(elements []any, pred predicate) ([]any, int) {
+func (r *document) partition(elements []any, pred predicate) ([]any, int) {
 	kept := make([]any, 0, len(elements))
 	matched := 0
 	for _, element := range elements {
@@ -282,7 +282,7 @@ func (r *mapEngine) partition(elements []any, pred predicate) ([]any, int) {
 	return kept, matched
 }
 
-func (r *mapEngine) removeMemberSub(elements []any, sub string, pred predicate) error {
+func (r *document) removeMemberSub(elements []any, sub string, pred predicate) error {
 	matched := 0
 	for _, element := range elements {
 		if member, ok := element.(map[string]any); ok && pred(member) {
@@ -296,7 +296,7 @@ func (r *mapEngine) removeMemberSub(elements []any, sub string, pred predicate) 
 	return nil
 }
 
-func (r *mapEngine) guard(path filter.Path, resource map[string]any) (*core.Attribute, error) {
+func (r *document) guard(path filter.Path, resource map[string]any) (*core.Attribute, error) {
 	attr, err := r.catalog.attrFor(path)
 	if err != nil {
 		return nil, err
@@ -304,7 +304,7 @@ func (r *mapEngine) guard(path filter.Path, resource map[string]any) (*core.Attr
 	return attr, guard{}.permits(attr, r.attrExists(resource, path))
 }
 
-func (r *mapEngine) writePath(resource map[string]any, w valueWrite, attr *core.Attribute) error {
+func (r *document) writePath(resource map[string]any, w valueWrite, attr *core.Attribute) error {
 	value := r.shape(w.value, attr.MultiValued)
 	if w.path.SubAttribute == "" {
 		object(resource).set(w.path.Name, value, w.appendMode)
@@ -318,7 +318,7 @@ func (r *mapEngine) writePath(resource map[string]any, w valueWrite, attr *core.
 	return nil
 }
 
-func (r *mapEngine) guardParent(path filter.Path, resource map[string]any) (*core.Attribute, error) {
+func (r *document) guardParent(path filter.Path, resource map[string]any) (*core.Attribute, error) {
 	parent, err := r.catalog.parentAttr(path)
 	if err != nil {
 		return parent, err
@@ -328,7 +328,7 @@ func (r *mapEngine) guardParent(path filter.Path, resource map[string]any) (*cor
 	return parent, guard{}.permits(parent, r.attrExists(resource, base))
 }
 
-func (r *mapEngine) attrExists(resource map[string]any, path filter.Path) bool {
+func (r *document) attrExists(resource map[string]any, path filter.Path) bool {
 	if path.SubAttribute == "" {
 		return object(resource).has(path.Name)
 	}
@@ -339,14 +339,14 @@ func (r *mapEngine) attrExists(resource map[string]any, path filter.Path) bool {
 }
 
 // RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array.
-func (r *mapEngine) shape(value any, multiValued bool) any {
+func (r *document) shape(value any, multiValued bool) any {
 	if !multiValued {
 		return value
 	}
 	return r.members(value)
 }
 
-func (r *mapEngine) members(value any) []any {
+func (r *document) members(value any) []any {
 	if list, ok := value.([]any); ok {
 		return list
 	}
