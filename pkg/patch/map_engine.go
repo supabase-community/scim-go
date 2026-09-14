@@ -97,12 +97,12 @@ func (r *mapEngine) applyRemove(resource map[string]any, op Operation) error {
 
 func (r *mapEngine) removePath(resource map[string]any, path filter.Path) {
 	if path.SubAttribute == "" {
-		delete(resource, object(resource).key(path.Name))
+		object(resource).remove(path.Name)
 		return
 	}
 	key := object(resource).key(path.Name)
 	if nested, ok := resource[key].(map[string]any); ok {
-		delete(nested, object(nested).key(path.SubAttribute))
+		object(nested).remove(path.SubAttribute)
 	}
 }
 
@@ -143,7 +143,7 @@ func (r *mapEngine) applyMerge(resource map[string]any, raw json.RawMessage, kin
 			}
 			return err
 		}
-		r.setKey(resource, key, r.shape(value, attr.MultiValued), appendMode)
+		object(resource).set(key, r.shape(value, attr.MultiValued), appendMode)
 	}
 	return nil
 }
@@ -219,7 +219,7 @@ func (r *mapEngine) writeMember(member map[string]any, w valueWrite, attr *core.
 		if err := (guard{}).permits(attr, object(member).has(w.path.SubAttribute)); err != nil {
 			return err
 		}
-		r.setKey(member, w.path.SubAttribute, r.shape(w.value, attr.MultiValued), w.appendMode)
+		object(member).set(w.path.SubAttribute, r.shape(w.value, attr.MultiValued), w.appendMode)
 		return nil
 	}
 	values, ok := w.value.(map[string]any)
@@ -238,7 +238,7 @@ func (r *mapEngine) mergeMember(member, values map[string]any, appendMode bool, 
 			}
 			return err
 		}
-		r.setKey(member, key, r.shape(value, sub.MultiValued), appendMode)
+		object(member).set(key, r.shape(value, sub.MultiValued), appendMode)
 	}
 	return nil
 }
@@ -286,7 +286,7 @@ func (r *mapEngine) removeMemberSub(elements []any, sub string, pred predicate) 
 	matched := 0
 	for _, element := range elements {
 		if member, ok := element.(map[string]any); ok && pred(member) {
-			delete(member, object(member).key(sub))
+			object(member).remove(sub)
 			matched++
 		}
 	}
@@ -307,19 +307,14 @@ func (r *mapEngine) guard(path filter.Path, resource map[string]any) (*core.Attr
 func (r *mapEngine) writePath(resource map[string]any, w valueWrite, attr *core.Attribute) error {
 	value := r.shape(w.value, attr.MultiValued)
 	if w.path.SubAttribute == "" {
-		r.setKey(resource, w.path.Name, value, w.appendMode)
+		object(resource).set(w.path.Name, value, w.appendMode)
 		return nil
 	}
-	key := object(resource).key(w.path.Name)
-	nested, ok := resource[key].(map[string]any)
-	if !ok {
-		if resource[key] != nil {
-			return scimerrors.ErrInvalidPath(`"path" targets a non-complex attribute`)
-		}
-		nested = map[string]any{}
+	nested, err := object(resource).child(w.path.Name)
+	if err != nil {
+		return err
 	}
-	r.setKey(nested, w.path.SubAttribute, value, w.appendMode)
-	resource[key] = nested
+	nested.set(w.path.SubAttribute, value, w.appendMode)
 	return nil
 }
 
@@ -341,17 +336,6 @@ func (r *mapEngine) attrExists(resource map[string]any, path filter.Path) bool {
 		return object(nested).has(path.SubAttribute)
 	}
 	return false
-}
-
-func (r *mapEngine) setKey(container map[string]any, key string, value any, appendMode bool) {
-	existing := object(container).key(key)
-	if appendMode {
-		if before, ok := container[existing].([]any); ok {
-			container[existing] = append(before, r.members(value)...)
-			return
-		}
-	}
-	container[existing] = value
 }
 
 // RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array.
