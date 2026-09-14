@@ -141,12 +141,12 @@ func (r *engine) applyRemove(doc map[string]any, op Operation, schemas []*core.S
 
 func (r *engine) removePath(doc map[string]any, path filter.Path) {
 	if path.SubAttribute == "" {
-		delete(doc, r.lookupKey(doc, path.Name))
+		delete(doc, object(doc).key(path.Name))
 		return
 	}
-	key := r.lookupKey(doc, path.Name)
+	key := object(doc).key(path.Name)
 	if nested, ok := doc[key].(map[string]any); ok {
-		delete(nested, r.lookupKey(nested, path.SubAttribute))
+		delete(nested, object(nested).key(path.SubAttribute))
 	}
 }
 
@@ -167,7 +167,7 @@ func (r *engine) applyValueWrite(doc map[string]any, w valueWrite, schemas []*co
 		}
 	}
 
-	key := r.lookupKey(doc, w.path.Name)
+	key := object(doc).key(w.path.Name)
 	elements, _ := doc[key].([]any)
 	matched := 0
 	for _, element := range elements {
@@ -193,25 +193,25 @@ func (r *engine) applyValueWrite(doc map[string]any, w valueWrite, schemas []*co
 func (r *engine) writeMember(member map[string]any, w valueWrite, attr *core.Attribute) error {
 	if w.path.SubAttribute != "" {
 		if attr != nil {
-			if err := r.checkMutability(attr, r.hasKey(member, w.path.SubAttribute)); err != nil {
+			if err := r.checkMutability(attr, object(member).has(w.path.SubAttribute)); err != nil {
 				return err
 			}
 		}
 		r.setKey(member, w.path.SubAttribute, r.shape(w.value, r.isMultiValued(attr)), w.appendMode)
 		return nil
 	}
-	object, ok := w.value.(map[string]any)
+	values, ok := w.value.(map[string]any)
 	if !ok {
 		return scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
 	}
-	return r.mergeMember(member, object, w.appendMode, attr)
+	return r.mergeMember(member, values, w.appendMode, attr)
 }
 
-func (r *engine) mergeMember(member, object map[string]any, appendMode bool, attr *core.Attribute) error {
-	for key, value := range object {
+func (r *engine) mergeMember(member, values map[string]any, appendMode bool, attr *core.Attribute) error {
+	for key, value := range values {
 		sub := r.subAttr(attr, key)
 		if sub != nil {
-			if err := r.checkMutability(sub, r.hasKey(member, key)); err != nil {
+			if err := r.checkMutability(sub, object(member).has(key)); err != nil {
 				if errors.Is(err, errSkip) {
 					continue
 				}
@@ -236,7 +236,7 @@ func (r *engine) applyValueRemove(doc map[string]any, path filter.Path, schemas 
 		return r.skipOrFail(err)
 	}
 
-	key := r.lookupKey(doc, path.Name)
+	key := object(doc).key(path.Name)
 	elements, _ := doc[key].([]any)
 	if path.SubAttribute != "" {
 		return r.removeMemberSub(elements, path.SubAttribute, pred)
@@ -253,7 +253,7 @@ func (r *engine) removeMemberSub(elements []any, sub string, pred predicate) err
 	matched := 0
 	for _, element := range elements {
 		if member, ok := element.(map[string]any); ok && pred(member) {
-			delete(member, r.lookupKey(member, sub))
+			delete(member, object(member).key(sub))
 			matched++
 		}
 	}
@@ -282,7 +282,7 @@ func (r *engine) writePath(doc map[string]any, w valueWrite, attr *core.Attribut
 		r.setKey(doc, w.path.Name, value, w.appendMode)
 		return nil
 	}
-	key := r.lookupKey(doc, w.path.Name)
+	key := object(doc).key(w.path.Name)
 	nested, ok := doc[key].(map[string]any)
 	if !ok {
 		if doc[key] != nil {
@@ -435,7 +435,7 @@ func (r *engine) compileLeaf(node *filter.Node, attr *core.Attribute) predicate 
 }
 
 func (r *engine) matchOne(member map[string]any, l leaf) bool {
-	got, ok := r.lookupCI(member, l.key)
+	got, ok := object(member).get(l.key)
 	if l.op == "pr" {
 		return ok && got != nil
 	}
@@ -528,7 +528,7 @@ func (r *engine) toFloat(value any) (float64, bool) {
 }
 
 func (r *engine) setKey(container map[string]any, key string, value any, appendMode bool) {
-	existing := r.lookupKey(container, key)
+	existing := object(container).key(key)
 	if appendMode {
 		if before, ok := container[existing].([]any); ok {
 			container[existing] = append(before, r.members(value)...)
@@ -553,34 +553,12 @@ func (r *engine) shape(value any, multiValued bool) any {
 	return r.members(value)
 }
 
-func (r *engine) lookupKey(container map[string]any, key string) string {
-	if _, ok := container[key]; ok {
-		return key
-	}
-	for candidate := range container {
-		if strings.EqualFold(candidate, key) {
-			return candidate
-		}
-	}
-	return key
-}
-
-func (r *engine) lookupCI(container map[string]any, key string) (any, bool) {
-	value, ok := container[r.lookupKey(container, key)]
-	return value, ok
-}
-
-func (r *engine) hasKey(container map[string]any, key string) bool {
-	_, ok := container[r.lookupKey(container, key)]
-	return ok
-}
-
 func (r *engine) attrExists(doc map[string]any, path filter.Path) bool {
 	if path.SubAttribute == "" {
-		return r.hasKey(doc, path.Name)
+		return object(doc).has(path.Name)
 	}
-	if nested, ok := doc[r.lookupKey(doc, path.Name)].(map[string]any); ok {
-		return r.hasKey(nested, path.SubAttribute)
+	if nested, ok := doc[object(doc).key(path.Name)].(map[string]any); ok {
+		return object(nested).has(path.SubAttribute)
 	}
 	return false
 }

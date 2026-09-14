@@ -110,6 +110,16 @@ func TestApplyResolvesMixedCaseTopLevelKey(t *testing.T) {
 	assert.False(t, duplicated)
 }
 
+// RFC 7643 2.1 - attribute names are case insensitive; folding collisions resolve to the lowest-ordered key.
+func TestApplyResolvesDuplicateFoldingKeysDeterministically(t *testing.T) {
+	item := map[string]any{"UserName": "upper", "username": "lower"}
+
+	require.NoError(t, apply(item, nil, operation(patch.OpReplace, "userName", `"new"`)))
+
+	assert.Equal(t, "new", item["UserName"])
+	assert.Equal(t, "lower", item["username"])
+}
+
 func TestApplyNonPointerResourceRejected(t *testing.T) {
 	var scimErr *scimerrors.Error
 	require.ErrorAs(t, apply(core.User{UserName: "bob"}, nil, operation(patch.OpReplace, "userName", `"new"`)), &scimErr)
