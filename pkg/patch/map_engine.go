@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
-	"strconv"
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -73,7 +72,7 @@ func (r *mapEngine) applyWrite(resource map[string]any, op Operation, kind Op) e
 	}
 	attr, err := r.guard(path, resource)
 	if err != nil {
-		return r.skipOrFail(err)
+		return guard{}.skipOrFail(err)
 	}
 	return r.writePath(resource, w, attr)
 }
@@ -90,7 +89,7 @@ func (r *mapEngine) applyRemove(resource map[string]any, op Operation) error {
 		return r.applyValueRemove(resource, path)
 	}
 	if _, err := r.guard(path, resource); err != nil {
-		return r.skipOrFail(err)
+		return guard{}.skipOrFail(err)
 	}
 	r.removePath(resource, path)
 	return nil
@@ -178,7 +177,7 @@ func (r *mapEngine) decodeValue(raw json.RawMessage) (any, error) {
 func (r *mapEngine) applyValueWrite(resource map[string]any, w valueWrite) error {
 	parent, err := r.guardParent(w.path, resource)
 	if err != nil {
-		return r.skipOrFail(err)
+		return guard{}.skipOrFail(err)
 	}
 	pred, err := matcher{catalog: r.catalog}.compile(w.path.ValueFilter, parent)
 	if err != nil {
@@ -217,7 +216,7 @@ func (r *mapEngine) applyValueWrite(resource map[string]any, w valueWrite) error
 
 func (r *mapEngine) writeMember(member map[string]any, w valueWrite, attr *core.Attribute) error {
 	if w.path.SubAttribute != "" {
-		if err := r.checkMutability(attr, object(member).has(w.path.SubAttribute)); err != nil {
+		if err := (guard{}).permits(attr, object(member).has(w.path.SubAttribute)); err != nil {
 			return err
 		}
 		r.setKey(member, w.path.SubAttribute, r.shape(w.value, attr.MultiValued), w.appendMode)
@@ -233,7 +232,7 @@ func (r *mapEngine) writeMember(member map[string]any, w valueWrite, attr *core.
 func (r *mapEngine) mergeMember(member, values map[string]any, appendMode bool, attr *core.Attribute) error {
 	for key, value := range values {
 		sub := r.catalog.subAttr(attr, key)
-		if err := r.checkMutability(sub, object(member).has(key)); err != nil {
+		if err := (guard{}).permits(sub, object(member).has(key)); err != nil {
 			if errors.Is(err, errSkip) {
 				continue
 			}
@@ -247,14 +246,14 @@ func (r *mapEngine) mergeMember(member, values map[string]any, appendMode bool, 
 func (r *mapEngine) applyValueRemove(resource map[string]any, path filter.Path) error {
 	parent, err := r.guardParent(path, resource)
 	if err != nil {
-		return r.skipOrFail(err)
+		return guard{}.skipOrFail(err)
 	}
 	pred, err := matcher{catalog: r.catalog}.compile(path.ValueFilter, parent)
 	if err != nil {
 		return err
 	}
 	if _, err := r.guard(path, resource); err != nil {
-		return r.skipOrFail(err)
+		return guard{}.skipOrFail(err)
 	}
 
 	key := object(resource).key(path.Name)
@@ -302,26 +301,7 @@ func (r *mapEngine) guard(path filter.Path, resource map[string]any) (*core.Attr
 	if err != nil {
 		return nil, err
 	}
-	return attr, r.checkMutability(attr, r.attrExists(resource, path))
-}
-
-func (r *mapEngine) checkMutability(attr *core.Attribute, present bool) error {
-	switch attr.Mutability {
-	case core.MutabilityReadOnly:
-		return errSkip
-	case core.MutabilityImmutable:
-		if present {
-			return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is immutable")
-		}
-	}
-	return nil
-}
-
-func (r *mapEngine) skipOrFail(err error) error {
-	if errors.Is(err, errSkip) {
-		return nil
-	}
-	return err
+	return attr, guard{}.permits(attr, r.attrExists(resource, path))
 }
 
 func (r *mapEngine) writePath(resource map[string]any, w valueWrite, attr *core.Attribute) error {
@@ -350,7 +330,7 @@ func (r *mapEngine) guardParent(path filter.Path, resource map[string]any) (*cor
 	}
 	base := path
 	base.SubAttribute = ""
-	return parent, r.checkMutability(parent, r.attrExists(resource, base))
+	return parent, guard{}.permits(parent, r.attrExists(resource, base))
 }
 
 func (r *mapEngine) attrExists(resource map[string]any, path filter.Path) bool {

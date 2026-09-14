@@ -2,14 +2,11 @@ package patch
 
 import (
 	"encoding/json"
-	"errors"
 	"reflect"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
-
-var errSkip = errors.New("scim: skip readOnly attribute")
 
 type engine struct {
 	schemas []*core.Schema
