@@ -1,13 +1,15 @@
-package filter
+package filter_test
 
 import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
 func TestNestingIsLinearTime(t *testing.T) {
-	g := New(0)
+	g := filter.New(0)
 	for _, depth := range []int{1000, 2000, 4000, 8000} {
 		in := strings.Repeat("(", depth) + `a eq "1"` + strings.Repeat(")", depth)
 		node, err := g.Parse(in)
@@ -18,7 +20,7 @@ func TestNestingIsLinearTime(t *testing.T) {
 }
 
 func TestConcurrentParse(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	inputs := []string{
 		`userName eq "bjensen"`,
 		`emails[type eq "work" and primary eq true].value`,

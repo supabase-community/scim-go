@@ -1,15 +1,16 @@
-package filter
+package filter_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
 func TestNewPath(t *testing.T) {
 	t.Run("parses a bare attribute", func(t *testing.T) {
-		p, err := NewPath("userName")
+		p, err := filter.NewPath("userName")
 		require.NoError(t, err)
 		assert.Equal(t, "userName", p.Name)
 		assert.Empty(t, p.SubAttribute)
@@ -17,7 +18,7 @@ func TestNewPath(t *testing.T) {
 	})
 
 	t.Run("parses a dotted sub-attribute", func(t *testing.T) {
-		p, err := NewPath("name.familyName")
+		p, err := filter.NewPath("name.familyName")
 		require.NoError(t, err)
 		assert.Equal(t, "name", p.Name)
 		assert.Equal(t, "familyName", p.SubAttribute)
@@ -25,14 +26,14 @@ func TestNewPath(t *testing.T) {
 	})
 
 	t.Run("parses a schema-qualified attribute", func(t *testing.T) {
-		p, err := NewPath("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department")
+		p, err := filter.NewPath("urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department")
 		require.NoError(t, err)
 		assert.Equal(t, "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User", p.URI)
 		assert.Equal(t, "department", p.Name)
 	})
 
 	t.Run("parses a value path", func(t *testing.T) {
-		p, err := NewPath(`emails[type eq "work"]`)
+		p, err := filter.NewPath(`emails[type eq "work"]`)
 		require.NoError(t, err)
 		assert.Equal(t, "emails", p.Name)
 		assert.Empty(t, p.SubAttribute)
@@ -40,7 +41,7 @@ func TestNewPath(t *testing.T) {
 	})
 
 	t.Run("parses a value path with a sub-attribute", func(t *testing.T) {
-		p, err := NewPath(`emails[type eq "work"].value`)
+		p, err := filter.NewPath(`emails[type eq "work"].value`)
 		require.NoError(t, err)
 		assert.Equal(t, "emails", p.Name)
 		assert.Equal(t, "value", p.SubAttribute)
@@ -52,7 +53,7 @@ func TestNewPath(t *testing.T) {
 			"", "123bad", "emails[", `emails[type eq "work"`, "name.", ".name",
 			"name.familyName.extra", "a_b:name", "foo bar:department", "userName ",
 		} {
-			_, err := NewPath(text)
+			_, err := filter.NewPath(text)
 			require.Error(t, err, text)
 		}
 	})

@@ -1,4 +1,4 @@
-package core
+package core_test
 
 import (
 	"encoding/json"
@@ -6,21 +6,22 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 func TestUser(t *testing.T) {
 	created := time.Date(2026, 7, 21, 19, 41, 41, 0, time.UTC)
 	lastModified := time.Date(2026, 7, 22, 8, 12, 3, 0, time.UTC)
 
-	user := User{
-		Schemas:    []SchemaURI{SchemaUser},
+	user := core.User{
+		Schemas:    []core.SchemaURI{core.SchemaUser},
 		ID:         "2819c223-7f76-453a-919d-413861904646",
 		ExternalID: "701984",
 		UserName:   "bjensen@example.com",
-		Name:       Name{Formatted: "Ms. Barbara J Jensen", FamilyName: "Jensen", GivenName: "Barbara"},
-		Emails:     []Email{{Value: "bjensen@example.com", Primary: new(true)}},
+		Name:       core.Name{Formatted: "Ms. Barbara J Jensen", FamilyName: "Jensen", GivenName: "Barbara"},
+		Emails:     []core.Email{{Value: "bjensen@example.com", Primary: new(true)}},
 		Active:     new(true),
-		Meta: Meta{
+		Meta: core.Meta{
 			ResourceType: "User",
 			Created:      created,
 			LastModified: lastModified,
@@ -50,7 +51,7 @@ func TestUser(t *testing.T) {
 	})
 
 	t.Run("round-trips a deactivated user", func(t *testing.T) {
-		var decoded User
+		var decoded core.User
 		require.NoError(t, json.Unmarshal([]byte(`{"userName":"bjensen","active":false}`), &decoded))
 
 		body, err := json.Marshal(decoded)
@@ -60,7 +61,7 @@ func TestUser(t *testing.T) {
 	})
 
 	t.Run("accepts password on input but never serializes it", func(t *testing.T) {
-		var decoded User
+		var decoded core.User
 		require.NoError(t, json.Unmarshal([]byte(`{"userName":"bjensen","password":"t1meMa$heen"}`), &decoded))
 		require.Equal(t, "t1meMa$heen", decoded.Password)
 

@@ -1,4 +1,4 @@
-package filter
+package filter_test
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
 func TestGrammarAttributePath(t *testing.T) {
@@ -20,7 +21,7 @@ func TestGrammarAttributePath(t *testing.T) {
 		{"schema-URI-prefixed", `urn:ietf:params:scim:schemas:core:2.0:User:userName eq "x"`, "urn:ietf:params:scim:schemas:core:2.0:User:userName"},
 		{"schema-URI-prefixed with sub-attribute", `urn:ietf:params:scim:schemas:core:2.0:User:name.familyName eq "x"`, "urn:ietf:params:scim:schemas:core:2.0:User:name.familyName"},
 	}
-	g := newGrammar(0)
+	g := filter.New(0)
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			node, err := g.Parse(tc.input)
@@ -31,7 +32,7 @@ func TestGrammarAttributePath(t *testing.T) {
 }
 
 func TestGrammarLeafComparison(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	node, err := g.Parse(`userName eq "bjensen"`)
 
 	require.NoError(t, err)
@@ -63,7 +64,7 @@ func TestGrammarComparisonOperatorsAndLiterals(t *testing.T) {
 		{`active eq false`, "active", "eq", false},
 		{`nickName eq null`, "nickName", "eq", nil},
 	}
-	g := newGrammar(0)
+	g := filter.New(0)
 	for _, tc := range tt {
 		t.Run(tc.input, func(t *testing.T) {
 			node, err := g.Parse(tc.input)
@@ -78,16 +79,16 @@ func TestGrammarComparisonOperatorsAndLiterals(t *testing.T) {
 }
 
 func TestParseErrorMessage(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	_, err := g.Parse(`userName eq`)
 
-	var perr *ParseError
+	var perr *filter.ParseError
 	require.ErrorAs(t, err, &perr)
 	assert.Contains(t, perr.Error(), "scim: invalid filter at position")
 }
 
 func TestGrammarPreservesNumericLiteralForCoercion(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	node, err := g.Parse(`id eq 9007199254740993`)
 
 	require.NoError(t, err)
@@ -95,7 +96,7 @@ func TestGrammarPreservesNumericLiteralForCoercion(t *testing.T) {
 }
 
 func TestGrammarPresence(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	node, err := g.Parse("userName pr")
 
 	require.NoError(t, err)
@@ -106,7 +107,7 @@ func TestGrammarPresence(t *testing.T) {
 }
 
 func TestGrammarLogicalExpression(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 
 	t.Run("and", func(t *testing.T) {
 		node, err := g.Parse(`userName eq "bjensen" and active eq true`)
@@ -161,7 +162,7 @@ func TestGrammarLogicalExpression(t *testing.T) {
 }
 
 func TestGrammarParensAndNot(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 
 	t.Run("not wrapping a parenthesized leaf", func(t *testing.T) {
 		node, err := g.Parse(`not (userName eq "bjensen")`)
@@ -199,7 +200,7 @@ func TestGrammarParensAndNot(t *testing.T) {
 }
 
 func TestGrammarValuePath(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 
 	t.Run("simple", func(t *testing.T) {
 		node, err := g.Parse(`emails[type eq "work"]`)
@@ -232,19 +233,19 @@ func TestGrammarValuePath(t *testing.T) {
 }
 
 func TestGrammarRejectsTrailingGarbage(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	_, err := g.Parse(`userName eq "bjensen" garbage`)
 
 	require.Error(t, err)
 }
 
 func TestParseRejectsOversizedInput(t *testing.T) {
-	g := newGrammar(16)
+	g := filter.New(16)
 
 	t.Run("input over the cap is rejected before parsing", func(t *testing.T) {
 		_, err := g.Parse(`userName eq "bjensen"`) // 21 bytes > 16
-		require.ErrorIs(t, err, ErrInputTooLarge)
-		assert.NotErrorIs(t, err, ErrInvalidFilter)
+		require.ErrorIs(t, err, filter.ErrInputTooLarge)
+		assert.NotErrorIs(t, err, filter.ErrInvalidFilter)
 	})
 
 	t.Run("input within the cap still parses", func(t *testing.T) {
@@ -255,7 +256,7 @@ func TestParseRejectsOversizedInput(t *testing.T) {
 }
 
 func TestParseDefaultIsUnbounded(t *testing.T) {
-	g := New(0)
+	g := filter.New(0)
 	const depth = 4000
 	input := strings.Repeat("(", depth) + `a eq "1"` + strings.Repeat(")", depth)
 
@@ -266,19 +267,19 @@ func TestParseDefaultIsUnbounded(t *testing.T) {
 }
 
 func TestParseErrorReportsPosition(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	input := `userName eq "bjensen" garbage`
 	_, err := g.Parse(input)
 
-	require.ErrorIs(t, err, ErrInvalidFilter)
-	var perr *ParseError
+	require.ErrorIs(t, err, filter.ErrInvalidFilter)
+	var perr *filter.ParseError
 	require.ErrorAs(t, err, &perr)
 	assert.Equal(t, input, perr.Input)
 	assert.Equal(t, len("userName eq \"bjensen\" "), perr.Position)
 }
 
 func TestGrammarTrailingWhitespaceIsTolerated(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	node, err := g.Parse(`userName eq "bjensen"   `)
 
 	require.NoError(t, err)
@@ -286,7 +287,7 @@ func TestGrammarTrailingWhitespaceIsTolerated(t *testing.T) {
 }
 
 func TestGrammarDeepNestingIsLinear(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	const depth = 2000
 	input := strings.Repeat("(", depth) + `userName eq "bjensen"` + strings.Repeat(")", depth)
 
@@ -299,7 +300,7 @@ func TestGrammarDeepNestingIsLinear(t *testing.T) {
 
 func TestGrammarOperatorsAreCaseInsensitive(t *testing.T) {
 	// RFC 7644 3.4.2.2: attribute operators and logical keywords are case insensitive.
-	g := newGrammar(0)
+	g := filter.New(0)
 
 	t.Run("comparison operator", func(t *testing.T) {
 		node, err := g.Parse(`userName EQ "bjensen"`)
@@ -322,7 +323,7 @@ func TestGrammarOperatorsAreCaseInsensitive(t *testing.T) {
 
 func TestGrammarJSONLiteralsAreCaseSensitive(t *testing.T) {
 	// compValue uses JSON rules (RFC 7159); true/false/null are lowercase only.
-	g := newGrammar(0)
+	g := filter.New(0)
 
 	for _, good := range []string{`active eq true`, `active eq false`, `nickName eq null`} {
 		t.Run("accepts "+good, func(t *testing.T) {
@@ -349,7 +350,7 @@ func TestGrammarStringEscapesAreDecoded(t *testing.T) {
 		{`userName eq "tab\tend"`, "tab\tend"},
 		{`userName eq "A"`, "A"},
 	}
-	g := newGrammar(0)
+	g := filter.New(0)
 	for _, tc := range tt {
 		t.Run(tc.input, func(t *testing.T) {
 			node, err := g.Parse(tc.input)
@@ -370,18 +371,18 @@ func TestGrammarRejectsMalformed(t *testing.T) {
 		{"unclosed paren", `not (userName eq "a"`},
 		{"unopened paren", `userName eq "a")`},
 	}
-	g := newGrammar(0)
+	g := filter.New(0)
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := g.Parse(tc.input)
-			require.ErrorIs(t, err, ErrInvalidFilter)
+			require.ErrorIs(t, err, filter.ErrInvalidFilter)
 		})
 	}
 }
 
 func TestGrammarValueFilterRejectsNestedValuePath(t *testing.T) {
 	// valFilter = attrExp / logExp / *1"not" "(" valFilter ")" -- no nested valuePath.
-	g := newGrammar(0)
+	g := filter.New(0)
 
 	t.Run("nested value path is rejected", func(t *testing.T) {
 		_, err := g.Parse(`emails[members[type eq "work"]]`)

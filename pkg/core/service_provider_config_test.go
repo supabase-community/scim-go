@@ -1,4 +1,4 @@
-package core
+package core_test
 
 import (
 	"encoding/json"
@@ -6,11 +6,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 func TestNewServiceProviderConfig(t *testing.T) {
 	t.Run("supports none of the optional protocol features", func(t *testing.T) {
-		config := &ServiceProviderConfig{}
+		config := &core.ServiceProviderConfig{}
 
 		assert.False(t, config.Patch.Supported)
 		assert.False(t, config.Bulk.Supported)
@@ -21,7 +22,7 @@ func TestNewServiceProviderConfig(t *testing.T) {
 	})
 
 	t.Run("the builders announce the features the provider honours", func(t *testing.T) {
-		config := (&ServiceProviderConfig{}).Patching().Sorting().Filtering(200)
+		config := (&core.ServiceProviderConfig{}).Patching().Sorting().Filtering(200)
 
 		assert.True(t, config.Patch.Supported)
 		assert.True(t, config.Sort.Supported)
@@ -30,9 +31,9 @@ func TestNewServiceProviderConfig(t *testing.T) {
 	})
 
 	t.Run("serializes to JSON correctly", func(t *testing.T) {
-		config := (&ServiceProviderConfig{
-			Schemas: []SchemaURI{SchemaServiceProviderConfig},
-			Meta:    Meta{ResourceType: "ServiceProviderConfig"},
+		config := (&core.ServiceProviderConfig{
+			Schemas: []core.SchemaURI{core.SchemaServiceProviderConfig},
+			Meta:    core.Meta{ResourceType: "ServiceProviderConfig"},
 		}).Patching().Filtering(200)
 
 		body, err := json.Marshal(config)

@@ -1,36 +1,37 @@
-package filter
+package filter_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
 func TestNodeAttrPathSplitsParts(t *testing.T) {
 	tt := []struct {
 		input string
-		want  AttrPath
+		want  filter.AttrPath
 	}{
-		{`userName eq "x"`, AttrPath{Name: "userName"}},
-		{`name.familyName eq "x"`, AttrPath{Name: "name", SubAttribute: "familyName"}},
+		{`userName eq "x"`, filter.AttrPath{Name: "userName"}},
+		{`name.familyName eq "x"`, filter.AttrPath{Name: "name", SubAttribute: "familyName"}},
 		{
 			`urn:ietf:params:scim:schemas:core:2.0:User:userName eq "x"`,
-			AttrPath{
+			filter.AttrPath{
 				URI:  "urn:ietf:params:scim:schemas:core:2.0:User",
 				Name: "userName",
 			},
 		},
 		{
 			`urn:ietf:params:scim:schemas:core:2.0:User:name.familyName eq "x"`,
-			AttrPath{
+			filter.AttrPath{
 				URI:          "urn:ietf:params:scim:schemas:core:2.0:User",
 				Name:         "name",
 				SubAttribute: "familyName",
 			},
 		},
 	}
-	g := newGrammar(0)
+	g := filter.New(0)
 	for _, tc := range tt {
 		t.Run(tc.input, func(t *testing.T) {
 			node, err := g.Parse(tc.input)
@@ -46,12 +47,12 @@ func TestNodeAttrPathSplitsParts(t *testing.T) {
 
 func TestAttrPathKey(t *testing.T) {
 	tt := []struct {
-		path AttrPath
+		path filter.AttrPath
 		want string
 	}{
-		{AttrPath{Name: "userName"}, "username"},
-		{AttrPath{Name: "meta", SubAttribute: "lastModified"}, "meta.lastmodified"},
-		{AttrPath{URI: "urn:ietf:params:scim:schemas:core:2.0:User", Name: "userName"}, "username"},
+		{filter.AttrPath{Name: "userName"}, "username"},
+		{filter.AttrPath{Name: "meta", SubAttribute: "lastModified"}, "meta.lastmodified"},
+		{filter.AttrPath{URI: "urn:ietf:params:scim:schemas:core:2.0:User", Name: "userName"}, "username"},
 	}
 	for _, tc := range tt {
 		t.Run(tc.want, func(t *testing.T) {
@@ -61,16 +62,16 @@ func TestAttrPathKey(t *testing.T) {
 }
 
 func TestNodeAttrPathOfValuePath(t *testing.T) {
-	g := newGrammar(0)
+	g := filter.New(0)
 	node, err := g.Parse(`emails[type eq "work"]`)
 	require.NoError(t, err)
 
-	assert.Equal(t, AttrPath{Name: "emails"}, node.AttrPath())
+	assert.Equal(t, filter.AttrPath{Name: "emails"}, node.AttrPath())
 }
 
 func TestNewAttrPath(t *testing.T) {
 	t.Run("parses a bare attribute", func(t *testing.T) {
-		p, err := NewAttrPath("userName")
+		p, err := filter.NewAttrPath("userName")
 		require.NoError(t, err)
 		assert.Equal(t, "userName", p.Name)
 		assert.Empty(t, p.URI)
@@ -78,14 +79,14 @@ func TestNewAttrPath(t *testing.T) {
 	})
 
 	t.Run("parses a dotted sub-attribute", func(t *testing.T) {
-		p, err := NewAttrPath("name.familyName")
+		p, err := filter.NewAttrPath("name.familyName")
 		require.NoError(t, err)
 		assert.Equal(t, "name", p.Name)
 		assert.Equal(t, "familyName", p.SubAttribute)
 	})
 
 	t.Run("parses a multi-colon schema URN", func(t *testing.T) {
-		p, err := NewAttrPath("urn:ietf:params:scim:schemas:core:2.0:User:userName")
+		p, err := filter.NewAttrPath("urn:ietf:params:scim:schemas:core:2.0:User:userName")
 		require.NoError(t, err)
 		assert.Equal(t, "urn:ietf:params:scim:schemas:core:2.0:User", p.URI)
 		assert.Equal(t, "userName", p.Name)
@@ -96,7 +97,7 @@ func TestNewAttrPath(t *testing.T) {
 			"", "123bad", "name.", ".name", "name.familyName.extra",
 			"a_b:name", "foo bar:department", "userName ", `emails[type eq "work"]`,
 		} {
-			_, err := NewAttrPath(text)
+			_, err := filter.NewAttrPath(text)
 			require.Error(t, err, text)
 		}
 	})

@@ -1,10 +1,11 @@
-package filter
+package filter_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
 func TestFilterConformance(t *testing.T) {
@@ -24,7 +25,7 @@ func TestFilterConformance(t *testing.T) {
 		`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:employeeNumber eq "701984"`,
 	}
 	for _, f := range valid {
-		_, err := Parse(f)
+		_, err := filter.Parse(f)
 		require.NoError(t, err, f)
 	}
 
@@ -34,11 +35,11 @@ func TestFilterConformance(t *testing.T) {
 		`(userName eq "x"`,
 	}
 	for _, f := range malformed {
-		_, err := Parse(f)
-		require.ErrorIs(t, err, ErrInvalidFilter, f)
+		_, err := filter.Parse(f)
+		require.ErrorIs(t, err, filter.ErrInvalidFilter, f)
 	}
 
-	long := `userName eq "` + strings.Repeat("a", defaultGrammar.maxInputBytes) + `"`
-	_, err := Parse(long)
-	require.ErrorIs(t, err, ErrInputTooLarge, long)
+	long := `userName eq "` + strings.Repeat("a", 8192) + `"`
+	_, err := filter.Parse(long)
+	require.ErrorIs(t, err, filter.ErrInputTooLarge, long)
 }

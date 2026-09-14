@@ -1,8 +1,10 @@
-package filter
+package filter_test
 
 import (
 	"reflect"
 	"testing"
+
+	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
 func FuzzParse(f *testing.F) {
@@ -25,7 +27,7 @@ func FuzzParse(f *testing.F) {
 		f.Add(s)
 	}
 
-	g := New(8192)
+	g := filter.New(8192)
 	f.Fuzz(func(t *testing.T, input string) {
 		if len(input) > 4096 {
 			return
@@ -38,7 +40,7 @@ func FuzzParse(f *testing.F) {
 			t.Fatalf("nil node with nil error for %q", input)
 		}
 
-		text, err := Visit[string](Stringify{}, node)
+		text, err := filter.Visit[string](filter.Stringify{}, node)
 		if err != nil {
 			return
 		}
