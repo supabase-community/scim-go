@@ -9,7 +9,9 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-type matcher struct{}
+type matcher struct {
+	catalog catalog
+}
 
 func (m matcher) compile(node *filter.Node, attr *core.Attribute) (predicate, error) {
 	switch {
@@ -52,7 +54,7 @@ func (m matcher) compileLeaf(node *filter.Node, attr *core.Attribute) predicate 
 		key:       node.AttrPath().Name,
 		op:        strings.ToLower(node.Operator()),
 		want:      node.Value(),
-		caseExact: subAttr(attr, node.AttrPath().Name).CaseExact,
+		caseExact: m.catalog.subAttr(attr, node.AttrPath().Name).CaseExact,
 	}
 	return func(member map[string]any) bool { return m.matchOne(member, l) }
 }

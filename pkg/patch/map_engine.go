@@ -13,22 +13,13 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-var permissiveAttr = &core.Attribute{}
-
-func subAttr(attr *core.Attribute, name string) *core.Attribute {
-	if sub := attr.SubAttribute(name); sub != nil {
-		return sub
-	}
-	return permissiveAttr
-}
-
 type mapEngine struct {
-	schemas []*core.Schema
+	catalog catalog
 }
 
 func newMapEngine(schemas []*core.Schema) *mapEngine {
 	return &mapEngine{
-		schemas: schemas,
+		catalog: catalog{schemas: schemas},
 	}
 }
 
@@ -146,7 +137,7 @@ func (r *mapEngine) applyMerge(resource map[string]any, raw json.RawMessage, kin
 	}
 	appendMode := kind == OpAdd
 	for key, value := range values {
-		attr, err := r.guard(r.topLevelPath(key), resource)
+		attr, err := r.guard(r.catalog.topLevelPath(key), resource)
 		if err != nil {
 			if errors.Is(err, errSkip) {
 				continue
@@ -156,12 +147,6 @@ func (r *mapEngine) applyMerge(resource map[string]any, raw json.RawMessage, kin
 		r.setKey(resource, key, r.shape(value, attr.MultiValued), appendMode)
 	}
 	return nil
-}
-
-func (r *mapEngine) topLevelPath(name string) filter.Path {
-	var path filter.Path
-	path.Name = name
-	return path
 }
 
 func (r *mapEngine) decodeMap(raw []byte) (map[string]any, error) {
@@ -195,13 +180,13 @@ func (r *mapEngine) applyValueWrite(resource map[string]any, w valueWrite) error
 	if err != nil {
 		return r.skipOrFail(err)
 	}
-	pred, err := matcher{}.compile(w.path.ValueFilter, parent)
+	pred, err := matcher{catalog: r.catalog}.compile(w.path.ValueFilter, parent)
 	if err != nil {
 		return err
 	}
 	attr := parent
 	if w.path.SubAttribute != "" {
-		attr, err = r.attrFor(w.path)
+		attr, err = r.catalog.attrFor(w.path)
 		if err != nil {
 			return err
 		}
@@ -247,7 +232,7 @@ func (r *mapEngine) writeMember(member map[string]any, w valueWrite, attr *core.
 
 func (r *mapEngine) mergeMember(member, values map[string]any, appendMode bool, attr *core.Attribute) error {
 	for key, value := range values {
-		sub := subAttr(attr, key)
+		sub := r.catalog.subAttr(attr, key)
 		if err := r.checkMutability(sub, object(member).has(key)); err != nil {
 			if errors.Is(err, errSkip) {
 				continue
@@ -264,7 +249,7 @@ func (r *mapEngine) applyValueRemove(resource map[string]any, path filter.Path) 
 	if err != nil {
 		return r.skipOrFail(err)
 	}
-	pred, err := matcher{}.compile(path.ValueFilter, parent)
+	pred, err := matcher{catalog: r.catalog}.compile(path.ValueFilter, parent)
 	if err != nil {
 		return err
 	}
@@ -313,7 +298,7 @@ func (r *mapEngine) removeMemberSub(elements []any, sub string, pred predicate) 
 }
 
 func (r *mapEngine) guard(path filter.Path, resource map[string]any) (*core.Attribute, error) {
-	attr, err := r.attrFor(path)
+	attr, err := r.catalog.attrFor(path)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +344,7 @@ func (r *mapEngine) writePath(resource map[string]any, w valueWrite, attr *core.
 }
 
 func (r *mapEngine) guardParent(path filter.Path, resource map[string]any) (*core.Attribute, error) {
-	parent, err := r.parentAttr(path)
+	parent, err := r.catalog.parentAttr(path)
 	if err != nil {
 		return parent, err
 	}
@@ -389,19 +374,6 @@ func (r *mapEngine) setKey(container map[string]any, key string, value any, appe
 	container[existing] = value
 }
 
-func (r *mapEngine) attrFor(path filter.Path) (*core.Attribute, error) {
-	if len(r.schemas) == 0 {
-		return permissiveAttr, nil
-	}
-	return r.resolveAttr(path)
-}
-
-func (r *mapEngine) parentAttr(path filter.Path) (*core.Attribute, error) {
-	base := path
-	base.SubAttribute = ""
-	return r.attrFor(base)
-}
-
 // RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array.
 func (r *mapEngine) shape(value any, multiValued bool) any {
 	if !multiValued {
@@ -417,36 +389,3 @@ func (r *mapEngine) members(value any) []any {
 	return []any{value}
 }
 
-func (r *mapEngine) resolveAttr(path filter.Path) (*core.Attribute, error) {
-	schema := r.selectSchema(path.URI)
-	if schema == nil {
-		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.URI) + " is not a known schema")
-	}
-	attr, ok := schema.Resolve(path.Name)
-	if !ok {
-		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.Name) + " is not a known attribute")
-	}
-	if path.SubAttribute == "" {
-		return attr, nil
-	}
-	sub := attr.SubAttribute(path.SubAttribute)
-	if sub == nil {
-		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.SubAttribute) + " is not a known attribute")
-	}
-	return sub, nil
-}
-
-func (r *mapEngine) selectSchema(uri string) *core.Schema {
-	if uri == "" {
-		if len(r.schemas) == 0 {
-			return nil
-		}
-		return r.schemas[0]
-	}
-	for _, schema := range r.schemas {
-		if string(schema.ID) == uri {
-			return schema
-		}
-	}
-	return nil
-}
