@@ -22,6 +22,12 @@ type engine struct {
 	schemas []*core.Schema
 }
 
+func newEngine(schemas []*core.Schema) *engine {
+	return &engine{
+		schemas: schemas,
+	}
+}
+
 func (r *engine) apply(resource any, ops []Operation) error {
 	if doc, ok := resource.(map[string]any); ok {
 		return r.applyToMap(doc, ops)
