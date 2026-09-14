@@ -11,50 +11,80 @@ import (
 
 type matcher struct {
 	catalog catalog
+	attr    *core.Attribute
 }
 
 func (m matcher) compile(node *filter.Node, attr *core.Attribute) (predicate, error) {
-	switch {
-	case node == nil:
-		return nil, scimerrors.ErrInvalidPath("empty value filter")
-	case node.Not():
-		return m.compileNot(node, attr)
-	case node.Left() != nil:
-		return m.compileBinary(node, attr)
-	default:
-		return m.compileLeaf(node, attr), nil
+	pred, err := filter.Visit[predicate](matcher{catalog: m.catalog, attr: attr}, node)
+	if err != nil {
+		return nil, scimerrors.ErrInvalidPath(err.Error())
 	}
+	return pred, nil
 }
 
-func (m matcher) compileNot(node *filter.Node, attr *core.Attribute) (predicate, error) {
-	inner, err := m.compile(node.Operand(), attr)
-	if err != nil {
-		return nil, err
-	}
-	return func(member map[string]any) bool { return !inner(member) }, nil
-}
-
-func (m matcher) compileBinary(node *filter.Node, attr *core.Attribute) (predicate, error) {
-	left, err := m.compile(node.Left(), attr)
-	if err != nil {
-		return nil, err
-	}
-	right, err := m.compile(node.Right(), attr)
-	if err != nil {
-		return nil, err
-	}
-	if strings.EqualFold(node.Operator(), "or") {
-		return func(member map[string]any) bool { return left(member) || right(member) }, nil
-	}
+func (m matcher) VisitAnd(left, right predicate) (predicate, error) {
 	return func(member map[string]any) bool { return left(member) && right(member) }, nil
 }
 
-func (m matcher) compileLeaf(node *filter.Node, attr *core.Attribute) predicate {
+func (m matcher) VisitOr(left, right predicate) (predicate, error) {
+	return func(member map[string]any) bool { return left(member) || right(member) }, nil
+}
+
+func (m matcher) VisitNot(operand predicate) (predicate, error) {
+	return func(member map[string]any) bool { return !operand(member) }, nil
+}
+
+func (m matcher) VisitEquals(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpEquals, value), nil
+}
+
+func (m matcher) VisitNotEquals(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpNotEquals, value), nil
+}
+
+func (m matcher) VisitContains(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpContains, value), nil
+}
+
+func (m matcher) VisitStartsWith(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpStartsWith, value), nil
+}
+
+func (m matcher) VisitEndsWith(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpEndsWith, value), nil
+}
+
+func (m matcher) VisitGreaterThan(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpGreaterThan, value), nil
+}
+
+func (m matcher) VisitGreaterThanEquals(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpGreaterThanEquals, value), nil
+}
+
+func (m matcher) VisitLessThan(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpLessThan, value), nil
+}
+
+func (m matcher) VisitLessThanEquals(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpLessThanEquals, value), nil
+}
+
+func (m matcher) VisitPresence(attr filter.AttrPath) (predicate, error) {
+	return m.leaf(attr, filter.Operator("pr"), nil), nil
+}
+
+// RFC 7644 3.4.2.2 - a value filter cannot itself contain a value path.
+func (m matcher) VisitValuePath(_ filter.AttrPath, _ string, _ func() (predicate, error)) (predicate, error) {
+	return nil, scimerrors.ErrInvalidPath("value filter cannot contain a nested value path")
+}
+
+func (m matcher) leaf(attr filter.AttrPath, op filter.Operator, want any) predicate {
 	l := leaf{
-		key:       node.AttrPath().Name,
-		op:        strings.ToLower(node.Operator()),
-		want:      node.Value(),
-		caseExact: m.catalog.subAttr(attr, node.AttrPath().Name).CaseExact,
+		key:       attr.Name,
+		op:        string(op),
+		want:      want,
+		caseExact: m.catalog.subAttr(m.attr, attr.Name).CaseExact,
 	}
 	return func(member map[string]any) bool { return m.matchOne(member, l) }
 }
