@@ -1,23 +1,22 @@
-package core
+package core_test
 
 import (
 	"testing"
 	"time"
 
+	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimtest"
 )
 
-var (
-	createdAt = time.Date(2010, 1, 23, 4, 56, 22, 0, time.UTC)
-	updatedAt = time.Date(2011, 5, 13, 4, 42, 34, 0, time.UTC)
-)
+func TestJSON(t *testing.T) {
+	createdAt := time.Date(2010, 1, 23, 4, 56, 22, 0, time.UTC)
+	updatedAt := time.Date(2011, 5, 13, 4, 42, 34, 0, time.UTC)
 
-func TestAssertJSON(t *testing.T) {
 	t.Run("builds the minimal User of Section 8.1", func(t *testing.T) {
-		user := &User{
-			Schemas: []SchemaURI{SchemaUser},
+		user := &core.User{
+			Schemas: []core.SchemaURI{core.SchemaUser},
 			ID:      "2819c223-7f76-453a-919d-413861904646",
-			Meta: Meta{
+			Meta: core.Meta{
 				ResourceType: "User",
 				Created:      createdAt,
 				LastModified: updatedAt,
@@ -36,13 +35,13 @@ func TestAssertJSON(t *testing.T) {
 
 	t.Run("builds the enterprise User of Section 8.3", func(t *testing.T) {
 		user := fullUser()
-		user.Schemas = []SchemaURI{
-			SchemaUser,
-			SchemaEnterpriseUser,
+		user.Schemas = []core.SchemaURI{
+			core.SchemaUser,
+			core.SchemaEnterpriseUser,
 		}
 		user.Name.Formatted = "Ms. Barbara J Jensen, III"
 		user.Meta.Version = `W/"3694e05e9dff591"`
-		user.Groups = []GroupMembership{
+		user.Groups = []core.GroupMembership{
 			{
 				Value:   "e9e30dba-f08f-4109-8486-d5c6a331660a",
 				Ref:     "../Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
@@ -59,13 +58,13 @@ func TestAssertJSON(t *testing.T) {
 				Display: "US Employees",
 			},
 		}
-		user.EnterpriseUser = &EnterpriseUser{
+		user.EnterpriseUser = &core.EnterpriseUser{
 			EmployeeNumber: "701984",
 			CostCenter:     "4130",
 			Organization:   "Universal Studios",
 			Division:       "Theme Park",
 			Department:     "Tour Operations",
-			Manager: &Manager{
+			Manager: &core.Manager{
 				Value:       "26118915-6090-4610-87e4-49d8ca9f808d",
 				Ref:         "../Users/26118915-6090-4610-87e4-49d8ca9f808d",
 				DisplayName: "John Smith",
@@ -76,10 +75,10 @@ func TestAssertJSON(t *testing.T) {
 	})
 
 	t.Run("builds the Group of Section 8.4", func(t *testing.T) {
-		group := &Group{
-			Schemas: []SchemaURI{SchemaGroup},
+		group := &core.Group{
+			Schemas: []core.SchemaURI{core.SchemaGroup},
 			ID:      "e9e30dba-f08f-4109-8486-d5c6a331660a",
-			Meta: Meta{
+			Meta: core.Meta{
 				ResourceType: "Group",
 				Created:      createdAt,
 				LastModified: updatedAt,
@@ -87,7 +86,7 @@ func TestAssertJSON(t *testing.T) {
 				Location:     "https://example.com/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
 			},
 			DisplayName: "Tour Guides",
-			Members: []Member{
+			Members: []core.Member{
 				{
 					Value:   "2819c223-7f76-453a-919d-413861904646",
 					Ref:     "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
@@ -105,26 +104,26 @@ func TestAssertJSON(t *testing.T) {
 	})
 
 	t.Run("builds the service provider configuration of Section 8.5", func(t *testing.T) {
-		oauth := NewOAuthBearerToken().AsPrimary()
+		oauth := core.NewOAuthBearerToken().AsPrimary()
 		oauth.DocumentationURI = "http://example.com/help/oauth.html"
 
-		config := &ServiceProviderConfig{
-			Schemas:          []SchemaURI{SchemaServiceProviderConfig},
+		config := &core.ServiceProviderConfig{
+			Schemas:          []core.SchemaURI{core.SchemaServiceProviderConfig},
 			DocumentationURI: "http://example.com/help/scim.html",
-			Bulk:             BulkFeature{Supported: true, MaxOperations: 1000, MaxPayloadSize: 1048576},
-			ChangePassword:   SupportedFeature{Supported: true},
-			ETag:             SupportedFeature{Supported: true},
-			AuthenticationSchemes: []*AuthenticationScheme{
+			Bulk:             core.BulkFeature{Supported: true, MaxOperations: 1000, MaxPayloadSize: 1048576},
+			ChangePassword:   core.SupportedFeature{Supported: true},
+			ETag:             core.SupportedFeature{Supported: true},
+			AuthenticationSchemes: []*core.AuthenticationScheme{
 				oauth,
 				{
-					Type:             AuthenticationSchemeHTTPBasic,
+					Type:             core.AuthenticationSchemeHTTPBasic,
 					Name:             "HTTP Basic",
 					Description:      "Authentication scheme using the HTTP Basic Standard",
 					SpecURI:          "http://www.rfc-editor.org/info/rfc2617",
 					DocumentationURI: "http://example.com/help/httpBasic.html",
 				},
 			},
-			Meta: Meta{
+			Meta: core.Meta{
 				ResourceType: "ServiceProviderConfig",
 				Created:      createdAt,
 				LastModified: updatedAt,
@@ -140,28 +139,31 @@ func TestAssertJSON(t *testing.T) {
 	t.Run("builds the resource types of Section 8.6", func(t *testing.T) {
 		userType := userResourceType()
 
-		groupType := &ResourceType{
-			Schemas:     []SchemaURI{SchemaResourceType},
+		groupType := &core.ResourceType{
+			Schemas:     []core.SchemaURI{core.SchemaResourceType},
 			ID:          "Group",
 			Name:        "Group",
 			Endpoint:    "/Groups",
 			Description: "Group",
-			Schema:      SchemaGroup,
-			Meta: Meta{
+			Schema:      core.SchemaGroup,
+			Meta: core.Meta{
 				ResourceType: "ResourceType",
 				Location:     "https://example.com/v2/ResourceTypes/Group",
 			},
 		}
 
-		scimtest.AssertJSON(t, scimtest.RFC7643ResourceTypes, []*ResourceType{userType, groupType})
+		scimtest.AssertJSON(t, scimtest.RFC7643ResourceTypes, []*core.ResourceType{userType, groupType})
 	})
 }
 
-func fullUser() *User {
-	return &User{
-		Schemas: []SchemaURI{SchemaUser},
+func fullUser() *core.User {
+	createdAt := time.Date(2010, 1, 23, 4, 56, 22, 0, time.UTC)
+	updatedAt := time.Date(2011, 5, 13, 4, 42, 34, 0, time.UTC)
+
+	return &core.User{
+		Schemas: []core.SchemaURI{core.SchemaUser},
 		ID:      "2819c223-7f76-453a-919d-413861904646",
-		Meta: Meta{
+		Meta: core.Meta{
 			ResourceType: "User",
 			Created:      createdAt,
 			LastModified: updatedAt,
@@ -170,7 +172,7 @@ func fullUser() *User {
 		},
 		ExternalID: "701984",
 		UserName:   "bjensen@example.com",
-		Name: Name{
+		Name: core.Name{
 			Formatted:       "Ms. Barbara J Jensen, III",
 			FamilyName:      "Jensen",
 			GivenName:       "Barbara",
@@ -181,7 +183,7 @@ func fullUser() *User {
 		DisplayName: "Babs Jensen",
 		NickName:    "Babs",
 		ProfileURL:  "https://login.example.com/bjensen",
-		Emails: []Email{
+		Emails: []core.Email{
 			{
 				Value:   "bjensen@example.com",
 				Type:    "work",
@@ -192,7 +194,7 @@ func fullUser() *User {
 				Type:  "home",
 			},
 		},
-		Addresses: []Address{
+		Addresses: []core.Address{
 			{
 				Type:          "work",
 				StreetAddress: "100 Universal City Plaza",
@@ -213,7 +215,7 @@ func fullUser() *User {
 				Formatted:     "456 Hollywood Blvd\nHollywood, CA 91608 USA",
 			},
 		},
-		PhoneNumbers: []PhoneNumber{
+		PhoneNumbers: []core.PhoneNumber{
 			{
 				Value: "555-555-5555",
 				Type:  "work",
@@ -223,13 +225,13 @@ func fullUser() *User {
 				Type:  "mobile",
 			},
 		},
-		IMS: []IM{
+		IMS: []core.IM{
 			{
 				Value: "someaimhandle",
 				Type:  "aim",
 			},
 		},
-		Photos: []Photo{
+		Photos: []core.Photo{
 			{
 				Value: "https://photos.example.com/profilephoto/72930000000Ccne/F",
 				Type:  "photo",
@@ -246,7 +248,7 @@ func fullUser() *User {
 		Timezone:          "America/Los_Angeles",
 		Active:            new(true),
 		Password:          "t1meMa$heen",
-		Groups: []GroupMembership{
+		Groups: []core.GroupMembership{
 			{
 				Value:   "e9e30dba-f08f-4109-8486-d5c6a331660a",
 				Ref:     "https://example.com/v2/Groups/e9e30dba-f08f-4109-8486-d5c6a331660a",
@@ -263,7 +265,7 @@ func fullUser() *User {
 				Display: "US Employees",
 			},
 		},
-		X509Certificates: []X509Certificate{
+		X509Certificates: []core.X509Certificate{
 			{
 				Value: "MIIDQzCCAqygAwIBAgICEAAwDQYJKoZIhvcNAQEFBQAwTjELMAkGA1UEBhMCVVMx EzARBgNVBAgMCkNhbGlmb3JuaWExFDASBgNVBAoMC2V4YW1wbGUuY29tMRQwEgYD VQQDDAtleGFtcGxlLmNvbTAeFw0xMTEwMjIwNjI0MzFaFw0xMjEwMDQwNjI0MzFa MH8xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxpZm9ybmlhMRQwEgYDVQQKDAtl eGFtcGxlLmNvbTEhMB8GA1UEAwwYTXMuIEJhcmJhcmEgSiBKZW5zZW4gSUlJMSIw IAYJKoZIhvcNAQkBFhNiamVuc2VuQGV4YW1wbGUuY29tMIIBIjANBgkqhkiG9w0B AQEFAAOCAQ8AMIIBCgKCAQEA7Kr+Dcds/JQ5GwejJFcBIP682X3xpjis56AK02bc 1FLgzdLI8auoR+cC9/Vrh5t66HkQIOdA4unHh0AaZ4xL5PhVbXIPMB5vAPKpzz5i PSi8xO8SL7I7SDhcBVJhqVqr3HgllEG6UClDdHO7nkLuwXq8HcISKkbT5WFTVfFZ zidPl8HZ7DhXkZIRtJwBweq4bvm3hM1Os7UQH05ZS6cVDgweKNwdLLrT51ikSQG3 DYrl+ft781UQRIqxgwqCfXEuDiinPh0kkvIi5jivVu1Z9QiwlYEdRbLJ4zJQBmDr SGTMYn4lRc2HgHO4DqB/bnMVorHB0CC6AV1QoFK4GPe1LwIDAQABo3sweTAJBgNV HRMEAjAAMCwGCWCGSAGG+EIBDQQfFh1PcGVuU1NMIEdlbmVyYXRlZCBDZXJ0aWZp Y2F0ZTAdBgNVHQ4EFgQU8pD0U0vsZIsaA16lL8En8bx0F/gwHwYDVR0jBBgwFoAU dGeKitcaF7gnzsNwDx708kqaVt0wDQYJKoZIhvcNAQEFBQADgYEAA81SsFnOdYJt Ng5Tcq+/ByEDrBgnusx0jloUhByPMEVkoMZ3J7j1ZgI8rAbOkNngX8+pKfTiDz1R C4+dx8oU6Za+4NJXUjlL5CvV6BEYb1+QAEJwitTVvxB/A67g42/vzgAtoRUeDov1 +GFiBZ+GNF/cAYKcMtGcrs2i97ZkJMo=",
 			},

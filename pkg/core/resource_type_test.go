@@ -1,4 +1,4 @@
-package core
+package core_test
 
 import (
 	"encoding/json"
@@ -6,14 +6,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 func TestResourceType(t *testing.T) {
 	t.Run("Extend appends schema extensions", func(t *testing.T) {
-		resourceType := &ResourceType{Name: "User"}
+		resourceType := &core.ResourceType{Name: "User"}
 
-		require.Same(t, resourceType, resourceType.Extend(SchemaExtension{Schema: SchemaEnterpriseUser, Required: true}))
-		assert.Equal(t, []SchemaExtension{{Schema: SchemaEnterpriseUser, Required: true}}, resourceType.SchemaExtensions)
+		require.Same(t, resourceType, resourceType.Extend(core.SchemaExtension{
+			Schema:   core.SchemaEnterpriseUser,
+			Required: true,
+		}))
+
+		assert.Equal(t, []core.SchemaExtension{{
+			Schema:   core.SchemaEnterpriseUser,
+			Required: true,
+		}}, resourceType.SchemaExtensions)
 	})
 
 	t.Run("serializes to JSON correctly", func(t *testing.T) {
@@ -38,14 +46,20 @@ func TestResourceType(t *testing.T) {
 	})
 }
 
-func userResourceType() *ResourceType {
-	return (&ResourceType{
-		Schemas:     []SchemaURI{SchemaResourceType},
+func userResourceType() *core.ResourceType {
+	return (&core.ResourceType{
+		Schemas:     []core.SchemaURI{core.SchemaResourceType},
 		ID:          "User",
 		Name:        "User",
 		Endpoint:    "/Users",
 		Description: "User Account",
-		Schema:      SchemaUser,
-		Meta:        Meta{ResourceType: "ResourceType", Location: "https://example.com/v2/ResourceTypes/User"},
-	}).Extend(SchemaExtension{Schema: SchemaEnterpriseUser, Required: true})
+		Schema:      core.SchemaUser,
+		Meta: core.Meta{
+			ResourceType: "ResourceType",
+			Location:     "https://example.com/v2/ResourceTypes/User",
+		},
+	}).Extend(core.SchemaExtension{
+		Schema:   core.SchemaEnterpriseUser,
+		Required: true,
+	})
 }

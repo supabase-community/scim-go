@@ -1,4 +1,4 @@
-package core
+package core_test
 
 import (
 	"encoding/json"
@@ -6,33 +6,34 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-func exampleSchema() *Schema {
-	schema := &Schema{ID: SchemaUser, Name: "User"}
+func exampleSchema() *core.Schema {
+	schema := &core.Schema{ID: core.SchemaUser, Name: "User"}
 	return schema.With(
-		NewAttribute("userName", TypeString, "").AsRequired(),
-		NewAttribute("name", TypeComplex, "").With(
-			NewAttribute("familyName", TypeString, ""),
+		core.NewAttribute("userName", core.TypeString, "").AsRequired(),
+		core.NewAttribute("name", core.TypeComplex, "").With(
+			core.NewAttribute("familyName", core.TypeString, ""),
 		),
-		NewAttribute("emails", TypeComplex, "").AsMultiValued().With(
-			NewAttribute("value", TypeString, ""),
-			NewAttribute("primary", TypeBoolean, ""),
+		core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString, ""),
+			core.NewAttribute("primary", core.TypeBoolean, ""),
 		),
 	)
 }
 
 func TestSchema(t *testing.T) {
 	t.Run("serializes to JSON correctly", func(t *testing.T) {
-		schema := &Schema{
-			Schemas:     []SchemaURI{SchemaSchema},
-			ID:          SchemaUser,
+		schema := &core.Schema{
+			Schemas:     []core.SchemaURI{core.SchemaSchema},
+			ID:          core.SchemaUser,
 			Name:        "User",
 			Description: "User Account",
-			Attributes: []*Attribute{
-				NewAttribute("userName", TypeString, "A unique identifier for the user.").AsRequired(),
+			Attributes: []*core.Attribute{
+				core.NewAttribute("userName", core.TypeString, "A unique identifier for the user.").AsRequired(),
 			},
-			Meta: Meta{
+			Meta: core.Meta{
 				ResourceType: "Schema",
 				Location:     "http://example.com/scim/v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:User",
 			},
@@ -67,7 +68,7 @@ func TestSchema(t *testing.T) {
 	t.Run("resolves a top-level attribute", func(t *testing.T) {
 		attribute, ok := exampleSchema().Resolve("userName")
 		require.True(t, ok)
-		assert.Equal(t, TypeString, attribute.Type)
+		assert.Equal(t, core.TypeString, attribute.Type)
 		assert.False(t, attribute.CaseExact)
 	})
 
@@ -84,14 +85,14 @@ func TestSchema(t *testing.T) {
 
 		meta, ok := exampleSchema().Resolve("meta")
 		require.True(t, ok)
-		assert.Equal(t, TypeDateTime, meta.SubAttribute("lastModified").Type)
+		assert.Equal(t, core.TypeDateTime, meta.SubAttribute("lastModified").Type)
 	})
 
 	t.Run("common attributes resolve even without a schema", func(t *testing.T) {
-		var schema *Schema
+		var schema *core.Schema
 		attribute, ok := schema.Resolve("id")
 		require.True(t, ok)
-		assert.Equal(t, TypeString, attribute.Type)
+		assert.Equal(t, core.TypeString, attribute.Type)
 	})
 
 	t.Run("returns false for an unknown attribute", func(t *testing.T) {
@@ -104,16 +105,16 @@ func TestSchema(t *testing.T) {
 
 		id, ok := schema.Resolve("id")
 		require.True(t, ok)
-		assert.Equal(t, MutabilityReadOnly, id.Mutability)
-		assert.Equal(t, ReturnedAlways, id.Returned)
+		assert.Equal(t, core.MutabilityReadOnly, id.Mutability)
+		assert.Equal(t, core.ReturnedAlways, id.Returned)
 
 		meta, ok := schema.Resolve("meta")
 		require.True(t, ok)
-		assert.Equal(t, MutabilityReadOnly, meta.Mutability)
-		assert.Equal(t, MutabilityReadOnly, meta.SubAttribute("location").Mutability)
+		assert.Equal(t, core.MutabilityReadOnly, meta.Mutability)
+		assert.Equal(t, core.MutabilityReadOnly, meta.SubAttribute("location").Mutability)
 
 		ext, ok := schema.Resolve("externalId")
 		require.True(t, ok)
-		assert.Equal(t, MutabilityReadWrite, ext.Mutability)
+		assert.Equal(t, core.MutabilityReadWrite, ext.Mutability)
 	})
 }

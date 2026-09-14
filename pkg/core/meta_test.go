@@ -1,4 +1,4 @@
-package core
+package core_test
 
 import (
 	"encoding/json"
@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 func TestMeta(t *testing.T) {
 	t.Run("json.Marshal", func(t *testing.T) {
 		t.Run("serializes the minimal representation", func(t *testing.T) {
-			meta := Meta{ResourceType: "Example"}
+			meta := core.Meta{ResourceType: "Example"}
 
 			body, err := json.Marshal(meta)
 
@@ -22,7 +23,7 @@ func TestMeta(t *testing.T) {
 		t.Run("serializes the full representation", func(t *testing.T) {
 			createdAt := time.Date(2026, 7, 21, 19, 41, 41, 0, time.UTC)
 			updatedAt := time.Date(2026, 7, 22, 8, 12, 3, 0, time.UTC)
-			meta := Meta{
+			meta := core.Meta{
 				ResourceType: "User",
 				Created:      createdAt,
 				LastModified: updatedAt,

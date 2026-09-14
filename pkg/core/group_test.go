@@ -1,25 +1,30 @@
-package core
+package core_test
 
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 func TestGroup(t *testing.T) {
-	group := Group{
-		Schemas:     []SchemaURI{SchemaGroup},
+	createdAt := time.Date(2010, 1, 23, 4, 56, 22, 0, time.UTC)
+	updatedAt := time.Date(2011, 5, 13, 4, 42, 34, 0, time.UTC)
+
+	group := core.Group{
+		Schemas:     []core.SchemaURI{core.SchemaGroup},
 		ID:          "e9e30dba-f08f-4109-8486-d5c6a331660a",
 		DisplayName: "Tour Guides",
-		Members: []Member{
+		Members: []core.Member{
 			{
 				Value:   "2819c223-7f76-453a-919d-413861904646",
 				Ref:     "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
 				Display: "Babs Jensen",
 			},
 		},
-		Meta: Meta{
+		Meta: core.Meta{
 			ResourceType: "Group",
 			Created:      createdAt,
 			LastModified: updatedAt,
