@@ -366,3 +366,14 @@ func eachMatch(elements []any, pred predicate, fn func(object) error) (int, erro
 	}
 	return matched, nil
 }
+
+// RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array.
+func shaped(value any, multiValued bool) any {
+	if !multiValued {
+		return value
+	}
+	if list, ok := value.([]any); ok {
+		return list
+	}
+	return []any{value}
+}
