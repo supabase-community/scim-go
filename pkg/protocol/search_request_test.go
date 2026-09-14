@@ -1,4 +1,4 @@
-package protocol
+package protocol_test
 
 import (
 	"encoding/json"
@@ -8,85 +8,86 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-func parseQuery(t *testing.T, query string) (*SearchRequest, error) {
+func parseQuery(t *testing.T, query string) (*protocol.SearchRequest, error) {
 	t.Helper()
 
 	values, err := url.ParseQuery(query)
 	require.NoError(t, err)
 
-	return DefaultLimits.ParseSearchRequest(values)
+	return protocol.DefaultLimits.ParseSearchRequest(values)
 }
 
 func TestParseSearchRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		query string
-		want  SearchRequest
+		want  protocol.SearchRequest
 	}{
 		{
 			name:  "defaults to the whole first page when the client asks for nothing",
 			query: "",
-			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount},
 		},
 		{
 			name:  "honours the window the client asked for",
 			query: "startIndex=11&count=10",
-			want:  SearchRequest{StartIndex: 11, Count: 10},
+			want:  protocol.SearchRequest{StartIndex: 11, Count: 10},
 		},
 		{
 			name:  "caps a count larger than the provider is willing to return",
 			query: "count=5000",
-			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.MaxCount},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.MaxCount},
 		},
 		{
 			name:  "reads a start index below the first as the first",
 			query: "startIndex=0",
-			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount},
 		},
 		{
 			name:  "reads a negative start index as the first",
 			query: "startIndex=-7",
-			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount},
 		},
 		{
 			name:  "reads a negative count as none",
 			query: "count=-5",
-			want:  SearchRequest{StartIndex: 1, Count: 0},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: 0},
 		},
 		{
 			name:  "asks for the total alone with a count of none",
 			query: "count=0",
-			want:  SearchRequest{StartIndex: 1, Count: 0},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: 0},
 		},
 		{
 			name:  "leaves the order empty when attribute is empty",
 			query: "sortBy=",
-			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount, SortBy: "", SortOrder: ""},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount, SortBy: "", SortOrder: ""},
 		},
 		{
 			name:  "sorts ascending by default once an attribute is named",
 			query: "sortBy=userName",
-			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount, SortBy: "userName", SortOrder: SortAscending},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount, SortBy: "userName", SortOrder: protocol.SortAscending},
 		},
 		{
 			name:  "sorts descending when asked",
 			query: "sortBy=name.givenName&sortOrder=descending",
-			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount, SortBy: "name.givenName", SortOrder: SortDescending},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount, SortBy: "name.givenName", SortOrder: protocol.SortDescending},
 		},
 		{
 			name:  "leaves the order unsaid when no attribute is named",
 			query: "sortOrder=descending",
-			want:  SearchRequest{StartIndex: 1, Count: DefaultLimits.DefaultCount, SortOrder: SortDescending},
+			want:  protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount, SortOrder: protocol.SortDescending},
 		},
 		{
 			name:  "reads the attribute lists as the comma separated values they are",
 			query: "attributes=userName,active&excludedAttributes=meta,groups",
-			want: SearchRequest{
+			want: protocol.SearchRequest{
 				StartIndex:         1,
-				Count:              DefaultLimits.DefaultCount,
+				Count:              protocol.DefaultLimits.DefaultCount,
 				Attributes:         []string{"userName", "active"},
 				ExcludedAttributes: []string{"meta", "groups"},
 			},
@@ -97,7 +98,7 @@ func TestParseSearchRequest(t *testing.T) {
 
 			require.NoError(t, err)
 
-			tc.want.Schemas = []core.SchemaURI{SchemaSearchRequest}
+			tc.want.Schemas = []core.SchemaURI{protocol.SchemaSearchRequest}
 			assert.Equal(t, &tc.want, request)
 		})
 	}
@@ -121,28 +122,28 @@ func TestParseSearchRequest(t *testing.T) {
 
 func TestSearchRequest(t *testing.T) {
 	t.Run("converts the 1-based start index into a 0-based offset", func(t *testing.T) {
-		assert.Equal(t, 0, (&SearchRequest{StartIndex: 1}).Offset())
-		assert.Equal(t, 10, (&SearchRequest{StartIndex: 11}).Offset())
+		assert.Equal(t, 0, (&protocol.SearchRequest{StartIndex: 1}).Offset())
+		assert.Equal(t, 10, (&protocol.SearchRequest{StartIndex: 11}).Offset())
 	})
 
 	t.Run("reads a start index it was never given as the first", func(t *testing.T) {
-		assert.Equal(t, 0, (&SearchRequest{}).Offset())
+		assert.Equal(t, 0, (&protocol.SearchRequest{}).Offset())
 	})
 
 	t.Run("reports the direction of the sort", func(t *testing.T) {
-		assert.True(t, (&SearchRequest{SortOrder: SortDescending}).Descending())
-		assert.False(t, (&SearchRequest{SortOrder: SortAscending}).Descending())
-		assert.False(t, (&SearchRequest{}).Descending())
+		assert.True(t, (&protocol.SearchRequest{SortOrder: protocol.SortDescending}).Descending())
+		assert.False(t, (&protocol.SearchRequest{SortOrder: protocol.SortAscending}).Descending())
+		assert.False(t, (&protocol.SearchRequest{}).Descending())
 	})
 
 	t.Run("serializes as the SearchRequest of RFC 7644, Section 3.4.3", func(t *testing.T) {
-		request := &SearchRequest{
-			Schemas:            []core.SchemaURI{SchemaSearchRequest},
+		request := &protocol.SearchRequest{
+			Schemas:            []core.SchemaURI{protocol.SchemaSearchRequest},
 			Attributes:         []string{"displayName", "userName"},
 			ExcludedAttributes: []string{"meta"},
 			Filter:             `displayName sw "smith"`,
 			SortBy:             "displayName",
-			SortOrder:          SortAscending,
+			SortOrder:          protocol.SortAscending,
 			StartIndex:         1,
 			Count:              10,
 		}
@@ -163,7 +164,7 @@ func TestSearchRequest(t *testing.T) {
 	})
 
 	t.Run("decodes the body a client posts to .search", func(t *testing.T) {
-		var request SearchRequest
+		var request protocol.SearchRequest
 		require.NoError(t, json.Unmarshal([]byte(`{
 			"schemas": ["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],
 			"filter": "userName eq \"bjensen\"",

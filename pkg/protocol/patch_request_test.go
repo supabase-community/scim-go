@@ -17,7 +17,11 @@ func TestPatchRequestApplyDelegates(t *testing.T) {
 	request := &protocol.PatchRequest{
 		Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
 		Operations: []patch.Operation{
-			{Op: patch.OpReplace, Path: "userName", Value: json.RawMessage(`"new"`)},
+			{
+				Op:    patch.OpReplace,
+				Path:  "userName",
+				Value: json.RawMessage(`"new"`),
+			},
 		},
 	}
 
@@ -29,7 +33,10 @@ func TestPatchRequestApplyDelegates(t *testing.T) {
 func TestPatchRequestApplyReturnsProtocolError(t *testing.T) {
 	request := &protocol.PatchRequest{
 		Operations: []patch.Operation{
-			{Op: patch.OpReplace, Path: "userName"},
+			{
+				Op:   patch.OpReplace,
+				Path: "userName",
+			},
 		},
 	}
 

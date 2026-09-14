@@ -1,10 +1,11 @@
-package protocol
+package protocol_test
 
 import (
 	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
 const emptyListResponse = `{
@@ -76,7 +77,7 @@ func TestNewListResponse(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			body, err := json.Marshal(NewListResponse(tc.startIndex, tc.total, tc.resources))
+			body, err := json.Marshal(protocol.NewListResponse(tc.startIndex, tc.total, tc.resources))
 
 			require.NoError(t, err)
 			require.JSONEq(t, tc.expected, string(body))

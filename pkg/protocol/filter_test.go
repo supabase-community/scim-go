@@ -1,4 +1,4 @@
-package protocol
+package protocol_test
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
@@ -24,42 +25,42 @@ func TestFilter(t *testing.T) {
 	schemas := []*core.Schema{schema}
 
 	t.Run("binds the coerced value as a parameter", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `active eq true`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `active eq true`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "active = ?", out.sql)
 		assert.Equal(t, []any{true}, out.args)
 	})
 
 	t.Run("preserves the dotted key for a common sub-attribute", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `meta.lastModified gt "2020-01-01T00:00:00Z"`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `meta.lastModified gt "2020-01-01T00:00:00Z"`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "meta.lastmodified > ?", out.sql)
 		assert.Len(t, out.args, 1)
 	})
 
 	t.Run("composes and, or, not", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `userName eq "bob" and not (active eq false)`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `userName eq "bob" and not (active eq false)`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "(username = ? AND NOT (active = ?))", out.sql)
 		assert.Equal(t, []any{"bob", false}, out.args)
 	})
 
 	t.Run("resolves presence", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `userName pr`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `userName pr`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "username IS NOT NULL", out.sql)
 		assert.Empty(t, out.args)
 	})
 
 	t.Run("scopes a value path to the element sub-attributes", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `emails[type eq "work"]`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `emails[type eq "work"]`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "EXISTS(emails: type = ?)", out.sql)
 		assert.Equal(t, []any{"work"}, out.args)
 	})
 
 	t.Run("composes a value path with a sibling comparison", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `emails[type eq "work"] and userName eq "bob"`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `emails[type eq "work"] and userName eq "bob"`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "(EXISTS(emails: type = ?) AND username = ?)", out.sql)
 		assert.Equal(t, []any{"work", "bob"}, out.args)
@@ -70,7 +71,7 @@ func TestFilter(t *testing.T) {
 			core.NewAttribute("department", core.TypeString, ""),
 		)
 		text := fmt.Sprintf("%s:department eq \"eng\"", core.SchemaEnterpriseUser)
-		out, err := Filter[clause]([]*core.Schema{schema, enterprise}, text, sqlEvaluator{})
+		out, err := protocol.Filter[clause]([]*core.Schema{schema, enterprise}, text, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "department = ?", out.sql)
 		assert.Equal(t, []any{"eng"}, out.args)
@@ -84,7 +85,7 @@ func TestFilter(t *testing.T) {
 			`userName le "z"`: "username <= ?",
 		}
 		for text, want := range cases {
-			out, err := Filter[clause](schemas, text, sqlEvaluator{})
+			out, err := protocol.Filter[clause](schemas, text, sqlEvaluator{})
 			require.NoError(t, err)
 			assert.Equal(t, want, out.sql)
 			assert.Len(t, out.args, 1)
@@ -92,21 +93,21 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("composes or", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `userName eq "bob" or active eq true`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `userName eq "bob" or active eq true`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "(username = ? OR active = ?)", out.sql)
 		assert.Equal(t, []any{"bob", true}, out.args)
 	})
 
 	t.Run("renders an integer comparison", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `age gt 21`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `age gt 21`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "age > ?", out.sql)
 		assert.Equal(t, []any{int64(21)}, out.args)
 	})
 
 	t.Run("preserves an integer beyond float64 precision", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `age eq 9007199254740993`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `age eq 9007199254740993`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "age = ?", out.sql)
 		assert.Equal(t, []any{int64(9007199254740993)}, out.args)
@@ -115,13 +116,13 @@ func TestFilter(t *testing.T) {
 	// RFC 7643 Section 2.3.4: an integer MUST NOT contain fractional or exponent parts.
 	t.Run("rejects a fractional or exponent integer literal", func(t *testing.T) {
 		for _, text := range []string{`age eq 21.0`, `age eq 2e3`, `age eq 21.5`} {
-			_, err := Filter[clause](schemas, text, sqlEvaluator{})
+			_, err := protocol.Filter[clause](schemas, text, sqlEvaluator{})
 			require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""), text)
 		}
 	})
 
 	t.Run("renders a ne comparison", func(t *testing.T) {
-		out, err := Filter[clause](schemas, `userName ne "bob"`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `userName ne "bob"`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "username <> ?", out.sql)
 		assert.Equal(t, []any{"bob"}, out.args)
@@ -135,7 +136,7 @@ func TestFilter(t *testing.T) {
 			`userName ew "ob"`: {"%ob"},
 		}
 		for text, wantArgs := range cases {
-			out, err := Filter[clause](schemas, text, sqlEvaluator{})
+			out, err := protocol.Filter[clause](schemas, text, sqlEvaluator{})
 			require.NoError(t, err, text)
 			assert.Equal(t, "username LIKE ?", out.sql, text)
 			assert.Equal(t, wantArgs, out.args, text)
@@ -144,62 +145,62 @@ func TestFilter(t *testing.T) {
 
 	// RFC 7644 Section 3.4.2.2: co, sw, ew apply only to string or reference attributes.
 	t.Run("rejects a substring operator on a non-string attribute", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `active co "x"`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `active co "x"`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("resolves presence of an unknown attribute to invalidFilter", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `nickName pr`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `nickName pr`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects a value path on a non-multivalued attribute", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `userName[type eq "work"]`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `userName[type eq "work"]`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects a value path targeting an unknown attribute", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `unknown[type eq "work"]`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `unknown[type eq "work"]`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects an unknown sub-attribute within a value path", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `emails[unknownSub eq "work"]`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `emails[unknownSub eq "work"]`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects an unknown sub-attribute of a known attribute", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `emails.unknownSub eq "work"`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `emails.unknownSub eq "work"`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects any attribute when no schemas are configured", func(t *testing.T) {
-		_, err := Filter[clause]([]*core.Schema{}, `userName eq "bob"`, sqlEvaluator{})
+		_, err := protocol.Filter[clause]([]*core.Schema{}, `userName eq "bob"`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("maps an unknown attribute to invalidFilter", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `nickName eq "x"`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `nickName eq "x"`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("maps an unknown schema URI to invalidFilter", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `urn:example:Widget:color eq "red"`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `urn:example:Widget:color eq "red"`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("maps a mistyped value to invalidValue", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `active eq "yes"`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `active eq "yes"`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 	})
 
 	t.Run("rejects an operator that is invalid for the attribute type", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `active gt true`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `active gt true`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("maps a malformed filter to invalidFilter", func(t *testing.T) {
-		_, err := Filter[clause](schemas, `userName zz "x"`, sqlEvaluator{})
+		_, err := protocol.Filter[clause](schemas, `userName zz "x"`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 }
