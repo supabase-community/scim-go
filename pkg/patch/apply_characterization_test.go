@@ -49,7 +49,7 @@ func TestApplyValuePathComparisonMatrix(t *testing.T) {
 		{"presence miss", map[string]any{"score": json.Number("5")}, `value pr`, false},
 
 		{"type mismatch string vs number", map[string]any{"value": "a@b.com"}, `value gt 5`, false},
-		{"native int is unsupported", map[string]any{"score": 5}, `score eq 5`, false},
+		{"native int matches", map[string]any{"score": 5}, `score eq 5`, true},
 		{"bool unsupported op", map[string]any{"active": true}, `active gt false`, false},
 		{"nil value never matches", map[string]any{"value": nil}, `value eq "x"`, false},
 	}

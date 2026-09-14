@@ -61,8 +61,9 @@ func (p *patcher) write(root object, op Operation, appendMode bool) error {
 	if err != nil {
 		return scimerrors.ErrInvalidValue(`"value" is not valid JSON`)
 	}
+	m := mutation{value: value, appendMode: appendMode}
 	if path.ValueFilter != nil {
-		return p.valueWrite(root, path, value, appendMode)
+		return p.valueWrite(root, path, m)
 	}
 
 	attr, err := resolve(p.schemas, path)
@@ -76,7 +77,7 @@ func (p *patcher) write(root object, op Operation, appendMode bool) error {
 	if err != nil {
 		return err
 	}
-	p.store(target, key, attr, value, appendMode)
+	p.store(target, key, attr, m)
 	return nil
 }
 
@@ -102,13 +103,28 @@ func (p *patcher) remove(root object, op Operation) error {
 		root.remove(path.Name)
 		return nil
 	}
-	if nested, ok := root[root.key(path.Name)].(map[string]any); ok {
+	return removeSub(root, path)
+}
+
+func removeSub(root object, path filter.Path) error {
+	switch nested := root[root.key(path.Name)].(type) {
+	case map[string]any:
 		object(nested).remove(path.SubAttribute)
+		return nil
+	case []any:
+		matched, _ := eachMatch(nested, func(map[string]any) bool { return true }, func(member object) error {
+			member.remove(path.SubAttribute)
+			return nil
+		})
+		if matched == 0 {
+			return scimerrors.ErrNoTarget(`"path" matched no elements`)
+		}
+		return nil
 	}
 	return nil
 }
 
-func (p *patcher) valueWrite(root object, path filter.Path, value any, appendMode bool) error {
+func (p *patcher) valueWrite(root object, path filter.Path, m mutation) error {
 	parent, err := resolve(p.schemas, base(path))
 	if err != nil {
 		return err
@@ -120,28 +136,15 @@ func (p *patcher) valueWrite(root object, path filter.Path, value any, appendMod
 	if err != nil {
 		return err
 	}
-	attr := parent
-	if path.SubAttribute != "" {
-		if attr, err = resolve(p.schemas, path); err != nil {
-			return err
-		}
+	writeOne, err := p.memberWriter(path, parent, m)
+	if err != nil {
+		return err
 	}
-
 	key := root.key(path.Name)
 	elements, _ := root[key].([]any)
-	matched := 0
-	for _, element := range elements {
-		member, ok := element.(map[string]any)
-		if !ok || !pred(member) {
-			continue
-		}
-		matched++
-		if err := p.writeMember(object(member), path, value, parent, attr, appendMode); err != nil {
-			if errors.Is(err, errSkip) {
-				continue
-			}
-			return err
-		}
+	matched, err := eachMatch(elements, pred, writeOne)
+	if err != nil {
+		return err
 	}
 	if matched == 0 {
 		return scimerrors.ErrNoTarget(`"path" filter matched no elements`)
@@ -150,19 +153,27 @@ func (p *patcher) valueWrite(root object, path filter.Path, value any, appendMod
 	return nil
 }
 
-func (p *patcher) writeMember(member object, path filter.Path, value any, parent, attr *core.Attribute, appendMode bool) error {
-	if path.SubAttribute != "" {
+func (p *patcher) memberWriter(path filter.Path, parent *core.Attribute, m mutation) (func(object) error, error) {
+	if path.SubAttribute == "" {
+		values, ok := m.value.(map[string]any)
+		if !ok {
+			return nil, scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
+		}
+		return func(member object) error {
+			return p.mergeAll(member, values, parent, m.appendMode)
+		}, nil
+	}
+	attr, err := resolve(p.schemas, path)
+	if err != nil {
+		return nil, err
+	}
+	return func(member object) error {
 		if err := gate(attr, member.has(path.SubAttribute)); err != nil {
 			return err
 		}
-		p.store(member, path.SubAttribute, attr, value, appendMode)
+		p.store(member, path.SubAttribute, attr, m)
 		return nil
-	}
-	values, ok := value.(map[string]any)
-	if !ok {
-		return scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
-	}
-	return p.mergeAll(member, values, parent, appendMode)
+	}, nil
 }
 
 func (p *patcher) valueRemove(root object, path filter.Path) error {
@@ -177,20 +188,33 @@ func (p *patcher) valueRemove(root object, path filter.Path) error {
 	if err != nil {
 		return err
 	}
-	if attr, err := resolve(p.schemas, path); err != nil {
-		return err
-	} else if err := gate(attr, present(root, path)); err != nil {
-		return skip(err)
-	}
-
 	key := root.key(path.Name)
 	elements, _ := root[key].([]any)
 	if path.SubAttribute != "" {
-		if eachMatch(elements, pred, func(m object) { m.remove(path.SubAttribute) }) == 0 {
-			return scimerrors.ErrNoTarget(`"path" filter matched no elements`)
-		}
-		return nil
+		return p.clearSub(root, path, elements, pred)
 	}
+	return dropMembers(root, key, elements, pred)
+}
+
+func (p *patcher) clearSub(root object, path filter.Path, elements []any, pred predicate) error {
+	attr, err := resolve(p.schemas, path)
+	if err != nil {
+		return err
+	}
+	if err := gate(attr, present(root, path)); err != nil {
+		return skip(err)
+	}
+	matched, _ := eachMatch(elements, pred, func(member object) error {
+		member.remove(path.SubAttribute)
+		return nil
+	})
+	if matched == 0 {
+		return scimerrors.ErrNoTarget(`"path" filter matched no elements`)
+	}
+	return nil
+}
+
+func dropMembers(root object, key string, elements []any, pred predicate) error {
 	kept := make([]any, 0, len(elements))
 	matched := 0
 	for _, element := range elements {
@@ -219,14 +243,13 @@ func (p *patcher) mergeAll(target object, values map[string]any, parent *core.At
 			}
 			return err
 		}
-		p.store(target, key, attr, value, appendMode)
+		p.store(target, key, attr, mutation{value: value, appendMode: appendMode})
 	}
 	return nil
 }
 
-// store is the only gated value write in the engine; every caller gates first.
-func (p *patcher) store(target object, key string, attr *core.Attribute, value any, appendMode bool) {
-	target.set(key, shaped(value, attr.MultiValued), appendMode)
+func (p *patcher) store(target object, key string, attr *core.Attribute, m mutation) {
+	target.set(key, shaped(m.value, attr.MultiValued), m.appendMode)
 }
 
 func (p *patcher) locate(root object, path filter.Path) (object, string, error) {
@@ -289,7 +312,7 @@ func subAttr(parent *core.Attribute, name string) *core.Attribute {
 }
 
 func topLevelPath(name string) filter.Path {
-	return filter.Path{AttrPath: filter.AttrPath{Name: name}}
+	return filter.Path{Name: name}
 }
 
 func base(path filter.Path) filter.Path {
@@ -326,13 +349,20 @@ func skip(err error) error {
 	return err
 }
 
-func eachMatch(elements []any, pred predicate, fn func(object)) int {
+func eachMatch(elements []any, pred predicate, fn func(object) error) (int, error) {
 	matched := 0
 	for _, element := range elements {
-		if member, ok := element.(map[string]any); ok && pred(member) {
-			matched++
-			fn(object(member))
+		member, ok := element.(map[string]any)
+		if !ok || !pred(member) {
+			continue
+		}
+		matched++
+		if err := fn(object(member)); err != nil {
+			if errors.Is(err, errSkip) {
+				continue
+			}
+			return matched, err
 		}
 	}
-	return matched
+	return matched, nil
 }

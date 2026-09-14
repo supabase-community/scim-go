@@ -419,6 +419,55 @@ func TestApplyValuePathFilterHonorsCaseExact(t *testing.T) {
 	assert.Equal(t, scimerrors.NoTarget, err.ScimType)
 }
 
+func TestApplyValuePathNumericFilterNativeInt(t *testing.T) {
+	item := map[string]any{"scores": []any{
+		map[string]any{"kind": "a", "n": 10},
+		map[string]any{"kind": "b", "n": 2},
+	}}
+
+	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `scores[n gt 5]`, "")))
+
+	scores := item["scores"].([]any)
+	require.Len(t, scores, 1)
+	assert.Equal(t, "b", scores[0].(map[string]any)["kind"])
+}
+
+// RFC 7644 3.4.2.2 - pr does not match an empty value.
+func TestApplyValuePathPresenceIgnoresEmptyString(t *testing.T) {
+	item := map[string]any{"emails": []any{
+		map[string]any{"type": "work", "value": "w@x"},
+		map[string]any{"type": "home", "value": ""},
+	}}
+
+	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[value pr]`, "")))
+
+	emails := item["emails"].([]any)
+	require.Len(t, emails, 1)
+	assert.Equal(t, "home", emails[0].(map[string]any)["type"])
+}
+
+func TestApplyRemoveSubAttributeAcrossMultiValued(t *testing.T) {
+	item := map[string]any{"emails": []any{
+		map[string]any{"type": "work", "value": "w@x"},
+		map[string]any{"type": "home", "value": "h@x"},
+	}}
+
+	require.NoError(t, apply(item, nil, operation(patch.OpRemove, "emails.type", "")))
+
+	emails := item["emails"].([]any)
+	require.Len(t, emails, 2)
+	assert.Equal(t, map[string]any{"value": "w@x"}, emails[0])
+	assert.Equal(t, map[string]any{"value": "h@x"}, emails[1])
+}
+
+func TestApplyRemoveSubAttributeMultiValuedNoTarget(t *testing.T) {
+	item := map[string]any{"emails": []any{}}
+
+	var err *scimerrors.Error
+	require.ErrorAs(t, apply(item, nil, operation(patch.OpRemove, "emails.type", "")), &err)
+	assert.Equal(t, scimerrors.NoTarget, err.ScimType)
+}
+
 func apply(resource any, schemas []*core.Schema, ops ...patch.Operation) error {
 	return patch.Apply(resource, ops, schemas)
 }

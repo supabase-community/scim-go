@@ -2,6 +2,7 @@ package patch
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -89,7 +90,7 @@ func (m matcher) leaf(attr filter.AttrPath, op filter.Operator, want any) predic
 	return func(member map[string]any) bool {
 		got, ok := object(member).get(key)
 		if op == opPresent {
-			return ok && got != nil
+			return ok && hasValue(got)
 		}
 		if !ok || got == nil {
 			return false
@@ -168,14 +169,34 @@ func (m matcher) compareNumbers(op filter.Operator, got, want float64) bool {
 }
 
 func (m matcher) toFloat(value any) (float64, bool) {
-	switch n := value.(type) {
-	case json.Number:
+	if n, ok := value.(json.Number); ok {
 		f, err := n.Float64()
 		return f, err == nil
-	case float64:
-		return n, true
-	case int64:
-		return float64(n), true
+	}
+	v := reflect.ValueOf(value)
+	switch v.Kind() {
+	case reflect.Float32, reflect.Float64:
+		return v.Float(), true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return float64(v.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return float64(v.Uint()), true
 	}
 	return 0, false
+}
+
+// RFC 7644 3.4.2.2 - pr matches only a non-empty, non-null value.
+func hasValue(value any) bool {
+	switch v := value.(type) {
+	case nil:
+		return false
+	case string:
+		return v != ""
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	default:
+		return true
+	}
 }
