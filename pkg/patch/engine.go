@@ -16,11 +16,13 @@ import (
 
 var errSkip = errors.New("scim: skip readOnly attribute")
 
-type engine struct{}
+type engine struct {
+	schemas []*core.Schema
+}
 
-func (r *engine) apply(resource any, ops []Operation, schemas []*core.Schema) error {
+func (r *engine) apply(resource any, ops []Operation) error {
 	if doc, ok := resource.(map[string]any); ok {
-		return r.applyToMap(doc, ops, schemas)
+		return r.applyToMap(doc, ops)
 	}
 
 	raw, err := json.Marshal(resource)
@@ -31,7 +33,7 @@ func (r *engine) apply(resource any, ops []Operation, schemas []*core.Schema) er
 	if err != nil {
 		return scimerrors.ErrInvalidSyntax("resource is not a JSON object")
 	}
-	if err := r.applyToMap(doc, ops, schemas); err != nil {
+	if err := r.applyToMap(doc, ops); err != nil {
 		return err
 	}
 	out, err := json.Marshal(doc)
@@ -41,10 +43,10 @@ func (r *engine) apply(resource any, ops []Operation, schemas []*core.Schema) er
 	return r.writeBack(resource, out)
 }
 
-func (r *engine) applyToMap(doc map[string]any, ops []Operation, schemas []*core.Schema) error {
+func (r *engine) applyToMap(doc map[string]any, ops []Operation) error {
 	working := r.cloneMap(doc)
 	for _, op := range ops {
-		if err := r.applyOp(working, op, schemas); err != nil {
+		if err := r.applyOp(working, op); err != nil {
 			return err
 		}
 	}
@@ -55,22 +57,22 @@ func (r *engine) applyToMap(doc map[string]any, ops []Operation, schemas []*core
 	return nil
 }
 
-func (r *engine) applyOp(doc map[string]any, op Operation, schemas []*core.Schema) error {
+func (r *engine) applyOp(doc map[string]any, op Operation) error {
 	switch Op(strings.ToLower(string(op.Op))) {
 	case OpAdd:
-		return r.applyWrite(doc, op, OpAdd, schemas)
+		return r.applyWrite(doc, op, OpAdd)
 	case OpReplace:
-		return r.applyWrite(doc, op, OpReplace, schemas)
+		return r.applyWrite(doc, op, OpReplace)
 	case OpRemove:
-		return r.applyRemove(doc, op, schemas)
+		return r.applyRemove(doc, op)
 	default:
 		return scimerrors.ErrInvalidSyntax(`"op" must be "add", "remove", or "replace"`)
 	}
 }
 
-func (r *engine) applyWrite(doc map[string]any, op Operation, kind Op, schemas []*core.Schema) error {
+func (r *engine) applyWrite(doc map[string]any, op Operation, kind Op) error {
 	if op.Path == "" {
-		return r.applyMerge(doc, op.Value, kind, schemas)
+		return r.applyMerge(doc, op.Value, kind)
 	}
 
 	path, err := filter.NewPath(op.Path)
@@ -87,23 +89,23 @@ func (r *engine) applyWrite(doc map[string]any, op Operation, kind Op, schemas [
 
 	w := valueWrite{path: path, value: value, appendMode: kind == OpAdd}
 	if path.ValueFilter != nil {
-		return r.applyValueWrite(doc, w, schemas)
+		return r.applyValueWrite(doc, w)
 	}
-	attr, err := r.guard(schemas, path, doc)
+	attr, err := r.guard(path, doc)
 	if err != nil {
 		return r.skipOrFail(err)
 	}
 	return r.writePath(doc, w, attr)
 }
 
-func (r *engine) applyMerge(doc map[string]any, raw json.RawMessage, kind Op, schemas []*core.Schema) error {
+func (r *engine) applyMerge(doc map[string]any, raw json.RawMessage, kind Op) error {
 	values, err := r.decodeMap(raw)
 	if err != nil {
 		return scimerrors.ErrInvalidValue(`"value" must be an object when "path" is omitted`)
 	}
 	appendMode := kind == OpAdd
 	for key, value := range values {
-		attr, err := r.guard(schemas, r.topLevelPath(key), doc)
+		attr, err := r.guard(r.topLevelPath(key), doc)
 		if err != nil {
 			if errors.Is(err, errSkip) {
 				continue
@@ -121,7 +123,7 @@ func (r *engine) topLevelPath(name string) filter.Path {
 	return path
 }
 
-func (r *engine) applyRemove(doc map[string]any, op Operation, schemas []*core.Schema) error {
+func (r *engine) applyRemove(doc map[string]any, op Operation) error {
 	if op.Path == "" {
 		return scimerrors.ErrNoTarget(`"remove" requires a "path"`)
 	}
@@ -130,9 +132,9 @@ func (r *engine) applyRemove(doc map[string]any, op Operation, schemas []*core.S
 		return scimerrors.ErrInvalidPath(err.Error())
 	}
 	if path.ValueFilter != nil {
-		return r.applyValueRemove(doc, path, schemas)
+		return r.applyValueRemove(doc, path)
 	}
-	if _, err := r.guard(schemas, path, doc); err != nil {
+	if _, err := r.guard(path, doc); err != nil {
 		return r.skipOrFail(err)
 	}
 	r.removePath(doc, path)
@@ -150,8 +152,8 @@ func (r *engine) removePath(doc map[string]any, path filter.Path) {
 	}
 }
 
-func (r *engine) applyValueWrite(doc map[string]any, w valueWrite, schemas []*core.Schema) error {
-	parent, err := r.guardParent(schemas, w.path, doc)
+func (r *engine) applyValueWrite(doc map[string]any, w valueWrite) error {
+	parent, err := r.guardParent(w.path, doc)
 	if err != nil {
 		return r.skipOrFail(err)
 	}
@@ -161,7 +163,7 @@ func (r *engine) applyValueWrite(doc map[string]any, w valueWrite, schemas []*co
 	}
 	attr := parent
 	if w.path.SubAttribute != "" {
-		attr, err = r.attrFor(schemas, w.path)
+		attr, err = r.attrFor(w.path)
 		if err != nil {
 			return err
 		}
@@ -223,8 +225,8 @@ func (r *engine) mergeMember(member, values map[string]any, appendMode bool, att
 	return nil
 }
 
-func (r *engine) applyValueRemove(doc map[string]any, path filter.Path, schemas []*core.Schema) error {
-	parent, err := r.guardParent(schemas, path, doc)
+func (r *engine) applyValueRemove(doc map[string]any, path filter.Path) error {
+	parent, err := r.guardParent(path, doc)
 	if err != nil {
 		return r.skipOrFail(err)
 	}
@@ -232,7 +234,7 @@ func (r *engine) applyValueRemove(doc map[string]any, path filter.Path, schemas 
 	if err != nil {
 		return err
 	}
-	if _, err := r.guard(schemas, path, doc); err != nil {
+	if _, err := r.guard(path, doc); err != nil {
 		return r.skipOrFail(err)
 	}
 
@@ -295,16 +297,16 @@ func (r *engine) writePath(doc map[string]any, w valueWrite, attr *core.Attribut
 	return nil
 }
 
-func (r *engine) guard(schemas []*core.Schema, path filter.Path, doc map[string]any) (*core.Attribute, error) {
-	attr, err := r.attrFor(schemas, path)
+func (r *engine) guard(path filter.Path, doc map[string]any) (*core.Attribute, error) {
+	attr, err := r.attrFor(path)
 	if err != nil || attr == nil {
 		return nil, err
 	}
 	return attr, r.checkMutability(attr, r.attrExists(doc, path))
 }
 
-func (r *engine) guardParent(schemas []*core.Schema, path filter.Path, doc map[string]any) (*core.Attribute, error) {
-	parent, err := r.parentAttr(schemas, path)
+func (r *engine) guardParent(path filter.Path, doc map[string]any) (*core.Attribute, error) {
+	parent, err := r.parentAttr(path)
 	if err != nil || parent == nil {
 		return parent, err
 	}
@@ -325,17 +327,17 @@ func (r *engine) checkMutability(attr *core.Attribute, present bool) error {
 	return nil
 }
 
-func (r *engine) attrFor(schemas []*core.Schema, path filter.Path) (*core.Attribute, error) {
-	if len(schemas) == 0 {
+func (r *engine) attrFor(path filter.Path) (*core.Attribute, error) {
+	if len(r.schemas) == 0 {
 		return nil, nil
 	}
-	return r.resolveAttr(schemas, path)
+	return r.resolveAttr(path)
 }
 
-func (r *engine) parentAttr(schemas []*core.Schema, path filter.Path) (*core.Attribute, error) {
+func (r *engine) parentAttr(path filter.Path) (*core.Attribute, error) {
 	base := path
 	base.SubAttribute = ""
-	return r.attrFor(schemas, base)
+	return r.attrFor(base)
 }
 
 func (r *engine) subAttr(attr *core.Attribute, name string) *core.Attribute {
@@ -354,8 +356,8 @@ func (r *engine) isCaseExact(attr *core.Attribute, name string) bool {
 	return sub != nil && sub.CaseExact
 }
 
-func (r *engine) resolveAttr(schemas []*core.Schema, path filter.Path) (*core.Attribute, error) {
-	schema := r.selectSchema(schemas, path.URI)
+func (r *engine) resolveAttr(path filter.Path) (*core.Attribute, error) {
+	schema := r.selectSchema(path.URI)
 	if schema == nil {
 		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.URI) + " is not a known schema")
 	}
@@ -373,14 +375,14 @@ func (r *engine) resolveAttr(schemas []*core.Schema, path filter.Path) (*core.At
 	return sub, nil
 }
 
-func (r *engine) selectSchema(schemas []*core.Schema, uri string) *core.Schema {
+func (r *engine) selectSchema(uri string) *core.Schema {
 	if uri == "" {
-		if len(schemas) == 0 {
+		if len(r.schemas) == 0 {
 			return nil
 		}
-		return schemas[0]
+		return r.schemas[0]
 	}
-	for _, schema := range schemas {
+	for _, schema := range r.schemas {
 		if string(schema.ID) == uri {
 			return schema
 		}
