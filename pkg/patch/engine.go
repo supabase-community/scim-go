@@ -16,6 +16,8 @@ import (
 
 var errSkip = errors.New("scim: skip readOnly attribute")
 
+var permissiveAttr = &core.Attribute{}
+
 type engine struct {
 	schemas []*core.Schema
 }
@@ -194,10 +196,8 @@ func (r *engine) applyValueWrite(doc map[string]any, w valueWrite) error {
 
 func (r *engine) writeMember(member map[string]any, w valueWrite, attr *core.Attribute) error {
 	if w.path.SubAttribute != "" {
-		if attr != nil {
-			if err := r.checkMutability(attr, object(member).has(w.path.SubAttribute)); err != nil {
-				return err
-			}
+		if err := r.checkMutability(attr, object(member).has(w.path.SubAttribute)); err != nil {
+			return err
 		}
 		r.setKey(member, w.path.SubAttribute, r.shape(w.value, r.isMultiValued(attr)), w.appendMode)
 		return nil
@@ -212,13 +212,11 @@ func (r *engine) writeMember(member map[string]any, w valueWrite, attr *core.Att
 func (r *engine) mergeMember(member, values map[string]any, appendMode bool, attr *core.Attribute) error {
 	for key, value := range values {
 		sub := r.subAttr(attr, key)
-		if sub != nil {
-			if err := r.checkMutability(sub, object(member).has(key)); err != nil {
-				if errors.Is(err, errSkip) {
-					continue
-				}
-				return err
+		if err := r.checkMutability(sub, object(member).has(key)); err != nil {
+			if errors.Is(err, errSkip) {
+				continue
 			}
+			return err
 		}
 		r.setKey(member, key, r.shape(value, r.isMultiValued(sub)), appendMode)
 	}
@@ -299,7 +297,7 @@ func (r *engine) writePath(doc map[string]any, w valueWrite, attr *core.Attribut
 
 func (r *engine) guard(path filter.Path, doc map[string]any) (*core.Attribute, error) {
 	attr, err := r.attrFor(path)
-	if err != nil || attr == nil {
+	if err != nil {
 		return nil, err
 	}
 	return attr, r.checkMutability(attr, r.attrExists(doc, path))
@@ -307,7 +305,7 @@ func (r *engine) guard(path filter.Path, doc map[string]any) (*core.Attribute, e
 
 func (r *engine) guardParent(path filter.Path, doc map[string]any) (*core.Attribute, error) {
 	parent, err := r.parentAttr(path)
-	if err != nil || parent == nil {
+	if err != nil {
 		return parent, err
 	}
 	base := path
@@ -329,7 +327,7 @@ func (r *engine) checkMutability(attr *core.Attribute, present bool) error {
 
 func (r *engine) attrFor(path filter.Path) (*core.Attribute, error) {
 	if len(r.schemas) == 0 {
-		return nil, nil
+		return permissiveAttr, nil
 	}
 	return r.resolveAttr(path)
 }
@@ -341,19 +339,18 @@ func (r *engine) parentAttr(path filter.Path) (*core.Attribute, error) {
 }
 
 func (r *engine) subAttr(attr *core.Attribute, name string) *core.Attribute {
-	if attr == nil {
-		return nil
+	if sub := attr.SubAttribute(name); sub != nil {
+		return sub
 	}
-	return attr.SubAttribute(name)
+	return permissiveAttr
 }
 
 func (r *engine) isMultiValued(attr *core.Attribute) bool {
-	return attr != nil && attr.MultiValued
+	return attr.MultiValued
 }
 
 func (r *engine) isCaseExact(attr *core.Attribute, name string) bool {
-	sub := r.subAttr(attr, name)
-	return sub != nil && sub.CaseExact
+	return r.subAttr(attr, name).CaseExact
 }
 
 func (r *engine) resolveAttr(path filter.Path) (*core.Attribute, error) {
