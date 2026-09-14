@@ -114,7 +114,7 @@ func (r *engine) applyMerge(doc map[string]any, raw json.RawMessage, kind Op) er
 			}
 			return err
 		}
-		r.setKey(doc, key, r.shape(value, r.isMultiValued(attr)), appendMode)
+		r.setKey(doc, key, r.shape(value, isMultiValued(attr)), appendMode)
 	}
 	return nil
 }
@@ -159,7 +159,7 @@ func (r *engine) applyValueWrite(doc map[string]any, w valueWrite) error {
 	if err != nil {
 		return r.skipOrFail(err)
 	}
-	pred, err := r.compile(w.path.ValueFilter, parent)
+	pred, err := matcher{}.compile(w.path.ValueFilter, parent)
 	if err != nil {
 		return err
 	}
@@ -199,7 +199,7 @@ func (r *engine) writeMember(member map[string]any, w valueWrite, attr *core.Att
 		if err := r.checkMutability(attr, object(member).has(w.path.SubAttribute)); err != nil {
 			return err
 		}
-		r.setKey(member, w.path.SubAttribute, r.shape(w.value, r.isMultiValued(attr)), w.appendMode)
+		r.setKey(member, w.path.SubAttribute, r.shape(w.value, isMultiValued(attr)), w.appendMode)
 		return nil
 	}
 	values, ok := w.value.(map[string]any)
@@ -211,14 +211,14 @@ func (r *engine) writeMember(member map[string]any, w valueWrite, attr *core.Att
 
 func (r *engine) mergeMember(member, values map[string]any, appendMode bool, attr *core.Attribute) error {
 	for key, value := range values {
-		sub := r.subAttr(attr, key)
+		sub := subAttr(attr, key)
 		if err := r.checkMutability(sub, object(member).has(key)); err != nil {
 			if errors.Is(err, errSkip) {
 				continue
 			}
 			return err
 		}
-		r.setKey(member, key, r.shape(value, r.isMultiValued(sub)), appendMode)
+		r.setKey(member, key, r.shape(value, isMultiValued(sub)), appendMode)
 	}
 	return nil
 }
@@ -228,7 +228,7 @@ func (r *engine) applyValueRemove(doc map[string]any, path filter.Path) error {
 	if err != nil {
 		return r.skipOrFail(err)
 	}
-	pred, err := r.compile(path.ValueFilter, parent)
+	pred, err := matcher{}.compile(path.ValueFilter, parent)
 	if err != nil {
 		return err
 	}
@@ -277,7 +277,7 @@ func (r *engine) partition(elements []any, pred predicate) ([]any, int) {
 }
 
 func (r *engine) writePath(doc map[string]any, w valueWrite, attr *core.Attribute) error {
-	value := r.shape(w.value, r.isMultiValued(attr))
+	value := r.shape(w.value, isMultiValued(attr))
 	if w.path.SubAttribute == "" {
 		r.setKey(doc, w.path.Name, value, w.appendMode)
 		return nil
@@ -338,19 +338,15 @@ func (r *engine) parentAttr(path filter.Path) (*core.Attribute, error) {
 	return r.attrFor(base)
 }
 
-func (r *engine) subAttr(attr *core.Attribute, name string) *core.Attribute {
+func subAttr(attr *core.Attribute, name string) *core.Attribute {
 	if sub := attr.SubAttribute(name); sub != nil {
 		return sub
 	}
 	return permissiveAttr
 }
 
-func (r *engine) isMultiValued(attr *core.Attribute) bool {
+func isMultiValued(attr *core.Attribute) bool {
 	return attr.MultiValued
-}
-
-func (r *engine) isCaseExact(attr *core.Attribute, name string) bool {
-	return r.subAttr(attr, name).CaseExact
 }
 
 func (r *engine) resolveAttr(path filter.Path) (*core.Attribute, error) {
@@ -385,145 +381,6 @@ func (r *engine) selectSchema(uri string) *core.Schema {
 		}
 	}
 	return nil
-}
-
-func (r *engine) compile(node *filter.Node, attr *core.Attribute) (predicate, error) {
-	switch {
-	case node == nil:
-		return nil, scimerrors.ErrInvalidPath("empty value filter")
-	case node.Not():
-		return r.compileNot(node, attr)
-	case node.Left() != nil:
-		return r.compileBinary(node, attr)
-	default:
-		return r.compileLeaf(node, attr), nil
-	}
-}
-
-func (r *engine) compileNot(node *filter.Node, attr *core.Attribute) (predicate, error) {
-	inner, err := r.compile(node.Operand(), attr)
-	if err != nil {
-		return nil, err
-	}
-	return func(m map[string]any) bool { return !inner(m) }, nil
-}
-
-func (r *engine) compileBinary(node *filter.Node, attr *core.Attribute) (predicate, error) {
-	left, err := r.compile(node.Left(), attr)
-	if err != nil {
-		return nil, err
-	}
-	right, err := r.compile(node.Right(), attr)
-	if err != nil {
-		return nil, err
-	}
-	if strings.EqualFold(node.Operator(), "or") {
-		return func(m map[string]any) bool { return left(m) || right(m) }, nil
-	}
-	return func(m map[string]any) bool { return left(m) && right(m) }, nil
-}
-
-func (r *engine) compileLeaf(node *filter.Node, attr *core.Attribute) predicate {
-	l := leaf{
-		key:       node.AttrPath().Name,
-		op:        strings.ToLower(node.Operator()),
-		want:      node.Value(),
-		caseExact: r.isCaseExact(attr, node.AttrPath().Name),
-	}
-	return func(m map[string]any) bool { return r.matchOne(m, l) }
-}
-
-func (r *engine) matchOne(member map[string]any, l leaf) bool {
-	got, ok := object(member).get(l.key)
-	if l.op == "pr" {
-		return ok && got != nil
-	}
-	if !ok || got == nil {
-		return false
-	}
-	return r.compareValues(filter.Operator(l.op), got, l.want, l.caseExact)
-}
-
-func (r *engine) compareValues(op filter.Operator, got, want any, caseExact bool) bool {
-	if gs, ok := got.(string); ok {
-		ws, ok := want.(string)
-		return ok && r.compareStrings(op, gs, ws, caseExact)
-	}
-	if gb, ok := got.(bool); ok {
-		wb, ok := want.(bool)
-		return ok && r.compareBools(op, gb, wb)
-	}
-	gf, gok := r.toFloat(got)
-	wf, wok := r.toFloat(want)
-	return gok && wok && r.compareNumbers(op, gf, wf)
-}
-
-func (r *engine) compareStrings(op filter.Operator, got, want string, caseExact bool) bool {
-	if !caseExact {
-		got, want = strings.ToLower(got), strings.ToLower(want)
-	}
-	switch op {
-	case filter.OpEquals:
-		return got == want
-	case filter.OpNotEquals:
-		return got != want
-	case filter.OpContains:
-		return strings.Contains(got, want)
-	case filter.OpStartsWith:
-		return strings.HasPrefix(got, want)
-	case filter.OpEndsWith:
-		return strings.HasSuffix(got, want)
-	case filter.OpGreaterThan:
-		return got > want
-	case filter.OpLessThan:
-		return got < want
-	case filter.OpGreaterThanEquals:
-		return got >= want
-	case filter.OpLessThanEquals:
-		return got <= want
-	}
-	return false
-}
-
-func (r *engine) compareBools(op filter.Operator, got, want bool) bool {
-	switch op {
-	case filter.OpEquals:
-		return got == want
-	case filter.OpNotEquals:
-		return got != want
-	}
-	return false
-}
-
-func (r *engine) compareNumbers(op filter.Operator, got, want float64) bool {
-	switch op {
-	case filter.OpEquals:
-		return got == want
-	case filter.OpNotEquals:
-		return got != want
-	case filter.OpGreaterThan:
-		return got > want
-	case filter.OpLessThan:
-		return got < want
-	case filter.OpGreaterThanEquals:
-		return got >= want
-	case filter.OpLessThanEquals:
-		return got <= want
-	}
-	return false
-}
-
-func (r *engine) toFloat(value any) (float64, bool) {
-	switch n := value.(type) {
-	case json.Number:
-		f, err := n.Float64()
-		return f, err == nil
-	case float64:
-		return n, true
-	case int64:
-		return float64(n), true
-	}
-	return 0, false
 }
 
 func (r *engine) setKey(container map[string]any, key string, value any, appendMode bool) {
