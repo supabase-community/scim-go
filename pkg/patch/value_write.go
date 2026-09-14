@@ -1,4 +1,4 @@
-package protocol
+package patch
 
 import "github.com/supabase-community/scim-go/pkg/filter"
 

@@ -1,10 +1,12 @@
 package protocol
 
-// PatchOp is the kind of modification in a PATCH operation, per RFC 7644, Section 3.5.2.
-type PatchOp string
+import "github.com/supabase-community/scim-go/pkg/patch"
+
+// PatchOp moved to pkg/patch; this alias preserves the protocol surface.
+type PatchOp = patch.Op
 
 const (
-	PatchOpAdd     PatchOp = "add"
-	PatchOpRemove  PatchOp = "remove"
-	PatchOpReplace PatchOp = "replace"
+	PatchOpAdd     = patch.OpAdd
+	PatchOpRemove  = patch.OpRemove
+	PatchOpReplace = patch.OpReplace
 )
