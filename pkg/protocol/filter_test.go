@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 func TestFilter(t *testing.T) {
@@ -115,7 +116,7 @@ func TestFilter(t *testing.T) {
 	t.Run("rejects a fractional or exponent integer literal", func(t *testing.T) {
 		for _, text := range []string{`age eq 21.0`, `age eq 2e3`, `age eq 21.5`} {
 			_, err := Filter[clause](schemas, text, sqlEvaluator{})
-			require.ErrorIs(t, err, ErrInvalidValue(""), text)
+			require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""), text)
 		}
 	})
 
@@ -144,62 +145,62 @@ func TestFilter(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: co, sw, ew apply only to string or reference attributes.
 	t.Run("rejects a substring operator on a non-string attribute", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `active co "x"`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("resolves presence of an unknown attribute to invalidFilter", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `nickName pr`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects a value path on a non-multivalued attribute", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `userName[type eq "work"]`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects a value path targeting an unknown attribute", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `unknown[type eq "work"]`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects an unknown sub-attribute within a value path", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `emails[unknownSub eq "work"]`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects an unknown sub-attribute of a known attribute", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `emails.unknownSub eq "work"`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("rejects any attribute when no schemas are configured", func(t *testing.T) {
 		_, err := Filter[clause]([]*core.Schema{}, `userName eq "bob"`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("maps an unknown attribute to invalidFilter", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `nickName eq "x"`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("maps an unknown schema URI to invalidFilter", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `urn:example:Widget:color eq "red"`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("maps a mistyped value to invalidValue", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `active eq "yes"`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidValue(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 	})
 
 	t.Run("rejects an operator that is invalid for the attribute type", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `active gt true`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
 	t.Run("maps a malformed filter to invalidFilter", func(t *testing.T) {
 		_, err := Filter[clause](schemas, `userName zz "x"`, sqlEvaluator{})
-		require.ErrorIs(t, err, ErrInvalidFilter(""))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 }
 
@@ -230,7 +231,7 @@ func (sqlEvaluator) Compare(_ *core.Attribute, key string, op filter.Operator, v
 	}
 	symbol, ok := sqlOperators[op]
 	if !ok {
-		return clause{}, ErrInvalidFilter(fmt.Sprintf("operator %q is not supported", op))
+		return clause{}, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not supported", op))
 	}
 	return clause{sql: key + " " + symbol + " ?", args: []any{value}}, nil
 }

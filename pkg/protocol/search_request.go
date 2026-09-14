@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 // SortOrder is the direction a sort runs in, per RFC 7644, Section 3.4.2.3.
@@ -87,7 +88,7 @@ func sortOrderParam(values url.Values) (SortOrder, error) {
 		}
 		return "", nil
 	default:
-		return "", ErrInvalidValue(`"sortOrder" must be "ascending" or "descending"`)
+		return "", scimerrors.ErrInvalidValue(`"sortOrder" must be "ascending" or "descending"`)
 	}
 }
 
@@ -112,7 +113,7 @@ func intParam(values url.Values, name string, fallback int) (int, error) {
 
 	value, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, ErrInvalidValue(strconv.Quote(name) + " must be an integer")
+		return 0, scimerrors.ErrInvalidValue(strconv.Quote(name) + " must be an integer")
 	}
 	return value, nil
 }

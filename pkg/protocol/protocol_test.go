@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 func TestSend(t *testing.T) {
@@ -47,7 +48,7 @@ func TestSendError(t *testing.T) {
 	t.Run("writes the error in the SCIM error form", func(t *testing.T) {
 		w := httptest.NewRecorder()
 
-		require.NoError(t, SendError(w, ErrUniqueness(`userName "bjensen" is already in use`)))
+		require.NoError(t, SendError(w, scimerrors.ErrUniqueness(`userName "bjensen" is already in use`)))
 
 		assert.Equal(t, http.StatusConflict, w.Code)
 		assert.Equal(t, MediaType, w.Header().Get("Content-Type"))
@@ -62,7 +63,7 @@ func TestSendError(t *testing.T) {
 	t.Run("finds the SCIM error inside a wrapped error", func(t *testing.T) {
 		w := httptest.NewRecorder()
 
-		require.NoError(t, SendError(w, fmt.Errorf("reading users: %w", ErrNotFound("Endpoint or resource does not exist"))))
+		require.NoError(t, SendError(w, fmt.Errorf("reading users: %w", scimerrors.ErrNotFound("Endpoint or resource does not exist"))))
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 		assert.Contains(t, w.Body.String(), "Endpoint or resource does not exist")

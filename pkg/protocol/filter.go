@@ -5,13 +5,14 @@ import (
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 func Filter[T any](schemas []*core.Schema, text string, v Evaluator[T]) (T, error) {
 	var zero T
 	node, err := filter.Parse(text)
 	if err != nil {
-		return zero, ErrInvalidFilter(err.Error())
+		return zero, scimerrors.ErrInvalidFilter(err.Error())
 	}
 	return filter.Visit[T](&resolvingVisitor[T]{schemas: schemas, inner: v}, node)
 }
@@ -86,7 +87,7 @@ func (r *resolvingVisitor[T]) VisitValuePath(path filter.AttrPath, subAttribute 
 		return zero, err
 	}
 	if !attribute.MultiValued || subAttribute != "" {
-		return zero, ErrInvalidFilter(fmt.Sprintf("%q is not a value-path target", path.String()))
+		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a value-path target", path.String()))
 	}
 	return r.inner.ValuePath(attribute, path.Key(), r.scoped(attribute, valueFilter))
 }
@@ -107,16 +108,16 @@ func (r *resolvingVisitor[T]) resolve(path filter.AttrPath) (*core.Attribute, er
 	}
 	schema, ok := r.selectSchema(path.URI)
 	if !ok {
-		return nil, ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
+		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
 	}
 	attribute, ok := schema.Resolve(path.Name)
 	if !ok {
-		return nil, ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
+		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
 	}
 	if path.SubAttribute != "" {
 		attribute = attribute.SubAttribute(path.SubAttribute)
 		if attribute == nil {
-			return nil, ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
+			return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
 		}
 	}
 	return attribute, nil
@@ -125,7 +126,7 @@ func (r *resolvingVisitor[T]) resolve(path filter.AttrPath) (*core.Attribute, er
 func (r *resolvingVisitor[T]) resolveWithin(path filter.AttrPath) (*core.Attribute, error) {
 	attribute := r.scope.SubAttribute(path.Name)
 	if attribute == nil || path.SubAttribute != "" {
-		return nil, ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
+		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
 	}
 	return attribute, nil
 }
@@ -152,11 +153,11 @@ func (r *resolvingVisitor[T]) compare(path filter.AttrPath, op filter.Operator, 
 		return zero, err
 	}
 	if !operatorAllowed(attribute.Type, op) {
-		return zero, ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
+		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
 	}
 	coerced, ok := attribute.Coerce(value)
 	if !ok {
-		return zero, ErrInvalidValue(fmt.Sprintf("%q is not a valid value for %q", value, path.String()))
+		return zero, scimerrors.ErrInvalidValue(fmt.Sprintf("%q is not a valid value for %q", value, path.String()))
 	}
 	return r.inner.Compare(attribute, path.Key(), op, coerced)
 }

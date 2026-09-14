@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 // MediaType is the SCIM media type registered in RFC 7644, Section 8.1.
@@ -33,9 +35,9 @@ func Send(w http.ResponseWriter, status int, obj any) error {
 
 // SendError answers the request with err in the error form of RFC 7644, Section 3.12.
 func SendError(w http.ResponseWriter, err error) error {
-	var scimErr *Error
+	var scimErr *scimerrors.Error
 	if !errors.As(err, &scimErr) {
-		scimErr = ErrInternal("Internal server error")
+		scimErr = scimerrors.ErrInternal("Internal server error")
 	}
 
 	return Send(w, scimErr.StatusCode(), scimErr)

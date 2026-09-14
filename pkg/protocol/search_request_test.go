@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 func parseQuery(t *testing.T, query string) (*SearchRequest, error) {
@@ -112,7 +113,7 @@ func TestParseSearchRequest(t *testing.T) {
 			request, err := parseQuery(t, tc.query)
 
 			require.Nil(t, request)
-			require.ErrorIs(t, err, ErrInvalidValue(""))
+			require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 			assert.Contains(t, err.Error(), tc.detail)
 		})
 	}

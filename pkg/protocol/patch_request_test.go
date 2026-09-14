@@ -7,15 +7,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 func TestPatchRequestApplyDelegates(t *testing.T) {
 	item := map[string]any{"userName": "old"}
 	request := &protocol.PatchRequest{
 		Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
-		Operations: []protocol.PatchOperation{
-			{Op: protocol.PatchOpReplace, Path: "userName", Value: json.RawMessage(`"new"`)},
+		Operations: []patch.Operation{
+			{Op: patch.OpReplace, Path: "userName", Value: json.RawMessage(`"new"`)},
 		},
 	}
 
@@ -26,13 +28,13 @@ func TestPatchRequestApplyDelegates(t *testing.T) {
 
 func TestPatchRequestApplyReturnsProtocolError(t *testing.T) {
 	request := &protocol.PatchRequest{
-		Operations: []protocol.PatchOperation{
-			{Op: protocol.PatchOpReplace, Path: "userName"},
+		Operations: []patch.Operation{
+			{Op: patch.OpReplace, Path: "userName"},
 		},
 	}
 
-	var err *protocol.Error
+	var err *scimerrors.Error
 	require.ErrorAs(t, request.Apply(map[string]any{}, nil), &err)
 
-	assert.Equal(t, protocol.ScimTypeInvalidValue, err.ScimType)
+	assert.Equal(t, scimerrors.InvalidValue, err.ScimType)
 }
