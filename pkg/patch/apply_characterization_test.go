@@ -174,6 +174,39 @@ func TestApplyRejectsInvalidPath(t *testing.T) {
 	assert.Equal(t, scimerrors.InvalidPath, scimErr.ScimType)
 }
 
+func TestApplyImmutableAddThenReplaceInSameBatchRejected(t *testing.T) {
+	item := map[string]any{}
+
+	var scimErr *scimerrors.Error
+	err := apply(item, userSchemas(),
+		operation(patch.OpAdd, "employeeNumber", `"e1"`),
+		operation(patch.OpReplace, "employeeNumber", `"e2"`),
+	)
+
+	require.ErrorAs(t, err, &scimErr)
+	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
+	_, present := item["employeeNumber"]
+	assert.False(t, present)
+}
+
+func TestApplyValuePathReadOnlySubAttributeIsNoOpNotNoTarget(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
+				core.NewAttribute("value", core.TypeString, ""),
+				core.NewAttribute("primary", core.TypeBoolean, "").AsReadOnly(),
+			),
+		),
+	}
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@b.com"}}}
+
+	require.NoError(t, apply(item, schemas, operation(patch.OpReplace, `emails[value eq "a@b.com"].primary`, `true`)))
+
+	member := item["emails"].([]any)[0].(map[string]any)
+	_, present := member["primary"]
+	assert.False(t, present)
+}
+
 func comparisonSchemas() []*core.Schema {
 	return []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
