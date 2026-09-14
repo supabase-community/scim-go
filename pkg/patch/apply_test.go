@@ -383,6 +383,26 @@ func TestApplyValuePathMergeRespectsParentMutability(t *testing.T) {
 	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
 }
 
+// RFC 7643 7 - a value-path write to a sub-attribute of a readOnly attribute must be skipped.
+func TestApplyValuePathWriteRespectsParentMutability(t *testing.T) {
+	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
+
+	require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, `groups[value eq "g1"].value`, `"g2"`)))
+
+	groups := item["groups"].([]any)
+	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
+}
+
+// RFC 7643 7 - a value-path remove of a sub-attribute of a readOnly attribute must be skipped.
+func TestApplyValuePathRemoveRespectsParentMutability(t *testing.T) {
+	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
+
+	require.NoError(t, apply(item, userSchemas(), operation(patch.OpRemove, `groups[value eq "g1"].value`, "")))
+
+	groups := item["groups"].([]any)
+	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
+}
+
 // RFC 7644 3.4.2.2 - a value filter on a caseExact attribute must compare case-sensitively.
 func TestApplyValuePathFilterHonorsCaseExact(t *testing.T) {
 	schemas := []*core.Schema{

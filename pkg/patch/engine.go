@@ -151,9 +151,9 @@ func (r *engine) removePath(doc map[string]any, path filter.Path) {
 }
 
 func (r *engine) applyValueWrite(doc map[string]any, w valueWrite, schemas []*core.Schema) error {
-	parent, err := r.parentAttr(schemas, w.path)
+	parent, err := r.guardParent(schemas, w.path, doc)
 	if err != nil {
-		return err
+		return r.skipOrFail(err)
 	}
 	pred, err := r.compile(w.path.ValueFilter, parent)
 	if err != nil {
@@ -204,11 +204,6 @@ func (r *engine) writeMember(member map[string]any, w valueWrite, attr *core.Att
 	if !ok {
 		return scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
 	}
-	if attr != nil {
-		if err := r.checkMutability(attr, true); err != nil {
-			return err
-		}
-	}
 	return r.mergeMember(member, object, w.appendMode, attr)
 }
 
@@ -229,9 +224,9 @@ func (r *engine) mergeMember(member, object map[string]any, appendMode bool, att
 }
 
 func (r *engine) applyValueRemove(doc map[string]any, path filter.Path, schemas []*core.Schema) error {
-	parent, err := r.parentAttr(schemas, path)
+	parent, err := r.guardParent(schemas, path, doc)
 	if err != nil {
-		return err
+		return r.skipOrFail(err)
 	}
 	pred, err := r.compile(path.ValueFilter, parent)
 	if err != nil {
@@ -306,6 +301,16 @@ func (r *engine) guard(schemas []*core.Schema, path filter.Path, doc map[string]
 		return nil, err
 	}
 	return attr, r.checkMutability(attr, r.attrExists(doc, path))
+}
+
+func (r *engine) guardParent(schemas []*core.Schema, path filter.Path, doc map[string]any) (*core.Attribute, error) {
+	parent, err := r.parentAttr(schemas, path)
+	if err != nil || parent == nil {
+		return parent, err
+	}
+	base := path
+	base.SubAttribute = ""
+	return parent, r.checkMutability(parent, r.attrExists(doc, base))
 }
 
 func (r *engine) checkMutability(attr *core.Attribute, present bool) error {
