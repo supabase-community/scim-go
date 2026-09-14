@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0](https://github.com/supabase-community/scim-go/compare/v0.4.0...v0.5.0) (2026-09-14)
+
+
+### Features
+
+* **protocol:** add PatchRequest.Apply for RFC 7644 PATCH ([005c15f](https://github.com/supabase-community/scim-go/commit/005c15fcb32ca917dbe3ae75295e08bdc152885d))
+
+
+### Bug Fixes
+
+* **filter:** make subAttribute production atomic ([acda367](https://github.com/supabase-community/scim-go/commit/acda3674c914b75ceeb7e7fd858182dbe66e910e))
+* **patch:** enforce parent mutability on value-path sub-attribute writes ([979c0f7](https://github.com/supabase-community/scim-go/commit/979c0f7a213fe050976133d1bfffc26f583c8162))
+* **patch:** match native numerics, fix pr on empty values, remove sub-attr on multi-valued ([81fd5c8](https://github.com/supabase-community/scim-go/commit/81fd5c8f3ba01ce857c32ad8ca296ae3516f58d4))
+* **protocol:** enforce parent mutability on value-path merges ([2b9b122](https://github.com/supabase-community/scim-go/commit/2b9b122dd0031c5a531ca7f7dae998eed6483155))
+* **protocol:** make PATCH value-path writes schema aware ([c50f21c](https://github.com/supabase-community/scim-go/commit/c50f21c78d7b6bbefd27cb914a9d5de384d19e3e))
+
 ## [0.4.0](https://github.com/supabase-community/scim-go/compare/v0.3.0...v0.4.0) (2026-09-10)
 
 
