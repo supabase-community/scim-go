@@ -47,9 +47,7 @@ func TestNewAttribute(t *testing.T) {
 			"uniqueness": "none"
 		}`, string(body))
 	})
-}
 
-func TestAttribute(t *testing.T) {
 	t.Run("marks the attribute the client must send", func(t *testing.T) {
 		attribute := core.NewAttribute("userName", core.TypeString, "A unique identifier for the user.")
 

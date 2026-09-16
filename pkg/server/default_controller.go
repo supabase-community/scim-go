@@ -1,0 +1,97 @@
+package server
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
+)
+
+// DefaultController adapts HTTP requests to a Service, per RFC 7644, Section 3.
+type DefaultController[T core.Resource] struct {
+	path    string // full collection path, e.g. "/scim/v2/Users"
+	schema  *core.Schema
+	service Service[T]
+}
+
+func NewDefaultController[T core.Resource](service Service[T], schema *core.Schema, path string) *DefaultController[T] {
+	return &DefaultController[T]{
+		path:    path,
+		schema:  schema,
+		service: service,
+	}
+}
+
+func (c *DefaultController[T]) List(w http.ResponseWriter, r *http.Request) error {
+	query, err := protocol.DefaultLimits.ParseSearchRequest(r.URL.Query())
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	items, total, err := c.service.List(r.Context(), query)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, items))
+}
+
+func (c *DefaultController[T]) ByID(w http.ResponseWriter, r *http.Request) error {
+	resource, err := c.service.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	return protocol.Send(w, http.StatusOK, resource)
+}
+
+func (c *DefaultController[T]) Create(w http.ResponseWriter, r *http.Request) error {
+	var resource T
+	if err := json.NewDecoder(r.Body).Decode(&resource); err != nil {
+		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
+	}
+	created, err := c.service.Create(r.Context(), resource)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	w.Header().Set("Location", c.path+"/"+created.ResourceID())
+	return protocol.Send(w, http.StatusCreated, created)
+}
+
+func (c *DefaultController[T]) Replace(w http.ResponseWriter, r *http.Request) error {
+	var resource T
+	if err := json.NewDecoder(r.Body).Decode(&resource); err != nil {
+		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
+	}
+	replaced, err := c.service.Replace(r.Context(), r.PathValue("id"), resource)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	return protocol.Send(w, http.StatusOK, replaced)
+}
+
+func (c *DefaultController[T]) Patch(w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+	resource, err := c.service.Get(r.Context(), id)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	var req protocol.PatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
+	}
+	if err := req.Apply(resource, []*core.Schema{c.schema}); err != nil {
+		return protocol.SendError(w, err)
+	}
+	replaced, err := c.service.Replace(r.Context(), id, resource)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	return protocol.Send(w, http.StatusOK, replaced)
+}
+
+func (c *DefaultController[T]) Delete(w http.ResponseWriter, r *http.Request) error {
+	if err := c.service.Delete(r.Context(), r.PathValue("id")); err != nil {
+		return protocol.SendError(w, err)
+	}
+	return protocol.Send(w, http.StatusNoContent, nil)
+}

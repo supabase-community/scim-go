@@ -49,6 +49,11 @@ func (a *Attribute) AsCaseExact() *Attribute {
 	return a
 }
 
+func (a *Attribute) DescribedAs(description string) *Attribute {
+	a.Description = description
+	return a
+}
+
 // AsImmutable sets "mutability" to "immutable", per RFC 7643, Section 7.
 func (a *Attribute) AsImmutable() *Attribute {
 	a.Mutability = MutabilityImmutable
