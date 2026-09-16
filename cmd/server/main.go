@@ -24,16 +24,16 @@ func newUserSchema(basePath string) *core.Schema {
 			Location:     basePath + "/Schemas/" + string(core.SchemaUser),
 		},
 	}).Describe("User Account").With(
-		core.NewAttribute("userName", core.TypeString, "").AsRequired().UniqueOn(core.UniquenessServer),
-		core.NewAttribute("name", core.TypeComplex, "").With(
-			core.NewAttribute("givenName", core.TypeString, ""),
-			core.NewAttribute("familyName", core.TypeString, ""),
+		core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
+		core.NewAttribute("name", core.TypeComplex).With(
+			core.NewAttribute("givenName", core.TypeString),
+			core.NewAttribute("familyName", core.TypeString),
 		),
-		core.NewAttribute("active", core.TypeBoolean, ""),
-		core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-			core.NewAttribute("value", core.TypeString, ""),
-			core.NewAttribute("type", core.TypeString, "").Suggesting("work", "home", "other"),
-			core.NewAttribute("primary", core.TypeBoolean, ""),
+		core.NewAttribute("active", core.TypeBoolean),
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString),
+			core.NewAttribute("type", core.TypeString).Suggesting("work", "home", "other"),
+			core.NewAttribute("primary", core.TypeBoolean),
 		),
 	)
 }

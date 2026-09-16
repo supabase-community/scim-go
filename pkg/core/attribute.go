@@ -23,14 +23,13 @@ type Attribute struct {
 	SubAttributes   Attributes      `json:"subAttributes,omitempty"`
 }
 
-func NewAttribute(name string, attributeType AttributeType, description string) *Attribute {
+func NewAttribute(name string, attributeType AttributeType) *Attribute {
 	return &Attribute{
-		Name:        name,
-		Type:        attributeType,
-		Description: description,
-		Mutability:  MutabilityReadWrite,
-		Returned:    ReturnedDefault,
-		Uniqueness:  UniquenessNone,
+		Name:       name,
+		Type:       attributeType,
+		Mutability: MutabilityReadWrite,
+		Returned:   ReturnedDefault,
+		Uniqueness: UniquenessNone,
 	}
 }
 

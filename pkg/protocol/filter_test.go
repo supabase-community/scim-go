@@ -14,12 +14,12 @@ import (
 
 func TestFilter(t *testing.T) {
 	schema := (&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-		core.NewAttribute("userName", core.TypeString, ""),
-		core.NewAttribute("active", core.TypeBoolean, ""),
-		core.NewAttribute("age", core.TypeInteger, ""),
-		core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-			core.NewAttribute("type", core.TypeString, ""),
-			core.NewAttribute("value", core.TypeString, ""),
+		core.NewAttribute("userName", core.TypeString),
+		core.NewAttribute("active", core.TypeBoolean),
+		core.NewAttribute("age", core.TypeInteger),
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("type", core.TypeString),
+			core.NewAttribute("value", core.TypeString),
 		),
 	)
 	schemas := []*core.Schema{schema}
@@ -68,7 +68,7 @@ func TestFilter(t *testing.T) {
 
 	t.Run("resolves an extension attribute by schema URI", func(t *testing.T) {
 		enterprise := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
-			core.NewAttribute("department", core.TypeString, ""),
+			core.NewAttribute("department", core.TypeString),
 		)
 		text := fmt.Sprintf("%s:department eq \"eng\"", core.SchemaEnterpriseUser)
 		out, err := protocol.Filter[clause]([]*core.Schema{schema, enterprise}, text, sqlEvaluator{})
