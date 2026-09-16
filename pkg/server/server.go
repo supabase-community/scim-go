@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -16,24 +15,18 @@ type Server struct {
 func New(basePath string, resources ...Registration) (*Server, error) {
 	mux := http.NewServeMux()
 
-	seen := make(map[string]bool)
 	var resourceTypes []*core.ResourceType
 	var schemas []*core.Schema
 	for _, resource := range resources {
-		resourceType := resource.resourceType(basePath)
-		if seen[resourceType.Endpoint] {
-			return nil, fmt.Errorf("scim: resource type %q already registered at %s", resourceType.Name, resourceType.Endpoint)
-		}
-		seen[resourceType.Endpoint] = true
-
 		resource.mount(mux, basePath)
-		resourceTypes = append(resourceTypes, resourceType)
+		resourceTypes = append(resourceTypes, resource.resourceType(basePath))
 		schemas = append(schemas, resource.schemas()...)
 	}
 
-	// mountDiscovery(mux, basePath, schemas, resourceTypes, defaultServiceProviderConfig())
+	config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching()
+
 	mux.HandleFunc("GET "+basePath+"/ServiceProviderConfig", func(w http.ResponseWriter, _ *http.Request) {
-		_ = protocol.Send(w, http.StatusOK, defaultServiceProviderConfig())
+		_ = protocol.Send(w, http.StatusOK, config)
 	})
 	mux.HandleFunc("GET "+basePath+"/ResourceTypes", func(w http.ResponseWriter, _ *http.Request) {
 		_ = protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(resourceTypes), resourceTypes))
@@ -65,11 +58,4 @@ func New(basePath string, resources ...Registration) (*Server, error) {
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
-}
-
-func defaultServiceProviderConfig() *core.ServiceProviderConfig {
-	return (&core.ServiceProviderConfig{
-		Schemas:               []core.SchemaURI{core.SchemaServiceProviderConfig},
-		AuthenticationSchemes: []*core.AuthenticationScheme{core.NewOAuthBearerToken()},
-	}).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching()
 }

@@ -1,5 +1,7 @@
 package core
 
+import "github.com/supabase-community/scim-go/pkg/core"
+
 type SupportedFeature struct {
 	Supported bool `json:"supported"`
 }
@@ -27,6 +29,16 @@ type ServiceProviderConfig struct {
 	ETag                  SupportedFeature        `json:"etag"`
 	AuthenticationSchemes []*AuthenticationScheme `json:"authenticationSchemes"`
 	Meta                  Meta                    `json:"meta"`
+}
+
+func NewServiceProviderConfig() *ServiceProviderConfig {
+	return &ServiceProviderConfig{
+		Schemas: []SchemaURI{SchemaServiceProviderConfig},
+		Meta: Meta{
+			ResourceType: "ServiceProviderConfig",
+		},
+		AuthenticationSchemes: []*core.AuthenticationScheme{},
+	}
 }
 
 // Sorting states that this provider honours "sortBy" and "sortOrder", per RFC 7644, Section 3.4.2.3.
