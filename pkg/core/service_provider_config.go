@@ -1,7 +1,5 @@
 package core
 
-import "github.com/supabase-community/scim-go/pkg/core"
-
 type SupportedFeature struct {
 	Supported bool `json:"supported"`
 }
@@ -37,7 +35,7 @@ func NewServiceProviderConfig() *ServiceProviderConfig {
 		Meta: Meta{
 			ResourceType: "ServiceProviderConfig",
 		},
-		AuthenticationSchemes: []*core.AuthenticationScheme{},
+		AuthenticationSchemes: []*AuthenticationScheme{},
 	}
 }
 
