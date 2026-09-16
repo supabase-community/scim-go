@@ -2,15 +2,14 @@ package server
 
 import (
 	"context"
+	"strconv"
 	"time"
+	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
-	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// DefaultService wraps a Repository, assigning ID/Meta and running schema
-// validation plus any Validator hooks before persisting.
 type DefaultService[T core.Identifiable] struct {
 	repo       Repository[T]
 	schema     *core.Schema
@@ -30,13 +29,18 @@ func (s *DefaultService[T]) List(ctx context.Context, query *protocol.SearchRequ
 }
 
 func (s *DefaultService[T]) Create(ctx context.Context, item T) (T, error) {
-	if err := s.validate(ctx, item, ""); err != nil {
+	if err := s.validate(ctx, item); err != nil {
 		var zero T
 		return zero, err
 	}
 	now := time.Now().UTC()
-	item.SetID(randomHex(16))
-	item.SetMeta(core.Meta{ResourceType: s.schema.Name, Created: now, LastModified: now, Version: randomHex(8)})
+	item.SetID(uuid.NewV7().String())
+	item.SetMeta(core.Meta{
+		ResourceType: s.schema.Name,
+		Created:      now,
+		LastModified: now,
+		Version:      strconv.FormatInt(now.Unix(), 10),
+	})
 	return s.repo.Create(ctx, item)
 }
 
@@ -46,13 +50,14 @@ func (s *DefaultService[T]) Replace(ctx context.Context, id string, item T) (T, 
 		var zero T
 		return zero, err
 	}
-	if err := s.validate(ctx, item, id); err != nil {
+	if err := s.validate(ctx, item); err != nil {
 		var zero T
 		return zero, err
 	}
 	meta := existing.GetMeta()
-	meta.LastModified = time.Now().UTC()
-	meta.Version = randomHex(8)
+	now := time.Now().UTC()
+	meta.LastModified = now
+	meta.Version = strconv.FormatInt(now.Unix(), 10)
 	item.SetID(existing.ResourceID())
 	item.SetMeta(meta)
 	return s.repo.Replace(ctx, id, item)
@@ -62,12 +67,9 @@ func (s *DefaultService[T]) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *DefaultService[T]) validate(ctx context.Context, item T, excludeID string) error {
-	if err := s.schema.Validate(item); err != nil {
-		return scimerrors.ErrInvalidValue(err.Error())
-	}
+func (s *DefaultService[T]) validate(ctx context.Context, item T) error {
 	for _, validate := range s.validators {
-		if err := validate(ctx, item, excludeID); err != nil {
+		if err := validate(ctx, item); err != nil {
 			return err
 		}
 	}

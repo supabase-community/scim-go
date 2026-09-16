@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -86,4 +87,12 @@ func (c *ResourceConfiguration[T]) mount(mux *http.ServeMux, basePath string) {
 	mux.HandleFunc("PUT "+path+"/{id}", handle(ctrl.Replace))
 	mux.HandleFunc("PATCH "+path+"/{id}", handle(ctrl.Patch))
 	mux.HandleFunc("DELETE "+path+"/{id}", handle(ctrl.Delete))
+}
+
+func handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := fn(w, r); err != nil {
+			log.Printf("%v\n", err)
+		}
+	}
 }

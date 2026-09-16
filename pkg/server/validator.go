@@ -6,4 +6,4 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-type Validator[T core.Resource] func(ctx context.Context, candidate T, excludeID string) error
+type Validator[T core.Resource] func(ctx context.Context, candidate T) error
