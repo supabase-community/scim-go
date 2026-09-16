@@ -7,13 +7,13 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-type Resource[T core.Identifiable] struct {
+type Resource[T Entity] struct {
 	name     string
 	endpoint string
 	schema   *core.Schema
 }
 
-func NewResource[T core.Identifiable](name, endpoint string, schema *core.Schema) *Resource[T] {
+func NewResource[T Entity](name, endpoint string, schema *core.Schema) *Resource[T] {
 	return &Resource[T]{
 		name:     name,
 		endpoint: endpoint,
@@ -48,8 +48,7 @@ func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
 }
 
 func (c *Resource[T]) build(basePath string) Controller[T] {
-	schemas := []*core.Schema{c.schema}
-	repository := NewRepository[T](schemas)
+	repository := NewRepository[T](c.schema)
 	service := NewService[T](repository, c.schema)
 	return NewController[T](service, c.schema, basePath+c.endpoint)
 }

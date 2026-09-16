@@ -2,9 +2,6 @@ package server
 
 import (
 	"context"
-	"strconv"
-	"time"
-	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -18,13 +15,13 @@ type Service[T core.Resource] interface {
 	Delete(ctx context.Context, id string) error
 }
 
-type service[T core.Identifiable] struct {
+type service[T Entity] struct {
 	repo       Repository[T]
 	schema     *core.Schema
 	validators []Validator[T]
 }
 
-func NewService[T core.Identifiable](repo Repository[T], schema *core.Schema, validators ...Validator[T]) Service[T] {
+func NewService[T Entity](repo Repository[T], schema *core.Schema, validators ...Validator[T]) Service[T] {
 	return &service[T]{repo: repo, schema: schema, validators: validators}
 }
 
@@ -41,33 +38,14 @@ func (s *service[T]) Create(ctx context.Context, item T) (T, error) {
 		var zero T
 		return zero, err
 	}
-	now := time.Now().UTC()
-	item.SetID(uuid.NewV7().String())
-	item.SetMeta(core.Meta{
-		ResourceType: s.schema.Name,
-		Created:      now,
-		LastModified: now,
-		Version:      strconv.FormatInt(now.Unix(), 10),
-	})
 	return s.repo.Create(ctx, item)
 }
 
 func (s *service[T]) Replace(ctx context.Context, id string, item T) (T, error) {
-	existing, err := s.repo.Get(ctx, id)
-	if err != nil {
-		var zero T
-		return zero, err
-	}
 	if err := s.validate(ctx, item); err != nil {
 		var zero T
 		return zero, err
 	}
-	meta := existing.GetMeta()
-	now := time.Now().UTC()
-	meta.LastModified = now
-	meta.Version = strconv.FormatInt(now.Unix(), 10)
-	item.SetID(existing.ResourceID())
-	item.SetMeta(meta)
 	return s.repo.Replace(ctx, id, item)
 }
 
