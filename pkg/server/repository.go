@@ -22,7 +22,7 @@ type DefaultRepository[T core.Resource] struct {
 	items   []T
 }
 
-func NewMemoryRepository[T core.Resource](schemas []*core.Schema) *DefaultRepository[T] {
+func NewRepository[T core.Resource](schemas []*core.Schema) Repository[T] {
 	return &DefaultRepository[T]{schemas: schemas}
 }
 

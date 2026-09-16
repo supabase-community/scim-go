@@ -24,7 +24,7 @@ type DefaultService[T core.Identifiable] struct {
 	validators []Validator[T]
 }
 
-func NewDefaultService[T core.Identifiable](repo Repository[T], schema *core.Schema, validators ...Validator[T]) *DefaultService[T] {
+func NewService[T core.Identifiable](repo Repository[T], schema *core.Schema, validators ...Validator[T]) Service[T] {
 	return &DefaultService[T]{repo: repo, schema: schema, validators: validators}
 }
 

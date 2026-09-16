@@ -35,7 +35,6 @@ func NewServiceProviderConfig() *ServiceProviderConfig {
 		Meta: Meta{
 			ResourceType: "ServiceProviderConfig",
 		},
-		AuthenticationSchemes: []*AuthenticationScheme{},
 	}
 }
 

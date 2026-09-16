@@ -18,9 +18,10 @@ func New(basePath string, resources ...Registration) (*Server, error) {
 	var resourceTypes []*core.ResourceType
 	var schemas []*core.Schema
 	for _, resource := range resources {
-		resource.mount(mux, basePath)
 		resourceTypes = append(resourceTypes, resource.resourceType(basePath))
 		schemas = append(schemas, resource.schemas()...)
+
+		resource.mount(mux, basePath)
 	}
 
 	config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching()
