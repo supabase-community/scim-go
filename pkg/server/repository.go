@@ -40,10 +40,25 @@ func (r *repository[T]) Get(_ context.Context, id string) (T, error) {
 }
 
 func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
-	total := len(r.items)
+	matching := r.items
+
+	if query.Filter != "" {
+		predicate, err := protocol.Filter([]*core.Schema{r.schema}, query.Filter, NewVisitor[T]())
+		if err != nil {
+			return []T{}, 0, err
+		}
+		matching = []T{}
+		for _, item := range r.items {
+			if predicate(item) {
+				matching = append(matching, item)
+			}
+		}
+	}
+
+	total := len(matching)
 	start := min(query.Offset(), total)
 	end := min(start+query.Count, total)
-	page := r.items[start:end]
+	page := matching[start:end]
 	return page, total, nil
 }
 
