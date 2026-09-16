@@ -31,7 +31,7 @@ func TestResourceIDAccessors(t *testing.T) {
 
 func TestSchemaDescribe(t *testing.T) {
 	s := &core.Schema{ID: core.SchemaUser}
-	assert.Same(t, s, s.Describe("the user resource"))
+	assert.Same(t, s, s.WithDescription("the user resource"))
 	assert.Equal(t, "the user resource", s.Description)
 }
 

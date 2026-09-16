@@ -16,16 +16,28 @@ type Schema struct {
 	Meta        Meta             `json:"meta,omitzero"`
 }
 
-func (s *Schema) Resolve(name string) (*Attribute, bool) {
-	attribute := commonAttributes.Lookup(name)
-	if attribute == nil && s != nil {
-		attribute = s.Attributes.Lookup(name)
+func NewSchema(id SchemaURI) *Schema {
+	return &Schema{
+		Schemas: []SchemaURI{SchemaSchema},
+		ID:      id,
+		Meta: Meta{
+			ResourceType: "Schema",
+		},
 	}
-	return attribute, attribute != nil
 }
 
-func (s *Schema) Describe(description string) *Schema {
+func (s *Schema) WithName(name ResourceTypeName) *Schema {
+	s.Name = name
+	return s
+}
+
+func (s *Schema) WithDescription(description string) *Schema {
 	s.Description = description
+	return s
+}
+
+func (s *Schema) WithLocation(location string) *Schema {
+	s.Meta.Location = location
 	return s
 }
 
@@ -38,7 +50,15 @@ func (s *Schema) ResourceID() string {
 	return string(s.ID)
 }
 
-// Validate checks resource against the schema's required attributes, per RFC 7643, Section 7.
+func (s *Schema) Resolve(name string) (*Attribute, bool) {
+	attribute := commonAttributes.Lookup(name)
+	if attribute == nil && s != nil {
+		attribute = s.Attributes.Lookup(name)
+	}
+	return attribute, attribute != nil
+}
+
+// Validate against the schema's attributes, per RFC 7643, Section 7.
 func (s *Schema) Validate(resource any) error {
 	raw, err := json.Marshal(resource)
 	if err != nil {

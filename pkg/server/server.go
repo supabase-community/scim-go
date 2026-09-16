@@ -7,14 +7,10 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// Server is a SCIM HTTP server assembled from one or more resource registrations.
 type Server struct {
 	mux *http.ServeMux
 }
 
-// New assembles a SCIM server mounting each of resources under basePath, and
-// generates the ServiceProviderConfig/ResourceTypes/Schemas discovery
-// endpoints from the registered resources, per RFC 7644, Section 4.
 func New(basePath string, resources ...Registration) (*Server, error) {
 	mux := http.NewServeMux()
 

@@ -7,7 +7,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
-// Repository stores resources of one type, with no business logic beyond persistence.
 type Repository[T core.Resource] interface {
 	Get(ctx context.Context, id string) (T, error)
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)

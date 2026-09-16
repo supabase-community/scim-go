@@ -15,15 +15,10 @@ import (
 )
 
 func newUserSchema(basePath string) *core.Schema {
-	return (&core.Schema{
-		Schemas: []core.SchemaURI{core.SchemaSchema},
-		ID:      core.SchemaUser,
-		Name:    "User",
-		Meta: core.Meta{
-			ResourceType: "Schema",
-			Location:     basePath + "/Schemas/" + string(core.SchemaUser),
-		},
-	}).Describe("User Account").With(
+	return core.NewSchema(core.SchemaUser).
+		WithName("User").
+		WithLocation(basePath+"/Schemas/"+string(core.SchemaUser)).
+		WithDescription("User Account").With(
 		core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
 		core.NewAttribute("name", core.TypeComplex).With(
 			core.NewAttribute("givenName", core.TypeString),
@@ -40,10 +35,15 @@ func newUserSchema(basePath string) *core.Schema {
 
 func main() {
 	basePath := "/scim/v2"
-	schema := newUserSchema(basePath)
-	users := server.NewResource[*core.User]("User", "/Users", schema)
 
-	srv, err := server.New(basePath, users)
+	srv, err := server.New(
+		basePath,
+		server.NewResource[*core.User](
+			"User",
+			"/Users",
+			newUserSchema(basePath),
+		),
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
