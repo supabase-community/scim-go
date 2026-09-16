@@ -18,25 +18,25 @@ type Service[T core.Resource] interface {
 	Delete(ctx context.Context, id string) error
 }
 
-type DefaultService[T core.Identifiable] struct {
+type service[T core.Identifiable] struct {
 	repo       Repository[T]
 	schema     *core.Schema
 	validators []Validator[T]
 }
 
 func NewService[T core.Identifiable](repo Repository[T], schema *core.Schema, validators ...Validator[T]) Service[T] {
-	return &DefaultService[T]{repo: repo, schema: schema, validators: validators}
+	return &service[T]{repo: repo, schema: schema, validators: validators}
 }
 
-func (s *DefaultService[T]) Get(ctx context.Context, id string) (T, error) {
+func (s *service[T]) Get(ctx context.Context, id string) (T, error) {
 	return s.repo.Get(ctx, id)
 }
 
-func (s *DefaultService[T]) List(ctx context.Context, query *protocol.SearchRequest) ([]T, int, error) {
+func (s *service[T]) List(ctx context.Context, query *protocol.SearchRequest) ([]T, int, error) {
 	return s.repo.List(ctx, query)
 }
 
-func (s *DefaultService[T]) Create(ctx context.Context, item T) (T, error) {
+func (s *service[T]) Create(ctx context.Context, item T) (T, error) {
 	if err := s.validate(ctx, item); err != nil {
 		var zero T
 		return zero, err
@@ -52,7 +52,7 @@ func (s *DefaultService[T]) Create(ctx context.Context, item T) (T, error) {
 	return s.repo.Create(ctx, item)
 }
 
-func (s *DefaultService[T]) Replace(ctx context.Context, id string, item T) (T, error) {
+func (s *service[T]) Replace(ctx context.Context, id string, item T) (T, error) {
 	existing, err := s.repo.Get(ctx, id)
 	if err != nil {
 		var zero T
@@ -71,11 +71,11 @@ func (s *DefaultService[T]) Replace(ctx context.Context, id string, item T) (T, 
 	return s.repo.Replace(ctx, id, item)
 }
 
-func (s *DefaultService[T]) Delete(ctx context.Context, id string) error {
+func (s *service[T]) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *DefaultService[T]) validate(ctx context.Context, item T) error {
+func (s *service[T]) validate(ctx context.Context, item T) error {
 	for _, validate := range s.validators {
 		if err := validate(ctx, item); err != nil {
 			return err

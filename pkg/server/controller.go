@@ -19,22 +19,21 @@ type Controller[T core.Resource] interface {
 	Delete(http.ResponseWriter, *http.Request) error
 }
 
-// DefaultController adapts HTTP requests to a Service, per RFC 7644, Section 3.
-type DefaultController[T core.Resource] struct {
-	path    string // full collection path, e.g. "/scim/v2/Users"
+type controller[T core.Resource] struct {
+	path    string
 	schema  *core.Schema
 	service Service[T]
 }
 
-func NewDefaultController[T core.Resource](service Service[T], schema *core.Schema, path string) *DefaultController[T] {
-	return &DefaultController[T]{
+func NewController[T core.Resource](service Service[T], schema *core.Schema, path string) Controller[T] {
+	return &controller[T]{
 		path:    path,
 		schema:  schema,
 		service: service,
 	}
 }
 
-func (c *DefaultController[T]) List(w http.ResponseWriter, r *http.Request) error {
+func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
 	query, err := protocol.DefaultLimits.ParseSearchRequest(r.URL.Query())
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -46,7 +45,7 @@ func (c *DefaultController[T]) List(w http.ResponseWriter, r *http.Request) erro
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, items))
 }
 
-func (c *DefaultController[T]) ByID(w http.ResponseWriter, r *http.Request) error {
+func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 	resource, err := c.service.Get(r.Context(), r.PathValue("id"))
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -54,7 +53,7 @@ func (c *DefaultController[T]) ByID(w http.ResponseWriter, r *http.Request) erro
 	return protocol.Send(w, http.StatusOK, resource)
 }
 
-func (c *DefaultController[T]) Create(w http.ResponseWriter, r *http.Request) error {
+func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	var resource T
 	if err := json.NewDecoder(r.Body).Decode(&resource); err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
@@ -67,7 +66,7 @@ func (c *DefaultController[T]) Create(w http.ResponseWriter, r *http.Request) er
 	return protocol.Send(w, http.StatusCreated, created)
 }
 
-func (c *DefaultController[T]) Replace(w http.ResponseWriter, r *http.Request) error {
+func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	var resource T
 	if err := json.NewDecoder(r.Body).Decode(&resource); err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
@@ -79,7 +78,7 @@ func (c *DefaultController[T]) Replace(w http.ResponseWriter, r *http.Request) e
 	return protocol.Send(w, http.StatusOK, replaced)
 }
 
-func (c *DefaultController[T]) Patch(w http.ResponseWriter, r *http.Request) error {
+func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	id := r.PathValue("id")
 	resource, err := c.service.Get(r.Context(), id)
 	if err != nil {
@@ -99,7 +98,7 @@ func (c *DefaultController[T]) Patch(w http.ResponseWriter, r *http.Request) err
 	return protocol.Send(w, http.StatusOK, replaced)
 }
 
-func (c *DefaultController[T]) Delete(w http.ResponseWriter, r *http.Request) error {
+func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
 	if err := c.service.Delete(r.Context(), r.PathValue("id")); err != nil {
 		return protocol.SendError(w, err)
 	}

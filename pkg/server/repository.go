@@ -17,16 +17,16 @@ type Repository[T core.Resource] interface {
 	Delete(ctx context.Context, id string) error
 }
 
-type DefaultRepository[T core.Resource] struct {
+type repository[T core.Resource] struct {
 	schemas []*core.Schema
 	items   []T
 }
 
 func NewRepository[T core.Resource](schemas []*core.Schema) Repository[T] {
-	return &DefaultRepository[T]{schemas: schemas}
+	return &repository[T]{schemas: schemas}
 }
 
-func (r *DefaultRepository[T]) Get(_ context.Context, id string) (T, error) {
+func (r *repository[T]) Get(_ context.Context, id string) (T, error) {
 	for _, item := range r.items {
 		if item.ResourceID() == id {
 			return item, nil
@@ -36,7 +36,7 @@ func (r *DefaultRepository[T]) Get(_ context.Context, id string) (T, error) {
 	return zero, scimerrors.ErrNotFound("resource " + id + " not found")
 }
 
-func (r *DefaultRepository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
+func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
 	total := len(r.items)
 	start := min(query.Offset(), total)
 	end := min(start+query.Count, total)
@@ -44,12 +44,12 @@ func (r *DefaultRepository[T]) List(_ context.Context, query *protocol.SearchReq
 	return page, total, nil
 }
 
-func (r *DefaultRepository[T]) Create(_ context.Context, item T) (T, error) {
+func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 	r.items = append(r.items, item)
 	return item, nil
 }
 
-func (r *DefaultRepository[T]) Replace(_ context.Context, id string, item T) (T, error) {
+func (r *repository[T]) Replace(_ context.Context, id string, item T) (T, error) {
 	for i, existing := range r.items {
 		if existing.ResourceID() == id {
 			r.items[i] = item
@@ -60,7 +60,7 @@ func (r *DefaultRepository[T]) Replace(_ context.Context, id string, item T) (T,
 	return zero, scimerrors.ErrNotFound("resource " + id + " not found")
 }
 
-func (r *DefaultRepository[T]) Delete(_ context.Context, id string) error {
+func (r *repository[T]) Delete(_ context.Context, id string) error {
 	for i, existing := range r.items {
 		if existing.ResourceID() == id {
 			r.items = slices.Delete(r.items, i, i+1)

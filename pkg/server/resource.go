@@ -51,7 +51,7 @@ func (c *Resource[T]) build(basePath string) Controller[T] {
 	schemas := []*core.Schema{c.schema}
 	repository := NewRepository[T](schemas)
 	service := NewService[T](repository, c.schema)
-	return NewDefaultController[T](service, c.schema, basePath+c.endpoint)
+	return NewController[T](service, c.schema, basePath+c.endpoint)
 }
 
 func handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
