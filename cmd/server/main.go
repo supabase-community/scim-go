@@ -38,11 +38,7 @@ func main() {
 
 	srv, err := server.New(
 		basePath,
-		server.NewResource[*core.User](
-			"User",
-			"/Users",
-			newUserSchema(basePath),
-		),
+		server.NewResource[*core.User]("User", "/Users", newUserSchema(basePath)),
 	)
 	if err != nil {
 		log.Fatal(err)
