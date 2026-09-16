@@ -13,8 +13,8 @@ import (
 )
 
 type Repository[T Entity] interface {
-	Get(ctx context.Context, id string) (T, error)
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
+	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
 	Replace(ctx context.Context, id string, item T) (T, error)
 	Delete(ctx context.Context, id string) error
