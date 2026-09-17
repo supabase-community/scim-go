@@ -14,6 +14,9 @@ type Resource[T Entity] struct {
 	description  string
 	fields       Fields[T]
 	errorHandler func(error)
+	repository   Repository[T]
+	service      Service[T]
+	validators   []Validator[T]
 }
 
 func NewResource[T Entity](name, endpoint string, id core.SchemaURI, fields Fields[T]) *Resource[T] {
@@ -35,6 +38,30 @@ func (c *Resource[T]) WithDescription(description string) *Resource[T] {
 
 func (c *Resource[T]) WithErrorHandler(fn func(error)) *Resource[T] {
 	c.errorHandler = fn
+	return c
+}
+
+func (c *Resource[T]) WithRepository(repository Repository[T]) *Resource[T] {
+	if c.service != nil {
+		panic("server: WithRepository cannot be combined with WithService")
+	}
+	c.repository = repository
+	return c
+}
+
+func (c *Resource[T]) WithValidators(validators ...Validator[T]) *Resource[T] {
+	if c.service != nil {
+		panic("server: WithValidators cannot be combined with WithService")
+	}
+	c.validators = validators
+	return c
+}
+
+func (c *Resource[T]) WithService(service Service[T]) *Resource[T] {
+	if c.repository != nil || len(c.validators) > 0 {
+		panic("server: WithService cannot be combined with WithRepository or WithValidators")
+	}
+	c.service = service
 	return c
 }
 
@@ -73,8 +100,14 @@ func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
 }
 
 func (c *Resource[T]) build(basePath string) Controller[T] {
-	repository := NewRepository[T](c.schema(basePath), NewVisitor[T](c.fields.Accessors()))
-	service := NewService[T](repository, c.schema(basePath))
+	service := c.service
+	if service == nil {
+		repository := c.repository
+		if repository == nil {
+			repository = NewRepository[T](c.schema(basePath), NewVisitor[T](c.fields.Accessors()))
+		}
+		service = NewService[T](repository, c.validators...)
+	}
 	return NewController[T](service, c.schema(basePath), basePath+c.endpoint)
 }
 
