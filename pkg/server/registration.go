@@ -8,6 +8,6 @@ import (
 
 type Registration interface {
 	resourceType(basePath string) *core.ResourceType
-	schemas() []*core.Schema
+	schemas(basePath string) []*core.Schema
 	mount(mux *http.ServeMux, basePath string)
 }

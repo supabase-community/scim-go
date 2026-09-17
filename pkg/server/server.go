@@ -19,7 +19,7 @@ func New(basePath string, resources ...Registration) (*Server, error) {
 	var schemas []*core.Schema
 	for _, resource := range resources {
 		resourceTypes = append(resourceTypes, resource.resourceType(basePath))
-		schemas = append(schemas, resource.schemas()...)
+		schemas = append(schemas, resource.schemas(basePath)...)
 
 		resource.mount(mux, basePath)
 	}

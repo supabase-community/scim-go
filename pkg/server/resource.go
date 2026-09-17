@@ -10,26 +10,40 @@ import (
 type Resource[T Entity] struct {
 	name         string
 	endpoint     string
-	schema       *core.Schema
-	getters      Getters[T]
+	id           core.SchemaURI
+	description  string
+	fields       Fields[T]
 	errorHandler func(error)
 }
 
-func NewResource[T Entity](name, endpoint string, schema *core.Schema, getters Getters[T]) *Resource[T] {
+func NewResource[T Entity](name, endpoint string, id core.SchemaURI, fields Fields[T]) *Resource[T] {
 	return &Resource[T]{
 		name:     name,
 		endpoint: endpoint,
-		schema:   schema,
-		getters:  getters,
+		id:       id,
+		fields:   fields,
 		errorHandler: func(err error) {
 			log.Printf("%v\n", err)
 		},
 	}
 }
 
+func (c *Resource[T]) WithDescription(description string) *Resource[T] {
+	c.description = description
+	return c
+}
+
 func (c *Resource[T]) WithErrorHandler(fn func(error)) *Resource[T] {
 	c.errorHandler = fn
 	return c
+}
+
+func (c *Resource[T]) schema(basePath string) *core.Schema {
+	return core.NewSchema(c.id).
+		WithName(core.ResourceTypeName(c.name)).
+		WithDescription(c.description).
+		WithLocation(basePath + "/Schemas/" + string(c.id)).
+		With(c.fields.Attributes()...)
 }
 
 func (c *Resource[T]) resourceType(basePath string) *core.ResourceType {
@@ -38,12 +52,12 @@ func (c *Resource[T]) resourceType(basePath string) *core.ResourceType {
 		ID:       core.ResourceTypeName(c.name),
 		Name:     core.ResourceTypeName(c.name),
 		Endpoint: basePath + c.endpoint,
-		Schema:   c.schema.ID,
+		Schema:   c.id,
 	}
 }
 
-func (c *Resource[T]) schemas() []*core.Schema {
-	return []*core.Schema{c.schema}
+func (c *Resource[T]) schemas(basePath string) []*core.Schema {
+	return []*core.Schema{c.schema(basePath)}
 }
 
 func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
@@ -59,9 +73,9 @@ func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
 }
 
 func (c *Resource[T]) build(basePath string) Controller[T] {
-	repository := NewRepository[T](c.schema, NewVisitor[T](c.getters))
-	service := NewService[T](repository, c.schema)
-	return NewController[T](service, c.schema, basePath+c.endpoint)
+	repository := NewRepository[T](c.schema(basePath), NewVisitor[T](c.fields.Getters()))
+	service := NewService[T](repository, c.schema(basePath))
+	return NewController[T](service, c.schema(basePath), basePath+c.endpoint)
 }
 
 func (c *Resource[T]) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
