@@ -8,14 +8,26 @@ import (
 )
 
 type specification[T Entity] func(T) bool
-type evaluator[T Entity] struct{}
+type getter[T any] func(T) any
+type getters[T any] map[string]getter[T]
 
-func NewVisitor[T Entity]() protocol.Evaluator[specification[T]] {
-	return &evaluator[T]{}
+type evaluator[T Entity] struct {
+	getters getters[T]
+}
+
+func NewVisitor[T Entity](getters getters[T]) protocol.Evaluator[specification[T]] {
+	return &evaluator[T]{
+		getters: getters,
+	}
 }
 
 func (e *evaluator[T]) Compare(attribute *core.Attribute, key string, op filter.Operator, value any) (specification[T], error) {
 	return func(item T) bool {
+		got := e.getters[attribute.Name](item)
+		switch op {
+		case filter.OpEquals:
+			return got == value
+		}
 		return false
 	}, nil
 }
