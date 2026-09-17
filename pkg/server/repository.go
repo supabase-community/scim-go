@@ -21,12 +21,17 @@ type Repository[T Entity] interface {
 }
 
 type repository[T Entity] struct {
-	schema *core.Schema
-	items  []T
+	schema    *core.Schema
+	items     []T
+	evaluator protocol.Evaluator[specification[T]]
 }
 
-func NewRepository[T Entity](schemas *core.Schema) Repository[T] {
-	return &repository[T]{schema: schemas}
+func NewRepository[T Entity](schemas *core.Schema, evaluator protocol.Evaluator[specification[T]]) Repository[T] {
+	return &repository[T]{
+		schema:    schemas,
+		items:     []T{},
+		evaluator: evaluator,
+	}
 }
 
 func (r *repository[T]) Get(_ context.Context, id string) (T, error) {
@@ -43,7 +48,7 @@ func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) (
 	matching := r.items
 
 	if query.Filter != "" {
-		predicate, err := protocol.Filter([]*core.Schema{r.schema}, query.Filter, NewVisitor[T]())
+		predicate, err := protocol.Filter([]*core.Schema{r.schema}, query.Filter, r.evaluator)
 		if err != nil {
 			return []T{}, 0, err
 		}

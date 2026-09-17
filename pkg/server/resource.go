@@ -48,7 +48,7 @@ func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
 }
 
 func (c *Resource[T]) build(basePath string) Controller[T] {
-	repository := NewRepository[T](c.schema)
+	repository := NewRepository[T](c.schema, NewVisitor[T]())
 	service := NewService[T](repository, c.schema)
 	return NewController[T](service, c.schema, basePath+c.endpoint)
 }
