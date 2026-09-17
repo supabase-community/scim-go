@@ -12,6 +12,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+// RFC 7643 3.1 - Create and Replace must set the resource's id and meta (created, lastModified, version).
 type Repository[T Entity] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Get(ctx context.Context, id string) (T, error)
