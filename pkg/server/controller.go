@@ -10,7 +10,7 @@ import (
 )
 
 // Controller handles the HTTP requests for one SCIM resource type, per RFC 7644, Section 3.
-type Controller[T core.Resource] interface {
+type Controller[T Entity] interface {
 	List(http.ResponseWriter, *http.Request) error
 	ByID(http.ResponseWriter, *http.Request) error
 	Create(http.ResponseWriter, *http.Request) error
@@ -19,13 +19,13 @@ type Controller[T core.Resource] interface {
 	Delete(http.ResponseWriter, *http.Request) error
 }
 
-type controller[T core.Resource] struct {
+type controller[T Entity] struct {
 	path    string
 	schema  *core.Schema
 	service Service[T]
 }
 
-func NewController[T core.Resource](service Service[T], schema *core.Schema, path string) Controller[T] {
+func NewController[T Entity](service Service[T], schema *core.Schema, path string) Controller[T] {
 	return &controller[T]{
 		path:    path,
 		schema:  schema,
