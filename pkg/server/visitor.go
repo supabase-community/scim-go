@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -22,7 +21,8 @@ func NewVisitor[T Entity](getters Getters[T]) protocol.Evaluator[specification[T
 	return &evaluator[T]{getters: getters}
 }
 
-func (e *evaluator[T]) Compare(attribute *core.Attribute, key string, op filter.Operator, value any) (specification[T], error) {
+func (e *evaluator[T]) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (specification[T], error) {
+	key := attribute.Key()
 	get, ok := e.getters[key]
 	if !ok {
 		return nil, scimerrors.ErrInvalidFilter(key + " is not filterable")
@@ -34,7 +34,8 @@ func (e *evaluator[T]) Compare(attribute *core.Attribute, key string, op filter.
 	}, nil
 }
 
-func (e *evaluator[T]) Present(attribute *core.Attribute, key string) (specification[T], error) {
+func (e *evaluator[T]) Present(attribute *protocol.Attribute) (specification[T], error) {
+	key := attribute.Key()
 	get, ok := e.getters[key]
 	if !ok {
 		return nil, scimerrors.ErrInvalidFilter(key + " is not filterable")
@@ -56,8 +57,8 @@ func (e *evaluator[T]) Not(operand specification[T]) (specification[T], error) {
 	return func(item T) bool { return !operand(item) }, nil
 }
 
-func (e *evaluator[T]) ValuePath(attribute *core.Attribute, key string, valueFilter func() (specification[T], error)) (specification[T], error) {
-	return nil, scimerrors.ErrInvalidFilter(key + " does not support value filters yet")
+func (e *evaluator[T]) ValuePath(attribute *protocol.Attribute, valueFilter func() (specification[T], error)) (specification[T], error) {
+	return nil, scimerrors.ErrInvalidFilter(attribute.Key() + " does not support value filters yet")
 }
 
 // RFC 7644 3.4.2.2 - a multi-valued attribute matches if any value does, for every operator including ne.

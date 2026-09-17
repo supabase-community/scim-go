@@ -65,7 +65,7 @@ func (r *visitor[T]) VisitPresence(path filter.AttrPath) (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	return r.inner.Present(attribute, path.Key())
+	return r.inner.Present(NewAttribute(attribute, path))
 }
 
 func (r *visitor[T]) VisitAnd(left, right T) (T, error) {
@@ -89,7 +89,7 @@ func (r *visitor[T]) VisitValuePath(path filter.AttrPath, subAttribute string, v
 	if !attribute.MultiValued || subAttribute != "" {
 		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a value-path target", path.String()))
 	}
-	return r.inner.ValuePath(attribute, path.Key(), r.scoped(attribute, valueFilter))
+	return r.inner.ValuePath(NewAttribute(attribute, path), r.scoped(attribute, valueFilter))
 }
 
 func (r *visitor[T]) scoped(attribute *core.Attribute, valueFilter func() (T, error)) func() (T, error) {
@@ -159,7 +159,7 @@ func (r *visitor[T]) compare(path filter.AttrPath, op filter.Operator, value any
 	if !ok {
 		return zero, scimerrors.ErrInvalidValue(fmt.Sprintf("%q is not a valid value for %q", value, path.String()))
 	}
-	return r.inner.Compare(attribute, path.Key(), op, coerced)
+	return r.inner.Compare(NewAttribute(attribute, path), op, coerced)
 }
 
 func operatorAllowed(attributeType core.AttributeType, op filter.Operator) bool {
