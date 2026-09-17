@@ -14,25 +14,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
-func newUserSchema(basePath string) *core.Schema {
-	return core.NewSchema(core.SchemaUser).
-		WithName("User").
-		WithLocation(basePath+"/Schemas/"+string(core.SchemaUser)).
-		WithDescription("User Account").With(
-		core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
-		core.NewAttribute("name", core.TypeComplex).With(
-			core.NewAttribute("givenName", core.TypeString),
-			core.NewAttribute("familyName", core.TypeString),
-		),
-		core.NewAttribute("active", core.TypeBoolean),
-		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
-			core.NewAttribute("value", core.TypeString),
-			core.NewAttribute("type", core.TypeString).Suggesting("work", "home", "other"),
-			core.NewAttribute("primary", core.TypeBoolean),
-		),
-	)
-}
-
 func main() {
 	basePath := "/scim/v2"
 
@@ -60,4 +41,23 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
+}
+
+func newUserSchema(basePath string) *core.Schema {
+	return core.NewSchema(core.SchemaUser).
+		WithName("User").
+		WithLocation(basePath+"/Schemas/"+string(core.SchemaUser)).
+		WithDescription("User Account").With(
+		core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
+		core.NewAttribute("name", core.TypeComplex).With(
+			core.NewAttribute("givenName", core.TypeString),
+			core.NewAttribute("familyName", core.TypeString),
+		),
+		core.NewAttribute("active", core.TypeBoolean),
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString),
+			core.NewAttribute("type", core.TypeString).Suggesting("work", "home", "other"),
+			core.NewAttribute("primary", core.TypeBoolean),
+		),
+	)
 }
