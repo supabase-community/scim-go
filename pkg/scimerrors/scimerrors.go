@@ -73,3 +73,8 @@ func ErrNotImplemented(detail string) *Error {
 func ErrInternal(detail string) *Error {
 	return NewError(http.StatusInternalServerError, "", detail)
 }
+
+// ErrPreconditionFailed reports an If-Match precondition that did not hold, per Section 3.14.
+func ErrPreconditionFailed(detail string) *Error {
+	return NewError(http.StatusPreconditionFailed, "", detail)
+}
