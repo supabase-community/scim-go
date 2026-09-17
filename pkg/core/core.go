@@ -12,20 +12,6 @@ func (n ResourceTypeName) Reference() ReferenceType { return ReferenceType(n) }
 // ReferenceType is a "referenceTypes" value, per RFC 7643, Section 7.
 type ReferenceType string
 
-// AttributeType is the data type of an attribute, per RFC 7643, Section 7.
-type AttributeType string
-
-const (
-	TypeString    AttributeType = "string"
-	TypeBoolean   AttributeType = "boolean"
-	TypeDecimal   AttributeType = "decimal"
-	TypeInteger   AttributeType = "integer"
-	TypeDateTime  AttributeType = "dateTime"
-	TypeBinary    AttributeType = "binary"
-	TypeReference AttributeType = "reference"
-	TypeComplex   AttributeType = "complex"
-)
-
 // Mutability states when an attribute may be (re)defined, per RFC 7643, Section 7.
 type Mutability string
 
