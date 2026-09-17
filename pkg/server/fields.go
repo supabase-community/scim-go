@@ -12,17 +12,17 @@ func (fs Fields[T]) Attributes() core.Attributes {
 	return attributes
 }
 
-func (fs Fields[T]) Getters() Getters[T] {
-	getters := Getters[T]{}
-	fs.collect(getters)
-	return getters
+func (fs Fields[T]) Accessors() Accessors[T] {
+	accessors := Accessors[T]{}
+	fs.collect(accessors)
+	return accessors
 }
 
-func (fs Fields[T]) collect(getters Getters[T]) {
+func (fs Fields[T]) collect(accessors Accessors[T]) {
 	for _, field := range fs {
-		if field.get != nil {
-			getters[field.Attribute] = field.get
+		if field.accessor != nil {
+			accessors[field.Attribute] = field.accessor
 		}
-		Fields[T](field.children).collect(getters)
+		Fields[T](field.children).collect(accessors)
 	}
 }

@@ -4,12 +4,12 @@ import "github.com/supabase-community/scim-go/pkg/core"
 
 type Field[T Entity] struct {
 	*core.Attribute
-	get      Getter[T]
+	accessor Accessor[T]
 	children []*Field[T]
 }
 
-func NewField[T Entity](attribute *core.Attribute, get Getter[T]) *Field[T] {
-	return &Field[T]{Attribute: attribute, get: get}
+func NewField[T Entity](attribute *core.Attribute, accessor Accessor[T]) *Field[T] {
+	return &Field[T]{Attribute: attribute, accessor: accessor}
 }
 
 func (f *Field[T]) With(children ...*Field[T]) *Field[T] {

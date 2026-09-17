@@ -14,34 +14,34 @@ import (
 type specification[T Entity] func(T) bool
 
 type evaluator[T Entity] struct {
-	getters Getters[T]
+	accessors Accessors[T]
 }
 
-func NewVisitor[T Entity](getters Getters[T]) protocol.Evaluator[specification[T]] {
+func NewVisitor[T Entity](accessors Accessors[T]) protocol.Evaluator[specification[T]] {
 	return &evaluator[T]{
-		getters: getters,
+		accessors: accessors,
 	}
 }
 
 func (e *evaluator[T]) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (specification[T], error) {
-	get, ok := e.getters[attribute.Attribute]
+	accessor, ok := e.accessors[attribute.Attribute]
 	if !ok {
 		return nil, scimerrors.ErrInvalidFilter(attribute.Key() + " is not filterable")
 	}
 	return func(item T) bool {
-		return anyMatch(get(item), func(raw any) bool {
+		return anyMatch(accessor(item), func(raw any) bool {
 			return compareValue(op, raw, value, attribute.CaseExact)
 		})
 	}, nil
 }
 
 func (e *evaluator[T]) Present(attribute *protocol.Attribute) (specification[T], error) {
-	get, ok := e.getters[attribute.Attribute]
+	accessor, ok := e.accessors[attribute.Attribute]
 	if !ok {
 		return nil, scimerrors.ErrInvalidFilter(attribute.Key() + " is not filterable")
 	}
 	return func(item T) bool {
-		return anyMatch(get(item), hasValue)
+		return anyMatch(accessor(item), hasValue)
 	}, nil
 }
 
