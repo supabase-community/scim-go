@@ -35,8 +35,6 @@ linters:
         - name: argument-limit
           arguments: [4]
   exclusions:
-    paths:
-      - cmd/server/main.go
     rules:
       - path: _test\.go
         linters:
