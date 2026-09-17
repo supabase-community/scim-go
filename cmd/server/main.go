@@ -67,3 +67,38 @@ func newUserSchema(basePath string) *core.Schema {
 		),
 	)
 }
+
+func newUserGetters() server.Getters[*core.User] {
+	return server.Getters[*core.User]{
+		"username": func(u *core.User) any { return u.UserName },
+		"active": func(u *core.User) any {
+			if u.Active == nil {
+				return nil
+			}
+			return *u.Active
+		},
+		"name.givenname":  func(u *core.User) any { return u.Name.GivenName },
+		"name.familyname": func(u *core.User) any { return u.Name.FamilyName },
+		"emails.value": func(u *core.User) any {
+			values := make([]any, len(u.Emails))
+			for i, e := range u.Emails {
+				values[i] = e.Value
+			}
+			return values
+		},
+		"emails.type": func(u *core.User) any {
+			values := make([]any, len(u.Emails))
+			for i, e := range u.Emails {
+				values[i] = e.Type
+			}
+			return values
+		},
+		"emails.primary": func(u *core.User) any {
+			values := make([]any, len(u.Emails))
+			for i, e := range u.Emails {
+				values[i] = e.Primary != nil && *e.Primary
+			}
+			return values
+		},
+	}
+}

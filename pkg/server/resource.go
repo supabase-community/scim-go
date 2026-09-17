@@ -8,17 +8,28 @@ import (
 )
 
 type Resource[T Entity] struct {
-	name     string
-	endpoint string
-	schema   *core.Schema
+	name         string
+	endpoint     string
+	schema       *core.Schema
+	getters      Getters[T]
+	errorHandler func(error)
 }
 
-func NewResource[T Entity](name, endpoint string, schema *core.Schema) *Resource[T] {
+func NewResource[T Entity](name, endpoint string, schema *core.Schema, getters Getters[T]) *Resource[T] {
 	return &Resource[T]{
 		name:     name,
 		endpoint: endpoint,
 		schema:   schema,
+		getters:  getters,
+		errorHandler: func(err error) {
+			log.Printf("%v\n", err)
+		},
 	}
+}
+
+func (c *Resource[T]) WithErrorHandler(fn func(error)) *Resource[T] {
+	c.errorHandler = fn
+	return c
 }
 
 func (c *Resource[T]) resourceType(basePath string) *core.ResourceType {
@@ -39,24 +50,24 @@ func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
 	controller := c.build(basePath)
 
 	path := basePath + c.endpoint
-	mux.HandleFunc("GET "+path, handle(controller.List))
-	mux.HandleFunc("POST "+path, handle(controller.Create))
-	mux.HandleFunc("GET "+path+"/{id}", handle(controller.ByID))
-	mux.HandleFunc("PUT "+path+"/{id}", handle(controller.Replace))
-	mux.HandleFunc("PATCH "+path+"/{id}", handle(controller.Patch))
-	mux.HandleFunc("DELETE "+path+"/{id}", handle(controller.Delete))
+	mux.HandleFunc("GET "+path, c.handle(controller.List))
+	mux.HandleFunc("POST "+path, c.handle(controller.Create))
+	mux.HandleFunc("GET "+path+"/{id}", c.handle(controller.ByID))
+	mux.HandleFunc("PUT "+path+"/{id}", c.handle(controller.Replace))
+	mux.HandleFunc("PATCH "+path+"/{id}", c.handle(controller.Patch))
+	mux.HandleFunc("DELETE "+path+"/{id}", c.handle(controller.Delete))
 }
 
 func (c *Resource[T]) build(basePath string) Controller[T] {
-	repository := NewRepository[T](c.schema, NewVisitor[T](map[string]getter[T]{}))
+	repository := NewRepository[T](c.schema, NewVisitor[T](c.getters))
 	service := NewService[T](repository, c.schema)
 	return NewController[T](service, c.schema, basePath+c.endpoint)
 }
 
-func handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+func (c *Resource[T]) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := fn(w, r); err != nil {
-			log.Printf("%v\n", err)
+			c.errorHandler(err)
 		}
 	}
 }
