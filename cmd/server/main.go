@@ -20,7 +20,8 @@ func main() {
 	srv, err := server.New(
 		basePath,
 		server.
-			NewResource[*core.User]("User", "/Users", newUserSchema(basePath), newUserGetters()).
+			NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields()).
+			WithDescription("User Account").
 			WithErrorHandler(errorHandler),
 	)
 	if err != nil {
@@ -49,56 +50,47 @@ func main() {
 	_ = httpServer.Shutdown(shutdownCtx)
 }
 
-func newUserSchema(basePath string) *core.Schema {
-	return core.NewSchema(core.SchemaUser).
-		WithName("User").
-		WithLocation(basePath+"/Schemas/"+string(core.SchemaUser)).
-		WithDescription("User Account").With(
-		core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
-		core.NewAttribute("name", core.TypeComplex).With(
-			core.NewAttribute("givenName", core.TypeString),
-			core.NewAttribute("familyName", core.TypeString),
+func newUserFields() server.Fields[*core.User] {
+	return server.Fields[*core.User]{
+		server.NewField(
+			core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
+			func(u *core.User) any { return u.UserName },
 		),
-		core.NewAttribute("active", core.TypeBoolean),
-		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
-			core.NewAttribute("value", core.TypeString),
-			core.NewAttribute("type", core.TypeString).Suggesting("work", "home", "other"),
-			core.NewAttribute("primary", core.TypeBoolean),
+		server.NewField[*core.User](core.NewAttribute("name", core.TypeComplex), nil).With(
+			server.NewField(core.NewAttribute("givenName", core.TypeString), func(u *core.User) any { return u.Name.GivenName }),
+			server.NewField(core.NewAttribute("familyName", core.TypeString), func(u *core.User) any { return u.Name.FamilyName }),
 		),
-	)
-}
-
-func newUserGetters() server.Getters[*core.User] {
-	return server.Getters[*core.User]{
-		"username": func(u *core.User) any { return u.UserName },
-		"active": func(u *core.User) any {
-			if u.Active == nil {
-				return nil
-			}
-			return *u.Active
-		},
-		"name.givenname":  func(u *core.User) any { return u.Name.GivenName },
-		"name.familyname": func(u *core.User) any { return u.Name.FamilyName },
-		"emails.value": func(u *core.User) any {
-			values := make([]any, len(u.Emails))
-			for i, e := range u.Emails {
-				values[i] = e.Value
-			}
-			return values
-		},
-		"emails.type": func(u *core.User) any {
-			values := make([]any, len(u.Emails))
-			for i, e := range u.Emails {
-				values[i] = e.Type
-			}
-			return values
-		},
-		"emails.primary": func(u *core.User) any {
-			values := make([]any, len(u.Emails))
-			for i, e := range u.Emails {
-				values[i] = e.Primary != nil && *e.Primary
-			}
-			return values
-		},
+		server.NewField(
+			core.NewAttribute("active", core.TypeBoolean),
+			func(u *core.User) any {
+				if u.Active == nil {
+					return nil
+				}
+				return *u.Active
+			},
+		),
+		server.NewField[*core.User](core.NewAttribute("emails", core.TypeComplex).AsMultiValued(), nil).With(
+			server.NewField(core.NewAttribute("value", core.TypeString), func(u *core.User) any {
+				values := make([]any, len(u.Emails))
+				for i, e := range u.Emails {
+					values[i] = e.Value
+				}
+				return values
+			}),
+			server.NewField(core.NewAttribute("type", core.TypeString).Suggesting("work", "home", "other"), func(u *core.User) any {
+				values := make([]any, len(u.Emails))
+				for i, e := range u.Emails {
+					values[i] = e.Type
+				}
+				return values
+			}),
+			server.NewField(core.NewAttribute("primary", core.TypeBoolean), func(u *core.User) any {
+				values := make([]any, len(u.Emails))
+				for i, e := range u.Emails {
+					values[i] = e.Primary != nil && *e.Primary
+				}
+				return values
+			}),
+		),
 	}
 }
