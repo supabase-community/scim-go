@@ -16,10 +16,12 @@ import (
 
 func main() {
 	basePath := "/scim/v2"
-
+	errorHandler := func(err error) { log.Printf("%v\n", err) }
 	srv, err := server.New(
 		basePath,
-		server.NewResource[*core.User]("User", "/Users", newUserSchema(basePath)),
+		server.
+			NewResource[*core.User]("User", "/Users", newUserSchema(basePath), newUserGetters()).
+			WithErrorHandler(errorHandler),
 	)
 	if err != nil {
 		log.Fatal(err)
