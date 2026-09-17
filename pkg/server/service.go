@@ -17,12 +17,11 @@ type Service[T core.Resource] interface {
 
 type service[T Entity] struct {
 	repo       Repository[T]
-	schema     *core.Schema
 	validators []Validator[T]
 }
 
-func NewService[T Entity](repo Repository[T], schema *core.Schema, validators ...Validator[T]) Service[T] {
-	return &service[T]{repo: repo, schema: schema, validators: validators}
+func NewService[T Entity](repo Repository[T], validators ...Validator[T]) Service[T] {
+	return &service[T]{repo: repo, validators: validators}
 }
 
 func (s *service[T]) Get(ctx context.Context, id string) (T, error) {
