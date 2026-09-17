@@ -18,14 +18,15 @@ type evaluator[T Entity] struct {
 }
 
 func NewVisitor[T Entity](getters Getters[T]) protocol.Evaluator[specification[T]] {
-	return &evaluator[T]{getters: getters}
+	return &evaluator[T]{
+		getters: getters,
+	}
 }
 
 func (e *evaluator[T]) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (specification[T], error) {
-	key := attribute.Key()
-	get, ok := e.getters[key]
+	get, ok := e.getters[attribute.Attribute]
 	if !ok {
-		return nil, scimerrors.ErrInvalidFilter(key + " is not filterable")
+		return nil, scimerrors.ErrInvalidFilter(attribute.Key() + " is not filterable")
 	}
 	return func(item T) bool {
 		return anyMatch(get(item), func(raw any) bool {
@@ -35,10 +36,9 @@ func (e *evaluator[T]) Compare(attribute *protocol.Attribute, op filter.Operator
 }
 
 func (e *evaluator[T]) Present(attribute *protocol.Attribute) (specification[T], error) {
-	key := attribute.Key()
-	get, ok := e.getters[key]
+	get, ok := e.getters[attribute.Attribute]
 	if !ok {
-		return nil, scimerrors.ErrInvalidFilter(key + " is not filterable")
+		return nil, scimerrors.ErrInvalidFilter(attribute.Key() + " is not filterable")
 	}
 	return func(item T) bool {
 		return anyMatch(get(item), hasValue)
