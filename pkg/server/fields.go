@@ -4,6 +4,10 @@ import "github.com/supabase-community/scim-go/pkg/core"
 
 type Fields[T Entity] []*Field[T]
 
+func NewFields[T Entity](fields ...*Field[T]) Fields[T] {
+	return fields
+}
+
 func (fs Fields[T]) Attributes() core.Attributes {
 	attributes := make(core.Attributes, len(fs))
 	for i, field := range fs {

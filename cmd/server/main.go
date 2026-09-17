@@ -51,7 +51,7 @@ func main() {
 }
 
 func newUserFields() server.Fields[*core.User] {
-	return server.Fields[*core.User]{
+	return server.NewFields(
 		server.NewField(
 			core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
 			func(u *core.User) any { return u.UserName },
@@ -92,5 +92,5 @@ func newUserFields() server.Fields[*core.User] {
 				return values
 			}),
 		),
-	}
+	)
 }
