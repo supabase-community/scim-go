@@ -27,7 +27,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	httpServer := &http.Server{Addr: ":0", Handler: srv}
+	addr := ":8080"
+	if port := os.Getenv("PORT"); port != "" {
+		addr = ":" + port
+	}
+	httpServer := &http.Server{Addr: addr, Handler: srv}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -37,7 +41,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
-	fmt.Println("scim server listening under", basePath)
+	fmt.Println("scim server listening on", addr, "under", basePath)
 
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
