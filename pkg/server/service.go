@@ -10,8 +10,8 @@ type Service[T Entity] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
-	Replace(ctx context.Context, id string, item T) (T, error)
-	Delete(ctx context.Context, id string) error
+	Replace(ctx context.Context, item T) (T, error)
+	Delete(ctx context.Context, id string, version string) error
 }
 
 type service[T Entity] struct {
@@ -39,16 +39,16 @@ func (s *service[T]) Create(ctx context.Context, item T) (T, error) {
 	return s.repo.Create(ctx, item)
 }
 
-func (s *service[T]) Replace(ctx context.Context, id string, item T) (T, error) {
+func (s *service[T]) Replace(ctx context.Context, item T) (T, error) {
 	if err := s.validate(ctx, item); err != nil {
 		var zero T
 		return zero, err
 	}
-	return s.repo.Replace(ctx, id, item)
+	return s.repo.Replace(ctx, item)
 }
 
-func (s *service[T]) Delete(ctx context.Context, id string) error {
-	return s.repo.Delete(ctx, id)
+func (s *service[T]) Delete(ctx context.Context, id string, version string) error {
+	return s.repo.Delete(ctx, id, version)
 }
 
 func (s *service[T]) validate(ctx context.Context, item T) error {

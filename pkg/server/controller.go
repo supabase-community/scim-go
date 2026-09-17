@@ -50,6 +50,7 @@ func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	w.Header().Set("ETag", resource.GetMeta().Version)
 	return protocol.Send(w, http.StatusOK, resource)
 }
 
@@ -63,6 +64,7 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	w.Header().Set("Location", c.path+"/"+created.ResourceID())
+	w.Header().Set("ETag", created.GetMeta().Version)
 	return protocol.Send(w, http.StatusCreated, created)
 }
 
@@ -71,10 +73,13 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&resource); err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
 	}
-	replaced, err := c.service.Replace(r.Context(), r.PathValue("id"), resource)
+	resource.SetID(r.PathValue("id"))
+	resource.SetMeta(core.Meta{Version: r.Header.Get("If-Match")})
+	replaced, err := c.service.Replace(r.Context(), resource)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	w.Header().Set("ETag", replaced.GetMeta().Version)
 	return protocol.Send(w, http.StatusOK, replaced)
 }
 
@@ -91,15 +96,16 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err := req.Apply(resource, []*core.Schema{c.schema}); err != nil {
 		return protocol.SendError(w, err)
 	}
-	replaced, err := c.service.Replace(r.Context(), id, resource)
+	replaced, err := c.service.Replace(r.Context(), resource)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	w.Header().Set("ETag", replaced.GetMeta().Version)
 	return protocol.Send(w, http.StatusOK, replaced)
 }
 
 func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
-	if err := c.service.Delete(r.Context(), r.PathValue("id")); err != nil {
+	if err := c.service.Delete(r.Context(), r.PathValue("id"), r.Header.Get("If-Match")); err != nil {
 		return protocol.SendError(w, err)
 	}
 	return protocol.Send(w, http.StatusNoContent, nil)

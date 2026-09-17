@@ -12,13 +12,13 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// RFC 7643 3.1 - Create and Replace must set the resource's id and meta (created, lastModified, version).
+// RFC 7643 3.1 / RFC 7644 3.14 - Create/Replace stamp id+meta; Replace/Delete honour a non-empty expected version.
 type Repository[T Entity] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
-	Replace(ctx context.Context, id string, item T) (T, error)
-	Delete(ctx context.Context, id string) error
+	Replace(ctx context.Context, item T) (T, error)
+	Delete(ctx context.Context, id string, version string) error
 }
 
 type repository[T Entity] struct {
@@ -75,20 +75,26 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 		ResourceType: r.schema.Name,
 		Created:      now,
 		LastModified: now,
-		Version:      strconv.FormatInt(now.Unix(), 10),
+		Version:      weakETag(now),
 	})
 
 	r.items = append(r.items, item)
 	return item, nil
 }
 
-func (r *repository[T]) Replace(ctx context.Context, id string, item T) (T, error) {
+func (r *repository[T]) Replace(ctx context.Context, item T) (T, error) {
+	id := item.ResourceID()
+	version := item.GetMeta().Version
 	for i, existing := range r.items {
 		if existing.ResourceID() == id {
+			if version != "" && existing.GetMeta().Version != version {
+				var zero T
+				return zero, scimerrors.ErrPreconditionFailed("resource " + id + " has changed on the server")
+			}
 			meta := existing.GetMeta()
 			now := time.Now().UTC()
 			meta.LastModified = now
-			meta.Version = strconv.FormatInt(now.Unix(), 10)
+			meta.Version = weakETag(now)
 			item.SetMeta(meta)
 
 			r.items[i] = item
@@ -99,12 +105,20 @@ func (r *repository[T]) Replace(ctx context.Context, id string, item T) (T, erro
 	return zero, scimerrors.ErrNotFound("resource " + id + " not found")
 }
 
-func (r *repository[T]) Delete(_ context.Context, id string) error {
+func (r *repository[T]) Delete(_ context.Context, id string, version string) error {
 	for i, existing := range r.items {
 		if existing.ResourceID() == id {
+			if version != "" && existing.GetMeta().Version != version {
+				return scimerrors.ErrPreconditionFailed("resource " + id + " has changed on the server")
+			}
 			r.items = slices.Delete(r.items, i, i+1)
 			return nil
 		}
 	}
 	return scimerrors.ErrNotFound("resource " + id + " not found")
+}
+
+// weakETag formats a version per RFC 7644 3.14's worked example: a quoted weak entity-tag.
+func weakETag(t time.Time) string {
+	return `W/"` + strconv.FormatInt(t.Unix(), 10) + `"`
 }
