@@ -1,7 +1,6 @@
 package server
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -21,13 +20,11 @@ type Resource[T Entity] struct {
 
 func NewResource[T Entity](name, endpoint string, id core.SchemaURI, fields Fields[T]) *Resource[T] {
 	return &Resource[T]{
-		name:     name,
-		endpoint: endpoint,
-		id:       id,
-		fields:   fields,
-		errorHandler: func(err error) {
-			log.Printf("%v\n", err)
-		},
+		name:         name,
+		endpoint:     endpoint,
+		id:           id,
+		fields:       fields,
+		errorHandler: func(err error) {},
 	}
 }
 
