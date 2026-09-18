@@ -98,14 +98,15 @@ func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
 
 func (c *Resource[T]) build(basePath string) Controller[T] {
 	service := c.service
+	schema := c.schema(basePath)
 	if service == nil {
 		repository := c.repository
 		if repository == nil {
-			repository = NewRepository[T](c.schema(basePath), c.fields.Accessors())
+			repository = NewRepository[T](schema, c.fields.Accessors())
 		}
 		service = NewService[T](repository, c.validators...)
 	}
-	return NewController[T](service, c.schema(basePath), basePath+c.endpoint)
+	return NewController[T](service, schema, basePath+c.endpoint)
 }
 
 func (c *Resource[T]) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
