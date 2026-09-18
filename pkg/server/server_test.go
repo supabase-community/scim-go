@@ -275,8 +275,19 @@ func TestRFC7644(t *testing.T) {
 			assert.Equal(t, "bjensen2", replaced.UserName)
 		})
 
-		t.Run("the new ETag is not guaranteed to differ from the old one", func(t *testing.T) {
-			t.Skip("weakETag (repository.go) formats only whole Unix seconds, so two writes to the same resource within the same wall-clock second produce an identical ETag, silently defeating If-Match-based optimistic concurrency")
+		t.Run("the new ETag differs from the old one even within the same second", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", etag),
+				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			assert.NotEqual(t, etag, response.Header.Get("ETag"))
 		})
 
 		t.Run("replaces a resource even without If-Match", func(t *testing.T) {
@@ -368,8 +379,27 @@ func TestRFC7644(t *testing.T) {
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
 
-		t.Run("does not honor If-Match", func(t *testing.T) {
-			t.Skip("Controller.Patch never reads the If-Match header; it fetches then replaces using the version it just fetched, so the precondition check always trivially passes, unlike PUT/DELETE (controller.go:86-105)")
+		t.Run("rejects a patch with a stale If-Match", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", `W/"stale"`),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{
+						{
+							Op:    patch.OpReplace,
+							Path:  "active",
+							Value: json.RawMessage("true"),
+						},
+					},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 		})
 
 		t.Run("does not exercise add/remove operations end-to-end", func(t *testing.T) {

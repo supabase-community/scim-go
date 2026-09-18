@@ -95,6 +95,9 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	if match := r.Header.Get("If-Match"); match != "" && resource.GetMeta().Version != match {
+		return protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
+	}
 	var req protocol.PatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))

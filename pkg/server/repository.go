@@ -247,5 +247,5 @@ func boolSortRank(v bool) int {
 }
 
 func weakETag(t time.Time) string {
-	return `W/"` + strconv.FormatInt(t.Unix(), 10) + `"`
+	return `W/"` + strconv.FormatInt(t.UnixNano(), 10) + `"`
 }
