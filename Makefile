@@ -2,11 +2,19 @@
 
 COVERAGE := coverage.out
 COVER_MIN := 80
-COVER_EXCLUDE := /pkg/scimtest/|/internal/
+COVER_EXCLUDE := /pkg/scimtest/|/internal/|/cmd/server/
 
 .PHONY: clean
 clean:
 	rm -rf $(COVERAGE)
+
+.PHONY: build
+build:
+	go build -o bin/scim-server ./cmd/server
+
+.PHONY: run
+run:
+	go run ./cmd/server
 
 .PHONY: test
 test:

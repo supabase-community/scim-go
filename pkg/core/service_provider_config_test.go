@@ -11,7 +11,7 @@ import (
 
 func TestNewServiceProviderConfig(t *testing.T) {
 	t.Run("supports none of the optional protocol features", func(t *testing.T) {
-		config := &core.ServiceProviderConfig{}
+		config := core.NewServiceProviderConfig()
 
 		assert.False(t, config.Patch.Supported)
 		assert.False(t, config.Bulk.Supported)
@@ -22,19 +22,17 @@ func TestNewServiceProviderConfig(t *testing.T) {
 	})
 
 	t.Run("the builders announce the features the provider honours", func(t *testing.T) {
-		config := (&core.ServiceProviderConfig{}).Patching().Sorting().Filtering(200)
+		config := core.NewServiceProviderConfig().Patching().Sorting().Filtering(200).Versioning()
 
 		assert.True(t, config.Patch.Supported)
 		assert.True(t, config.Sort.Supported)
 		assert.True(t, config.Filter.Supported)
 		assert.Equal(t, 200, config.Filter.MaxResults)
+		assert.True(t, config.ETag.Supported)
 	})
 
 	t.Run("serializes to JSON correctly", func(t *testing.T) {
-		config := (&core.ServiceProviderConfig{
-			Schemas: []core.SchemaURI{core.SchemaServiceProviderConfig},
-			Meta:    core.Meta{ResourceType: "ServiceProviderConfig"},
-		}).Patching().Filtering(200)
+		config := core.NewServiceProviderConfig().Patching().Filtering(200)
 
 		body, err := json.Marshal(config)
 

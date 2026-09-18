@@ -14,12 +14,12 @@ import (
 
 func TestFilter(t *testing.T) {
 	schema := (&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-		core.NewAttribute("userName", core.TypeString, ""),
-		core.NewAttribute("active", core.TypeBoolean, ""),
-		core.NewAttribute("age", core.TypeInteger, ""),
-		core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-			core.NewAttribute("type", core.TypeString, ""),
-			core.NewAttribute("value", core.TypeString, ""),
+		core.NewAttribute("userName", core.TypeString),
+		core.NewAttribute("active", core.TypeBoolean),
+		core.NewAttribute("age", core.TypeInteger),
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("type", core.TypeString),
+			core.NewAttribute("value", core.TypeString),
 		),
 	)
 	schemas := []*core.Schema{schema}
@@ -68,7 +68,7 @@ func TestFilter(t *testing.T) {
 
 	t.Run("resolves an extension attribute by schema URI", func(t *testing.T) {
 		enterprise := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
-			core.NewAttribute("department", core.TypeString, ""),
+			core.NewAttribute("department", core.TypeString),
 		)
 		text := fmt.Sprintf("%s:department eq \"eng\"", core.SchemaEnterpriseUser)
 		out, err := protocol.Filter[clause]([]*core.Schema{schema, enterprise}, text, sqlEvaluator{})
@@ -221,7 +221,8 @@ type clause struct {
 
 type sqlEvaluator struct{}
 
-func (sqlEvaluator) Compare(_ *core.Attribute, key string, op filter.Operator, value any) (clause, error) {
+func (sqlEvaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (clause, error) {
+	key := attribute.Key()
 	switch op {
 	case filter.OpContains:
 		return clause{sql: key + " LIKE ?", args: []any{"%" + value.(string) + "%"}}, nil
@@ -237,8 +238,8 @@ func (sqlEvaluator) Compare(_ *core.Attribute, key string, op filter.Operator, v
 	return clause{sql: key + " " + symbol + " ?", args: []any{value}}, nil
 }
 
-func (sqlEvaluator) Present(_ *core.Attribute, key string) (clause, error) {
-	return clause{sql: key + " IS NOT NULL"}, nil
+func (sqlEvaluator) Present(attribute *protocol.Attribute) (clause, error) {
+	return clause{sql: attribute.Key() + " IS NOT NULL"}, nil
 }
 
 func (sqlEvaluator) And(left, right clause) (clause, error) {
@@ -253,12 +254,12 @@ func (sqlEvaluator) Not(operand clause) (clause, error) {
 	return clause{sql: "NOT (" + operand.sql + ")", args: operand.args}, nil
 }
 
-func (sqlEvaluator) ValuePath(_ *core.Attribute, key string, valueFilter func() (clause, error)) (clause, error) {
+func (sqlEvaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (clause, error)) (clause, error) {
 	inner, err := valueFilter()
 	if err != nil {
 		return clause{}, err
 	}
-	return clause{sql: "EXISTS(" + key + ": " + inner.sql + ")", args: inner.args}, nil
+	return clause{sql: "EXISTS(" + attribute.Key() + ": " + inner.sql + ")", args: inner.args}, nil
 }
 
 func concat(a, b []any) []any {

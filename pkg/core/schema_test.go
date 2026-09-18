@@ -10,34 +10,23 @@ import (
 )
 
 func exampleSchema() *core.Schema {
-	schema := &core.Schema{ID: core.SchemaUser, Name: "User"}
-	return schema.With(
-		core.NewAttribute("userName", core.TypeString, "").AsRequired(),
-		core.NewAttribute("name", core.TypeComplex, "").With(
-			core.NewAttribute("familyName", core.TypeString, ""),
+	return core.NewSchema(core.SchemaUser).WithName("User").With(
+		core.NewAttribute("userName", core.TypeString).AsRequired(),
+		core.NewAttribute("name", core.TypeComplex).With(
+			core.NewAttribute("familyName", core.TypeString),
 		),
-		core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-			core.NewAttribute("value", core.TypeString, ""),
-			core.NewAttribute("primary", core.TypeBoolean, ""),
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString),
+			core.NewAttribute("primary", core.TypeBoolean),
 		),
 	)
 }
 
 func TestSchema(t *testing.T) {
 	t.Run("serializes to JSON correctly", func(t *testing.T) {
-		schema := &core.Schema{
-			Schemas:     []core.SchemaURI{core.SchemaSchema},
-			ID:          core.SchemaUser,
-			Name:        "User",
-			Description: "User Account",
-			Attributes: []*core.Attribute{
-				core.NewAttribute("userName", core.TypeString, "A unique identifier for the user.").AsRequired(),
-			},
-			Meta: core.Meta{
-				ResourceType: "Schema",
-				Location:     "http://example.com/scim/v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:User",
-			},
-		}
+		schema := core.NewSchema(core.SchemaUser).WithName("User").WithLocation("http://example.com/scim/v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:User").WithDescription("User Account").With(
+			core.NewAttribute("userName", core.TypeString).DescribedAs("A unique identifier for the user.").AsRequired(),
+		)
 
 		body, err := json.Marshal(schema)
 

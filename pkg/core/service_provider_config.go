@@ -29,6 +29,15 @@ type ServiceProviderConfig struct {
 	Meta                  Meta                    `json:"meta"`
 }
 
+func NewServiceProviderConfig() *ServiceProviderConfig {
+	return &ServiceProviderConfig{
+		Schemas: []SchemaURI{SchemaServiceProviderConfig},
+		Meta: Meta{
+			ResourceType: "ServiceProviderConfig",
+		},
+	}
+}
+
 // Sorting states that this provider honours "sortBy" and "sortOrder", per RFC 7644, Section 3.4.2.3.
 func (c *ServiceProviderConfig) Sorting() *ServiceProviderConfig {
 	c.Sort.Supported = true
@@ -45,5 +54,11 @@ func (c *ServiceProviderConfig) Filtering(maxResults int) *ServiceProviderConfig
 // Patching states that this provider honours the PATCH request of RFC 7644, Section 3.5.2.
 func (c *ServiceProviderConfig) Patching() *ServiceProviderConfig {
 	c.Patch.Supported = true
+	return c
+}
+
+// Versioning states that this provider issues resource versions via ETags, per RFC 7644, Section 3.14.
+func (c *ServiceProviderConfig) Versioning() *ServiceProviderConfig {
+	c.ETag.Supported = true
 	return c
 }
