@@ -7,4 +7,5 @@ type Entity interface {
 	SetID(id string)
 	GetMeta() core.Meta
 	SetMeta(meta core.Meta)
+	SetSchemas(schemas []core.SchemaURI)
 }

@@ -71,6 +71,7 @@ func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) (
 func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 	now := time.Now().UTC()
 	item.SetID(uuid.NewV7().String())
+	item.SetSchemas([]core.SchemaURI{r.schema.ID})
 	item.SetMeta(core.Meta{
 		ResourceType: r.schema.Name,
 		Created:      now,
@@ -96,6 +97,7 @@ func (r *repository[T]) Replace(ctx context.Context, item T) (T, error) {
 			meta.LastModified = now
 			meta.Version = weakETag(now)
 			item.SetMeta(meta)
+			item.SetSchemas([]core.SchemaURI{r.schema.ID})
 
 			r.items[i] = item
 			return item, nil

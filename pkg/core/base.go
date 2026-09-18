@@ -12,6 +12,10 @@ func (b *Base) SetID(id string) {
 	b.ID = id
 }
 
+func (b *Base) SetSchemas(schemas []SchemaURI) {
+	b.Schemas = schemas
+}
+
 func (b *Base) GetMeta() Meta {
 	return b.Meta
 }

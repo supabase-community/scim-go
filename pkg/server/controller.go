@@ -42,6 +42,9 @@ func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	for i, item := range items {
+		items[i] = c.withLocation(item)
+	}
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, items))
 }
 
@@ -50,6 +53,7 @@ func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	resource = c.withLocation(resource)
 	w.Header().Set("ETag", resource.GetMeta().Version)
 	return protocol.Send(w, http.StatusOK, resource)
 }
@@ -63,7 +67,8 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	w.Header().Set("Location", c.path+"/"+created.ResourceID())
+	created = c.withLocation(created)
+	w.Header().Set("Location", created.GetMeta().Location)
 	w.Header().Set("ETag", created.GetMeta().Version)
 	return protocol.Send(w, http.StatusCreated, created)
 }
@@ -79,6 +84,7 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	replaced = c.withLocation(replaced)
 	w.Header().Set("ETag", replaced.GetMeta().Version)
 	return protocol.Send(w, http.StatusOK, replaced)
 }
@@ -100,6 +106,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	replaced = c.withLocation(replaced)
 	w.Header().Set("ETag", replaced.GetMeta().Version)
 	return protocol.Send(w, http.StatusOK, replaced)
 }
@@ -109,4 +116,11 @@ func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	return protocol.Send(w, http.StatusNoContent, nil)
+}
+
+func (c *controller[T]) withLocation(item T) T {
+	meta := item.GetMeta()
+	meta.Location = c.path + "/" + item.ResourceID()
+	item.SetMeta(meta)
+	return item
 }

@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -33,28 +32,17 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusCreated, response.StatusCode)
-
-			body := readBody(t, response)
-			var created map[string]any
-			require.NoError(t, json.Unmarshal(body, &created))
-			id, _ := created["id"].(string)
-			meta, _ := created["meta"].(map[string]any)
-
-			assert.Equal(t, basePath+"/Users/"+id, response.Header.Get("Location"))
+			user := ReadBodyAs[*core.User](t, response)
+			assert.Equal(t, basePath+"/Users/"+user.ID, response.Header.Get("Location"))
 			assert.NotEmpty(t, response.Header.Get("ETag"))
-
-			expected := fmt.Sprintf(`{
-				"schemas": null,
-				"id": %q,
-				"userName": "bjensen",
-				"meta": {
-					"resourceType": "User",
-					"created": %q,
-					"lastModified": %q,
-					"version": %q
-				}
-			}`, id, meta["created"], meta["lastModified"], meta["version"])
-			assert.JSONEq(t, expected, string(body))
+			assert.Equal(t, []core.SchemaURI{core.SchemaUser}, user.Schemas)
+			assert.NotEmpty(t, user.ID)
+			assert.Equal(t, "bjensen", user.UserName)
+			assert.Equal(t, core.ResourceTypeName("User"), user.Meta.ResourceType)
+			assert.NotZero(t, user.Meta.Created)
+			assert.NotZero(t, user.Meta.LastModified)
+			assert.NotEmpty(t, user.Meta.Location)
+			assert.NotEmpty(t, user.Meta.Version)
 		})
 
 		t.Run("rejects a malformed JSON body", func(t *testing.T) {
@@ -63,8 +51,7 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBody([]byte(`{`))))
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
-			var scimErr scimerrors.Error
-			readJSON(t, response, &scimErr)
+			scimErr := ReadBodyAs[scimerrors.Error](t, response)
 			assert.Equal(t, scimerrors.InvalidSyntax, scimErr.ScimType)
 		})
 	})
@@ -79,8 +66,8 @@ func TestRFC7644(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			assert.Equal(t, etag, response.Header.Get("ETag"))
-			var got core.User
-			readJSON(t, response, &got)
+
+			got := ReadBodyAs[core.User](t, response)
 			assert.Equal(t, "bjensen", got.UserName)
 		})
 
@@ -109,8 +96,7 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
-			var list protocol.ListResponse[*core.User]
-			readJSON(t, response, &list)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 			assert.Equal(t, 3, list.TotalResults)
 		})
 
@@ -127,8 +113,7 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
-			var list protocol.ListResponse[*core.User]
-			readJSON(t, response, &list)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 			assert.Equal(t, 3, list.TotalResults)
 			assert.Equal(t, 1, list.ItemsPerPage)
 			require.Len(t, list.Resources, 1)
@@ -149,8 +134,7 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
-			var list protocol.ListResponse[*core.User]
-			readJSON(t, response, &list)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 			require.Equal(t, 1, list.TotalResults)
 			assert.Equal(t, "alice", list.Resources[0].UserName)
 		})
@@ -165,8 +149,7 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
-			var scimErr scimerrors.Error
-			readJSON(t, response, &scimErr)
+			scimErr := ReadBodyAs[scimerrors.Error](t, response)
 			assert.Equal(t, scimerrors.InvalidFilter, scimErr.ScimType)
 		})
 	})
@@ -197,8 +180,7 @@ func TestRFC7644(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			assert.NotEmpty(t, response.Header.Get("ETag"))
-			var replaced core.User
-			readJSON(t, response, &replaced)
+			replaced := ReadBodyAs[core.User](t, response)
 			assert.Equal(t, "bjensen2", replaced.UserName)
 		})
 
@@ -253,14 +235,23 @@ func TestRFC7644(t *testing.T) {
 
 			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
-				WithRequestBody(activatePatchBody(t)),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{
+						{
+							Op:    patch.OpReplace,
+							Path:  "active",
+							Value: json.RawMessage("true"),
+						},
+					},
+				}),
 			)
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			assert.NotEmpty(t, response.Header.Get("ETag"))
-			var patched core.User
-			readJSON(t, response, &patched)
+
+			patched := ReadBodyAs[core.User](t, response)
 			require.NotNil(t, patched.Active)
 			assert.True(t, *patched.Active)
 		})
@@ -270,7 +261,16 @@ func TestRFC7644(t *testing.T) {
 
 			request := Request(t, srv, http.MethodPatch, basePath+"/Users/does-not-exist",
 				WithContentType(protocol.MediaType),
-				WithRequestBody(activatePatchBody(t)),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{
+						{
+							Op:    patch.OpReplace,
+							Path:  "active",
+							Value: json.RawMessage("true"),
+						},
+					},
+				}),
 			)
 			response := Response(t, srv, request)
 
@@ -348,8 +348,7 @@ func TestRFC7644(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, response.StatusCode)
 		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
 
-		var scimErr scimerrors.Error
-		readJSON(t, response, &scimErr)
+		scimErr := ReadBodyAs[scimerrors.Error](t, response)
 		assert.Equal(t, []core.SchemaURI{scimerrors.SchemaError}, scimErr.Schemas)
 		assert.Equal(t, "404", scimErr.Status)
 		assert.Empty(t, scimErr.ScimType)
@@ -371,8 +370,7 @@ func TestRFC7644(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
 
-		var config core.ServiceProviderConfig
-		readJSON(t, response, &config)
+		config := ReadBodyAs[core.ServiceProviderConfig](t, response)
 		assert.True(t, config.Patch.Supported)
 		assert.True(t, config.Filter.Supported)
 		assert.Equal(t, protocol.DefaultLimits.MaxCount, config.Filter.MaxResults)
@@ -389,8 +387,7 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
-			var list protocol.ListResponse[*core.ResourceType]
-			readJSON(t, response, &list)
+			list := ReadBodyAs[protocol.ListResponse[*core.ResourceType]](t, response)
 			require.Equal(t, 1, list.TotalResults)
 			assert.Equal(t, core.ResourceTypeName("User"), list.Resources[0].ID)
 			assert.Equal(t, basePath+"/Users", list.Resources[0].Endpoint)
@@ -430,8 +427,7 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
-			var list protocol.ListResponse[*core.Schema]
-			readJSON(t, response, &list)
+			list := ReadBodyAs[protocol.ListResponse[*core.Schema]](t, response)
 			require.Equal(t, 1, list.TotalResults)
 			schema := list.Resources[0]
 			assert.Equal(t, core.SchemaUser, schema.ID)
@@ -493,9 +489,8 @@ func TestServerRouting(t *testing.T) {
 		response := Response(t, srv, request)
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
-		var list protocol.ListResponse[*core.ResourceType]
-		readJSON(t, response, &list)
 
+		list := ReadBodyAs[protocol.ListResponse[*core.ResourceType]](t, response)
 		assert.Equal(t, 2, list.TotalResults)
 		var endpoints []string
 		for _, resourceType := range list.Resources {
@@ -543,44 +538,18 @@ func readBody(t *testing.T, response *http.Response) []byte {
 	return body
 }
 
-func readJSON(t *testing.T, response *http.Response, v any) {
-	t.Helper()
-	require.NoError(t, json.Unmarshal(readBody(t, response), v))
-}
-
 func createUser(t *testing.T, srv *httptest.Server, userName string) (id, etag string) {
 	t.Helper()
 
-	body, err := json.Marshal(core.User{UserName: userName})
-	require.NoError(t, err)
-
 	request := Request(t, srv, http.MethodPost, basePath+"/Users",
 		WithContentType(protocol.MediaType),
-		WithRequestBody(body),
+		WithRequestBodyAs(t, core.User{UserName: userName}),
 	)
 	response := Response(t, srv, request)
 	require.Equal(t, http.StatusCreated, response.StatusCode)
 
-	var created core.User
-	readJSON(t, response, &created)
+	created := ReadBodyAs[core.User](t, response)
 	return created.ID, response.Header.Get("ETag")
-}
-
-func activatePatchBody(t *testing.T) []byte {
-	t.Helper()
-
-	body, err := json.Marshal(protocol.PatchRequest{
-		Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
-		Operations: []patch.Operation{
-			{
-				Op:    patch.OpReplace,
-				Path:  "active",
-				Value: json.RawMessage("true"),
-			},
-		},
-	})
-	require.NoError(t, err)
-	return body
 }
 
 func newUserResource() *server.Resource[*core.User] {
