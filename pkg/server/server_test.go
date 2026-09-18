@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,30 +23,44 @@ const basePath = "/scim/v2"
 func TestRFC7644(t *testing.T) {
 	t.Run("3.3 Creating Resources", func(t *testing.T) {
 		t.Run("creates a resource and returns 201 with Location and ETag", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodPost, basePath+"/Users",
+			request := Request(t, srv, http.MethodPost, basePath+"/Users",
 				WithAcceptHeader(protocol.MediaType),
 				WithContentType(protocol.MediaType),
 				WithRequestBody([]byte(`{"userName":"bjensen"}`)),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusCreated, response.StatusCode)
 
-			var created core.User
-			readJSON(t, response, &created)
+			body := readBody(t, response)
+			var created map[string]any
+			require.NoError(t, json.Unmarshal(body, &created))
+			id, _ := created["id"].(string)
+			meta, _ := created["meta"].(map[string]any)
 
-			assert.NotEmpty(t, created.ID)
-			assert.Equal(t, basePath+"/Users/"+created.ID, response.Header.Get("Location"))
+			assert.Equal(t, basePath+"/Users/"+id, response.Header.Get("Location"))
 			assert.NotEmpty(t, response.Header.Get("ETag"))
-			assert.Equal(t, core.ResourceTypeName("User"), created.Meta.ResourceType)
+
+			expected := fmt.Sprintf(`{
+				"schemas": null,
+				"id": %q,
+				"userName": "bjensen",
+				"meta": {
+					"resourceType": "User",
+					"created": %q,
+					"lastModified": %q,
+					"version": %q
+				}
+			}`, id, meta["created"], meta["lastModified"], meta["version"])
+			assert.JSONEq(t, expected, string(body))
 		})
 
 		t.Run("rejects a malformed JSON body", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			response := Response(t, ts, Request(t, ts, http.MethodPost, basePath+"/Users", WithRequestBody([]byte(`{`))))
+			response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBody([]byte(`{`))))
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
 			var scimErr scimerrors.Error
@@ -56,11 +71,11 @@ func TestRFC7644(t *testing.T) {
 
 	t.Run("3.4.1 Retrieving a Known Resource", func(t *testing.T) {
 		t.Run("gets a created resource by id", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			id, etag := createUser(t, ts, "bjensen")
+			srv := newTestServer(t, newUserResource())
+			id, etag := createUser(t, srv, "bjensen")
 
-			request := Request(t, ts, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType))
-			response := Response(t, ts, request)
+			request := Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			assert.Equal(t, etag, response.Header.Get("ETag"))
@@ -70,12 +85,12 @@ func TestRFC7644(t *testing.T) {
 		})
 
 		t.Run("returns 404 for an unknown id", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodGet, basePath+"/Users/does-not-exist",
+			request := Request(t, srv, http.MethodGet, basePath+"/Users/does-not-exist",
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
@@ -83,15 +98,15 @@ func TestRFC7644(t *testing.T) {
 
 	t.Run("3.4.2 Query Resources", func(t *testing.T) {
 		t.Run("lists all created resources", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			createUser(t, ts, "alice")
-			createUser(t, ts, "bob")
-			createUser(t, ts, "carol")
+			srv := newTestServer(t, newUserResource())
+			createUser(t, srv, "alice")
+			createUser(t, srv, "bob")
+			createUser(t, srv, "carol")
 
-			request := Request(t, ts, http.MethodGet, basePath+"/Users",
+			request := Request(t, srv, http.MethodGet, basePath+"/Users",
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			var list protocol.ListResponse[*core.User]
@@ -100,16 +115,16 @@ func TestRFC7644(t *testing.T) {
 		})
 
 		t.Run("paginates with startIndex and count", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			createUser(t, ts, "alice")
-			createUser(t, ts, "bob")
-			createUser(t, ts, "carol")
+			srv := newTestServer(t, newUserResource())
+			createUser(t, srv, "alice")
+			createUser(t, srv, "bob")
+			createUser(t, srv, "carol")
 
 			path := basePath + "/Users?" + url.Values{"startIndex": {"2"}, "count": {"1"}}.Encode()
-			request := Request(t, ts, http.MethodGet, path,
+			request := Request(t, srv, http.MethodGet, path,
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			var list protocol.ListResponse[*core.User]
@@ -123,15 +138,15 @@ func TestRFC7644(t *testing.T) {
 
 	t.Run("3.4.2.2 Filtering", func(t *testing.T) {
 		t.Run("filters resources by an exact match on userName", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			createUser(t, ts, "alice")
-			createUser(t, ts, "bob")
+			srv := newTestServer(t, newUserResource())
+			createUser(t, srv, "alice")
+			createUser(t, srv, "bob")
 
 			path := basePath + "/Users?" + url.Values{"filter": {`userName eq "alice"`}}.Encode()
-			request := Request(t, ts, http.MethodGet, path,
+			request := Request(t, srv, http.MethodGet, path,
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			var list protocol.ListResponse[*core.User]
@@ -141,13 +156,13 @@ func TestRFC7644(t *testing.T) {
 		})
 
 		t.Run("rejects a filter on an attribute that is not filterable", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
 			path := basePath + "/Users?" + url.Values{"filter": {`bogus eq "x"`}}.Encode()
-			request := Request(t, ts, http.MethodGet, path,
+			request := Request(t, srv, http.MethodGet, path,
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
 			var scimErr scimerrors.Error
@@ -170,15 +185,15 @@ func TestRFC7644(t *testing.T) {
 
 	t.Run("3.5.1 Replacing with PUT", func(t *testing.T) {
 		t.Run("replaces a resource and returns a new ETag when If-Match matches", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			id, etag := createUser(t, ts, "bjensen")
+			srv := newTestServer(t, newUserResource())
+			id, etag := createUser(t, srv, "bjensen")
 
-			request := Request(t, ts, http.MethodPut, basePath+"/Users/"+id,
+			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", etag),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			assert.NotEmpty(t, response.Header.Get("ETag"))
@@ -192,40 +207,40 @@ func TestRFC7644(t *testing.T) {
 		})
 
 		t.Run("replaces a resource even without If-Match", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			id, _ := createUser(t, ts, "bjensen")
+			srv := newTestServer(t, newUserResource())
+			id, _ := createUser(t, srv, "bjensen")
 
-			request := Request(t, ts, http.MethodPut, basePath+"/Users/"+id,
+			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			assert.Equal(t, http.StatusOK, response.StatusCode)
 		})
 
 		t.Run("rejects a replace with a stale If-Match", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			id, _ := createUser(t, ts, "bjensen")
+			srv := newTestServer(t, newUserResource())
+			id, _ := createUser(t, srv, "bjensen")
 
-			request := Request(t, ts, http.MethodPut, basePath+"/Users/"+id,
+			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", `W/"stale"`),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 		})
 
 		t.Run("replacing an unknown id returns 404", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodPut, basePath+"/Users/does-not-exist",
+			request := Request(t, srv, http.MethodPut, basePath+"/Users/does-not-exist",
 				WithContentType(protocol.MediaType),
 				WithRequestBody([]byte(`{"userName":"bjensen"}`)),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
@@ -233,14 +248,14 @@ func TestRFC7644(t *testing.T) {
 
 	t.Run("3.5.2 Modifying with PATCH", func(t *testing.T) {
 		t.Run("patches a resource and returns the updated field with an ETag", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			id, _ := createUser(t, ts, "bjensen")
+			srv := newTestServer(t, newUserResource())
+			id, _ := createUser(t, srv, "bjensen")
 
-			request := Request(t, ts, http.MethodPatch, basePath+"/Users/"+id,
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
 				WithRequestBody(activatePatchBody(t)),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			assert.NotEmpty(t, response.Header.Get("ETag"))
@@ -251,13 +266,13 @@ func TestRFC7644(t *testing.T) {
 		})
 
 		t.Run("patching an unknown id returns 404", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodPatch, basePath+"/Users/does-not-exist",
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/does-not-exist",
 				WithContentType(protocol.MediaType),
 				WithRequestBody(activatePatchBody(t)),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
@@ -273,47 +288,47 @@ func TestRFC7644(t *testing.T) {
 
 	t.Run("3.6 Deleting Resources", func(t *testing.T) {
 		t.Run("deletes a resource and it is subsequently gone", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			id, _ := createUser(t, ts, "bjensen")
+			srv := newTestServer(t, newUserResource())
+			id, _ := createUser(t, srv, "bjensen")
 
-			request := Request(t, ts, http.MethodDelete, basePath+"/Users/"+id,
+			request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 			require.Equal(t, http.StatusNoContent, response.StatusCode)
 			body, err := io.ReadAll(response.Body)
 			require.NoError(t, err)
 			assert.Empty(t, body)
 
-			getResp := Response(t, ts, Request(t, ts, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType)))
+			getResp := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType)))
 			assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
 		})
 
 		t.Run("rejects a delete with a stale If-Match and leaves the resource intact", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
-			id, _ := createUser(t, ts, "bjensen")
+			srv := newTestServer(t, newUserResource())
+			id, _ := createUser(t, srv, "bjensen")
 
-			request := Request(t, ts, http.MethodDelete, basePath+"/Users/"+id,
+			request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", `W/"stale"`),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 			assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 
-			request = Request(t, ts, http.MethodGet, basePath+"/Users/"+id,
+			request = Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
 			)
-			response = Response(t, ts, request)
+			response = Response(t, srv, request)
 			assert.Equal(t, http.StatusOK, response.StatusCode)
 		})
 
 		t.Run("deleting an unknown id returns 404", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodDelete, basePath+"/Users/does-not-exist",
+			request := Request(t, srv, http.MethodDelete, basePath+"/Users/does-not-exist",
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
 	})
@@ -323,12 +338,12 @@ func TestRFC7644(t *testing.T) {
 	})
 
 	t.Run("3.12 SCIM Errors", func(t *testing.T) {
-		ts := newTestServer(t, newUserResource())
+		srv := newTestServer(t, newUserResource())
 
-		request := Request(t, ts, http.MethodGet, basePath+"/Users/does-not-exist",
+		request := Request(t, srv, http.MethodGet, basePath+"/Users/does-not-exist",
 			WithContentType(protocol.MediaType),
 		)
-		response := Response(t, ts, request)
+		response := Response(t, srv, request)
 
 		require.Equal(t, http.StatusNotFound, response.StatusCode)
 		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
@@ -346,12 +361,12 @@ func TestRFC7644(t *testing.T) {
 	})
 
 	t.Run("4.1 Service Provider Configuration", func(t *testing.T) {
-		ts := newTestServer(t, newUserResource())
+		srv := newTestServer(t, newUserResource())
 
-		request := Request(t, ts, http.MethodGet, basePath+"/ServiceProviderConfig",
+		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
 			WithContentType(protocol.MediaType),
 		)
-		response := Response(t, ts, request)
+		response := Response(t, srv, request)
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
@@ -366,12 +381,12 @@ func TestRFC7644(t *testing.T) {
 
 	t.Run("4.2 Resource Types", func(t *testing.T) {
 		t.Run("lists the registered resource types", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodGet, basePath+"/ResourceTypes",
+			request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes",
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			var list protocol.ListResponse[*core.ResourceType]
@@ -383,23 +398,23 @@ func TestRFC7644(t *testing.T) {
 		})
 
 		t.Run("fetches a resource type by id", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodGet, basePath+"/ResourceTypes/User",
+			request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User",
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			assert.Equal(t, http.StatusOK, response.StatusCode)
 		})
 
 		t.Run("returns 404 for an unknown resource type id", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodGet, basePath+"/ResourceTypes/Bogus",
+			request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/Bogus",
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
@@ -407,12 +422,12 @@ func TestRFC7644(t *testing.T) {
 
 	t.Run("4.3 Schemas", func(t *testing.T) {
 		t.Run("lists the registered schemas", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodGet, basePath+"/Schemas",
+			request := Request(t, srv, http.MethodGet, basePath+"/Schemas",
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			var list protocol.ListResponse[*core.Schema]
@@ -435,23 +450,23 @@ func TestRFC7644(t *testing.T) {
 		})
 
 		t.Run("fetches a schema by id", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodGet, basePath+"/Schemas/"+string(core.SchemaUser),
+			request := Request(t, srv, http.MethodGet, basePath+"/Schemas/"+string(core.SchemaUser),
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 
 			assert.Equal(t, http.StatusOK, response.StatusCode)
 		})
 
 		t.Run("returns 404 for an unknown schema id", func(t *testing.T) {
-			ts := newTestServer(t, newUserResource())
+			srv := newTestServer(t, newUserResource())
 
-			request := Request(t, ts, http.MethodGet, basePath+"/Schemas/urn:bogus",
+			request := Request(t, srv, http.MethodGet, basePath+"/Schemas/urn:bogus",
 				WithContentType(protocol.MediaType),
 			)
-			response := Response(t, ts, request)
+			response := Response(t, srv, request)
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
 	})
@@ -459,23 +474,23 @@ func TestRFC7644(t *testing.T) {
 
 func TestServerRouting(t *testing.T) {
 	t.Run("New with no resources still serves the discovery endpoints", func(t *testing.T) {
-		ts := newTestServer(t)
+		srv := newTestServer(t)
 
-		request := Request(t, ts, http.MethodGet, basePath+"/ServiceProviderConfig",
+		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
 			WithContentType(protocol.MediaType),
 		)
-		response := Response(t, ts, request)
+		response := Response(t, srv, request)
 
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 	})
 
 	t.Run("mounts every registered resource under the shared base path", func(t *testing.T) {
-		ts := newTestServer(t, newUserResource(), newGroupResource())
+		srv := newTestServer(t, newUserResource(), newGroupResource())
 
-		request := Request(t, ts, http.MethodGet, basePath+"/ResourceTypes",
+		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes",
 			WithContentType(protocol.MediaType),
 		)
-		response := Response(t, ts, request)
+		response := Response(t, srv, request)
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		var list protocol.ListResponse[*core.ResourceType]
@@ -490,23 +505,23 @@ func TestServerRouting(t *testing.T) {
 	})
 
 	t.Run("responds method not allowed when the path exists but the verb does not", func(t *testing.T) {
-		ts := newTestServer(t, newUserResource())
+		srv := newTestServer(t, newUserResource())
 
-		request := Request(t, ts, http.MethodDelete, basePath+"/Users",
+		request := Request(t, srv, http.MethodDelete, basePath+"/Users",
 			WithContentType(protocol.MediaType),
 		)
-		response := Response(t, ts, request)
+		response := Response(t, srv, request)
 
 		assert.Equal(t, http.StatusMethodNotAllowed, response.StatusCode)
 	})
 
 	t.Run("responds not found for a completely unknown path", func(t *testing.T) {
-		ts := newTestServer(t, newUserResource())
+		srv := newTestServer(t, newUserResource())
 
-		request := Request(t, ts, http.MethodGet, basePath+"/Bogus",
+		request := Request(t, srv, http.MethodGet, basePath+"/Bogus",
 			WithContentType(protocol.MediaType),
 		)
-		response := Response(t, ts, request)
+		response := Response(t, srv, request)
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
 	})
 }
@@ -520,22 +535,30 @@ func newTestServer(t *testing.T, resources ...server.Registration) *httptest.Ser
 	return Server(t, srv)
 }
 
-func readJSON(t *testing.T, response *http.Response, v any) {
+func readBody(t *testing.T, response *http.Response) []byte {
 	t.Helper()
-	require.NoError(t, json.NewDecoder(response.Body).Decode(v))
+
+	body, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+	return body
 }
 
-func createUser(t *testing.T, ts *httptest.Server, userName string) (id, etag string) {
+func readJSON(t *testing.T, response *http.Response, v any) {
+	t.Helper()
+	require.NoError(t, json.Unmarshal(readBody(t, response), v))
+}
+
+func createUser(t *testing.T, srv *httptest.Server, userName string) (id, etag string) {
 	t.Helper()
 
 	body, err := json.Marshal(core.User{UserName: userName})
 	require.NoError(t, err)
 
-	request := Request(t, ts, http.MethodPost, basePath+"/Users",
+	request := Request(t, srv, http.MethodPost, basePath+"/Users",
 		WithContentType(protocol.MediaType),
 		WithRequestBody(body),
 	)
-	response := Response(t, ts, request)
+	response := Response(t, srv, request)
 	require.Equal(t, http.StatusCreated, response.StatusCode)
 
 	var created core.User
@@ -549,7 +572,11 @@ func activatePatchBody(t *testing.T) []byte {
 	body, err := json.Marshal(protocol.PatchRequest{
 		Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
 		Operations: []patch.Operation{
-			{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")},
+			{
+				Op:    patch.OpReplace,
+				Path:  "active",
+				Value: json.RawMessage("true"),
+			},
 		},
 	})
 	require.NoError(t, err)
@@ -589,27 +616,9 @@ func userFields() server.Fields[*core.User] {
 			},
 		),
 		server.NewField[*core.User](core.NewAttribute("emails", core.TypeComplex).AsMultiValued(), nil).With(
-			server.NewField(core.NewAttribute("value", core.TypeString), func(u *core.User) any {
-				values := make([]any, len(u.Emails))
-				for i, e := range u.Emails {
-					values[i] = e.Value
-				}
-				return values
-			}),
-			server.NewField(core.NewAttribute("type", core.TypeString).Suggesting("work", "home", "other"), func(u *core.User) any {
-				values := make([]any, len(u.Emails))
-				for i, e := range u.Emails {
-					values[i] = e.Type
-				}
-				return values
-			}),
-			server.NewField(core.NewAttribute("primary", core.TypeBoolean), func(u *core.User) any {
-				values := make([]any, len(u.Emails))
-				for i, e := range u.Emails {
-					values[i] = e.Primary != nil && *e.Primary
-				}
-				return values
-			}),
+			server.NewField(core.NewAttribute("value", core.TypeString), func(u *core.User) any { return u.Emails }),
+			server.NewField(core.NewAttribute("type", core.TypeString).Suggesting("work", "home", "other"), func(u *core.User) any { return u.Emails }),
+			server.NewField(core.NewAttribute("primary", core.TypeBoolean), func(u *core.User) any { return u.Emails }),
 		),
 	)
 }
