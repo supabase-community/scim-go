@@ -540,14 +540,6 @@ func newTestServer(t *testing.T, resources ...server.Registration) *httptest.Ser
 	return Server(t, srv)
 }
 
-func readBody(t *testing.T, response *http.Response) []byte {
-	t.Helper()
-
-	body, err := io.ReadAll(response.Body)
-	require.NoError(t, err)
-	return body
-}
-
 func createUser(t *testing.T, srv *httptest.Server, userName string) (id, etag string) {
 	t.Helper()
 
