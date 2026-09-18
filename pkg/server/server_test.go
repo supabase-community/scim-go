@@ -25,7 +25,8 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodPost, basePath+"/Users",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithAcceptHeader(protocol.MediaType),
+				WithContentType(protocol.MediaType),
 				WithRequestBody([]byte(`{"userName":"bjensen"}`)),
 			)
 			response := Response(t, ts, request)
@@ -58,7 +59,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 			id, etag := createUser(t, ts, "bjensen")
 
-			request := Request(t, ts, http.MethodGet, basePath+"/Users/"+id, WithRequestHeader("Content-Type", protocol.MediaType))
+			request := Request(t, ts, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType))
 			response := Response(t, ts, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
@@ -72,7 +73,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodGet, basePath+"/Users/does-not-exist",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -88,7 +89,7 @@ func TestRFC7644(t *testing.T) {
 			createUser(t, ts, "carol")
 
 			request := Request(t, ts, http.MethodGet, basePath+"/Users",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -106,7 +107,7 @@ func TestRFC7644(t *testing.T) {
 
 			path := basePath + "/Users?" + url.Values{"startIndex": {"2"}, "count": {"1"}}.Encode()
 			request := Request(t, ts, http.MethodGet, path,
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -128,7 +129,7 @@ func TestRFC7644(t *testing.T) {
 
 			path := basePath + "/Users?" + url.Values{"filter": {`userName eq "alice"`}}.Encode()
 			request := Request(t, ts, http.MethodGet, path,
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -144,7 +145,7 @@ func TestRFC7644(t *testing.T) {
 
 			path := basePath + "/Users?" + url.Values{"filter": {`bogus eq "x"`}}.Encode()
 			request := Request(t, ts, http.MethodGet, path,
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -173,8 +174,8 @@ func TestRFC7644(t *testing.T) {
 			id, etag := createUser(t, ts, "bjensen")
 
 			request := Request(t, ts, http.MethodPut, basePath+"/Users/"+id,
-				WithRequestHeader("Content-Type", protocol.MediaType),
-				WithRequestHeader("If-Match", etag),
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", etag),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
 			)
 			response := Response(t, ts, request)
@@ -195,7 +196,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := createUser(t, ts, "bjensen")
 
 			request := Request(t, ts, http.MethodPut, basePath+"/Users/"+id,
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
 			)
 			response := Response(t, ts, request)
@@ -208,8 +209,8 @@ func TestRFC7644(t *testing.T) {
 			id, _ := createUser(t, ts, "bjensen")
 
 			request := Request(t, ts, http.MethodPut, basePath+"/Users/"+id,
-				WithRequestHeader("Content-Type", protocol.MediaType),
-				WithRequestHeader("If-Match", `W/"stale"`),
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", `W/"stale"`),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
 			)
 			response := Response(t, ts, request)
@@ -221,7 +222,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodPut, basePath+"/Users/does-not-exist",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 				WithRequestBody([]byte(`{"userName":"bjensen"}`)),
 			)
 			response := Response(t, ts, request)
@@ -236,7 +237,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := createUser(t, ts, "bjensen")
 
 			request := Request(t, ts, http.MethodPatch, basePath+"/Users/"+id,
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 				WithRequestBody(activatePatchBody(t)),
 			)
 			response := Response(t, ts, request)
@@ -253,7 +254,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodPatch, basePath+"/Users/does-not-exist",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 				WithRequestBody(activatePatchBody(t)),
 			)
 			response := Response(t, ts, request)
@@ -276,7 +277,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := createUser(t, ts, "bjensen")
 
 			request := Request(t, ts, http.MethodDelete, basePath+"/Users/"+id,
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 			require.Equal(t, http.StatusNoContent, response.StatusCode)
@@ -284,7 +285,7 @@ func TestRFC7644(t *testing.T) {
 			require.NoError(t, err)
 			assert.Empty(t, body)
 
-			getResp := Response(t, ts, Request(t, ts, http.MethodGet, basePath+"/Users/"+id, WithRequestHeader("Content-Type", protocol.MediaType)))
+			getResp := Response(t, ts, Request(t, ts, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType)))
 			assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
 		})
 
@@ -293,14 +294,14 @@ func TestRFC7644(t *testing.T) {
 			id, _ := createUser(t, ts, "bjensen")
 
 			request := Request(t, ts, http.MethodDelete, basePath+"/Users/"+id,
-				WithRequestHeader("Content-Type", protocol.MediaType),
-				WithRequestHeader("If-Match", `W/"stale"`),
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", `W/"stale"`),
 			)
 			response := Response(t, ts, request)
 			assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 
 			request = Request(t, ts, http.MethodGet, basePath+"/Users/"+id,
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response = Response(t, ts, request)
 			assert.Equal(t, http.StatusOK, response.StatusCode)
@@ -310,7 +311,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodDelete, basePath+"/Users/does-not-exist",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
@@ -325,7 +326,7 @@ func TestRFC7644(t *testing.T) {
 		ts := newTestServer(t, newUserResource())
 
 		request := Request(t, ts, http.MethodGet, basePath+"/Users/does-not-exist",
-			WithRequestHeader("Content-Type", protocol.MediaType),
+			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, ts, request)
 
@@ -348,7 +349,7 @@ func TestRFC7644(t *testing.T) {
 		ts := newTestServer(t, newUserResource())
 
 		request := Request(t, ts, http.MethodGet, basePath+"/ServiceProviderConfig",
-			WithRequestHeader("Content-Type", protocol.MediaType),
+			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, ts, request)
 
@@ -368,7 +369,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodGet, basePath+"/ResourceTypes",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -385,7 +386,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodGet, basePath+"/ResourceTypes/User",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -396,7 +397,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodGet, basePath+"/ResourceTypes/Bogus",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -409,7 +410,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodGet, basePath+"/Schemas",
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -437,7 +438,7 @@ func TestRFC7644(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
 			request := Request(t, ts, http.MethodGet, basePath+"/Schemas/"+string(core.SchemaUser),
-				WithRequestHeader("Content-Type", protocol.MediaType),
+				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, ts, request)
 
@@ -447,7 +448,10 @@ func TestRFC7644(t *testing.T) {
 		t.Run("returns 404 for an unknown schema id", func(t *testing.T) {
 			ts := newTestServer(t, newUserResource())
 
-			response := execute(t, ts, http.MethodGet, "/Schemas/urn:bogus", nil, nil)
+			request := Request(t, ts, http.MethodGet, basePath+"/Schemas/urn:bogus",
+				WithContentType(protocol.MediaType),
+			)
+			response := Response(t, ts, request)
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
 	})
@@ -458,7 +462,7 @@ func TestServerRouting(t *testing.T) {
 		ts := newTestServer(t)
 
 		request := Request(t, ts, http.MethodGet, basePath+"/ServiceProviderConfig",
-			WithRequestHeader("Content-Type", protocol.MediaType),
+			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, ts, request)
 
@@ -469,7 +473,7 @@ func TestServerRouting(t *testing.T) {
 		ts := newTestServer(t, newUserResource(), newGroupResource())
 
 		request := Request(t, ts, http.MethodGet, basePath+"/ResourceTypes",
-			WithRequestHeader("Content-Type", protocol.MediaType),
+			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, ts, request)
 
@@ -489,7 +493,7 @@ func TestServerRouting(t *testing.T) {
 		ts := newTestServer(t, newUserResource())
 
 		request := Request(t, ts, http.MethodDelete, basePath+"/Users",
-			WithRequestHeader("Content-Type", protocol.MediaType),
+			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, ts, request)
 
@@ -500,7 +504,7 @@ func TestServerRouting(t *testing.T) {
 		ts := newTestServer(t, newUserResource())
 
 		request := Request(t, ts, http.MethodGet, basePath+"/Bogus",
-			WithRequestHeader("Content-Type", protocol.MediaType),
+			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, ts, request)
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
@@ -516,12 +520,6 @@ func newTestServer(t *testing.T, resources ...server.Registration) *httptest.Ser
 	return Server(t, srv)
 }
 
-func execute(t *testing.T, ts *httptest.Server, method, path string, body []byte, headers map[string]string) *http.Response {
-	t.Helper()
-
-	return Response(t, ts, Request(t, ts, method, basePath+path, WithRequestBody(body), WithRequestHeaders(headers)))
-}
-
 func readJSON(t *testing.T, response *http.Response, v any) {
 	t.Helper()
 	require.NoError(t, json.NewDecoder(response.Body).Decode(v))
@@ -530,7 +528,14 @@ func readJSON(t *testing.T, response *http.Response, v any) {
 func createUser(t *testing.T, ts *httptest.Server, userName string) (id, etag string) {
 	t.Helper()
 
-	response := execute(t, ts, http.MethodPost, "/Users", []byte(`{"userName":"`+userName+`"}`), map[string]string{"Content-Type": protocol.MediaType})
+	body, err := json.Marshal(core.User{UserName: userName})
+	require.NoError(t, err)
+
+	request := Request(t, ts, http.MethodPost, basePath+"/Users",
+		WithContentType(protocol.MediaType),
+		WithRequestBody(body),
+	)
+	response := Response(t, ts, request)
 	require.Equal(t, http.StatusCreated, response.StatusCode)
 
 	var created core.User

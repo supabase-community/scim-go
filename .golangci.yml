@@ -41,6 +41,7 @@ linters:
           - dupl
           - funlen
           - goconst
+          - gosec
           - revive
       - linters:
           - revive

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
 type Option[T any] func(T) T
@@ -44,21 +45,16 @@ func Server(t *testing.T, handler http.Handler) *httptest.Server {
 }
 
 func WithAcceptHeader(value string) Option[*http.Request] {
-	return WithRequestHeader("Accept", value)
+	return WithHeader("Accept", value)
 }
 
-func WithRequestHeader(key, value string) Option[*http.Request] {
+func WithContentType(value string) Option[*http.Request] {
+	return WithHeader("Content-Type", protocol.MediaType)
+}
+
+func WithHeader(key, value string) Option[*http.Request] {
 	return func(r *http.Request) *http.Request {
 		r.Header.Set(key, value)
-		return r
-	}
-}
-
-func WithRequestHeaders(headers map[string]string) Option[*http.Request] {
-	return func(r *http.Request) *http.Request {
-		for key, value := range headers {
-			r = WithRequestHeader(key, value)(r)
-		}
 		return r
 	}
 }
