@@ -33,6 +33,7 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusCreated, response.StatusCode)
+			assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
 			user := ReadBodyAs[*core.User](t, response)
 			assert.Equal(t, basePath+"/Users/"+user.ID, response.Header.Get("Location"))
 			assert.NotEmpty(t, response.Header.Get("ETag"))
@@ -130,6 +131,20 @@ func TestRFC7644(t *testing.T) {
 			assert.Equal(t, 1, list.ItemsPerPage)
 			require.Len(t, list.Resources, 1)
 			assert.Equal(t, "bob", list.Resources[0].UserName)
+		})
+
+		t.Run("returns an empty list when there are no resources", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+
+			request := Request(t, srv, http.MethodGet, basePath+"/Users",
+				WithContentType(protocol.MediaType),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			assert.Equal(t, 0, list.TotalResults)
+			assert.Empty(t, list.Resources)
 		})
 	})
 
@@ -403,8 +418,52 @@ func TestRFC7644(t *testing.T) {
 			assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 		})
 
-		t.Run("does not exercise add/remove operations end-to-end", func(t *testing.T) {
-			t.Skip("add/remove ops are unit-tested in pkg/patch but not exercised through the live server")
+		t.Run("adds a value with an add operation", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{
+						{
+							Op:    patch.OpAdd,
+							Path:  "name.givenName",
+							Value: json.RawMessage(`"Barbara"`),
+						},
+					},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			patched := ReadBodyAs[core.User](t, response)
+			assert.Equal(t, "Barbara", patched.Name.GivenName)
+		})
+
+		t.Run("removes a value with a remove operation", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			active := true
+			id, _ := create(t, srv, &core.User{UserName: "bjensen", Active: &active})
+
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{
+						{
+							Op:   patch.OpRemove,
+							Path: "active",
+						},
+					},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			patched := ReadBodyAs[core.User](t, response)
+			assert.Nil(t, patched.Active)
 		})
 	})
 
@@ -421,6 +480,21 @@ func TestRFC7644(t *testing.T) {
 			body, err := io.ReadAll(response.Body)
 			require.NoError(t, err)
 			assert.Empty(t, body)
+
+			getResp := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType)))
+			assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
+		})
+
+		t.Run("deletes a resource when If-Match matches", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", etag),
+			)
+			response := Response(t, srv, request)
+			assert.Equal(t, http.StatusNoContent, response.StatusCode)
 
 			getResp := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType)))
 			assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
@@ -572,7 +646,11 @@ func TestRFC7644(t *testing.T) {
 			)
 			response := Response(t, srv, request)
 
-			assert.Equal(t, http.StatusOK, response.StatusCode)
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			resourceType := ReadBodyAs[core.ResourceType](t, response)
+			assert.Equal(t, core.ResourceTypeName("User"), resourceType.ID)
+			assert.Equal(t, basePath+"/Users", resourceType.Endpoint)
+			assert.Equal(t, core.SchemaUser, resourceType.Schema)
 		})
 
 		t.Run("returns 404 for an unknown resource type id", func(t *testing.T) {
@@ -623,7 +701,9 @@ func TestRFC7644(t *testing.T) {
 			)
 			response := Response(t, srv, request)
 
-			assert.Equal(t, http.StatusOK, response.StatusCode)
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			schema := ReadBodyAs[core.Schema](t, response)
+			assert.Equal(t, core.SchemaUser, schema.ID)
 		})
 
 		t.Run("returns 404 for an unknown schema id", func(t *testing.T) {
