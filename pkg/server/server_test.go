@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -477,7 +478,55 @@ func TestRFC7644(t *testing.T) {
 	})
 
 	t.Run("3.14 ETags", func(t *testing.T) {
-		t.Skip("ETag/If-Match work end-to-end for PUT/DELETE, but ServiceProviderConfig never calls .ETag() so etag.supported is false -- the SPC under-claims here, the mirror of the 3.4.2.3 sorting gap which over-claims")
+		t.Run("issues a weak ETag", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			_, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+			assert.True(t, strings.HasPrefix(etag, `W/"`))
+		})
+
+		t.Run("meta.version matches the ETag header on create", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+
+			request := Request(t, srv, http.MethodPost, basePath+"/Users",
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusCreated, response.StatusCode)
+			created := ReadBodyAs[core.User](t, response)
+			assert.Equal(t, response.Header.Get("ETag"), created.Meta.Version)
+		})
+
+		t.Run("meta.version matches the ETag header on replace", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", etag),
+				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			replaced := ReadBodyAs[core.User](t, response)
+			assert.Equal(t, response.Header.Get("ETag"), replaced.Meta.Version)
+		})
+
+		t.Run("advertises etag support in ServiceProviderConfig", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+
+			request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
+				WithContentType(protocol.MediaType),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			config := ReadBodyAs[core.ServiceProviderConfig](t, response)
+			assert.True(t, config.ETag.Supported)
+		})
 	})
 
 	t.Run("4.1 Service Provider Configuration", func(t *testing.T) {

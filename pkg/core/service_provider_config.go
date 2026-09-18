@@ -56,3 +56,9 @@ func (c *ServiceProviderConfig) Patching() *ServiceProviderConfig {
 	c.Patch.Supported = true
 	return c
 }
+
+// Versioning states that this provider issues resource versions via ETags, per RFC 7644, Section 3.14.
+func (c *ServiceProviderConfig) Versioning() *ServiceProviderConfig {
+	c.ETag.Supported = true
+	return c
+}

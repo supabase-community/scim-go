@@ -24,7 +24,7 @@ func New(basePath string, resources ...Registration) (*Server, error) {
 		resource.mount(mux, basePath)
 	}
 
-	config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching()
+	config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning()
 
 	mux.HandleFunc("GET "+basePath+"/ServiceProviderConfig", func(w http.ResponseWriter, _ *http.Request) {
 		_ = protocol.Send(w, http.StatusOK, config)

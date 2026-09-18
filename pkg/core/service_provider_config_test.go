@@ -22,12 +22,13 @@ func TestNewServiceProviderConfig(t *testing.T) {
 	})
 
 	t.Run("the builders announce the features the provider honours", func(t *testing.T) {
-		config := core.NewServiceProviderConfig().Patching().Sorting().Filtering(200)
+		config := core.NewServiceProviderConfig().Patching().Sorting().Filtering(200).Versioning()
 
 		assert.True(t, config.Patch.Supported)
 		assert.True(t, config.Sort.Supported)
 		assert.True(t, config.Filter.Supported)
 		assert.Equal(t, 200, config.Filter.MaxResults)
+		assert.True(t, config.ETag.Supported)
 	})
 
 	t.Run("serializes to JSON correctly", func(t *testing.T) {
