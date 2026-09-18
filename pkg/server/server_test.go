@@ -48,7 +48,8 @@ func TestRFC7644(t *testing.T) {
 		t.Run("rejects a malformed JSON body", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
 
-			response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBody([]byte(`{`))))
+			request := Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBody([]byte(`{`)))
+			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
 			scimErr := ReadBodyAs[scimerrors.Error](t, response)
@@ -66,9 +67,7 @@ func TestRFC7644(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			assert.Equal(t, etag, response.Header.Get("ETag"))
-
-			got := ReadBodyAs[core.User](t, response)
-			assert.Equal(t, "bjensen", got.UserName)
+			assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
 		})
 
 		t.Run("returns 404 for an unknown id", func(t *testing.T) {
@@ -80,6 +79,13 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
+			body, err := io.ReadAll(response.Body)
+			require.NoError(t, err)
+			assert.JSONEq(t, `{
+				"schemas": ["urn:ietf:params:scim:api:messages:2.0:Error"],
+				"status": "404",
+				"detail": "Not found"
+			}`, string(body))
 		})
 	})
 
@@ -98,6 +104,11 @@ func TestRFC7644(t *testing.T) {
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 			assert.Equal(t, 3, list.TotalResults)
+			assert.Equal(t, "alice", list.Resources[0].UserName)
+			assert.Equal(t, []core.SchemaURI{core.SchemaUser}, list.Resources[0].Schemas)
+			assert.NotEmpty(t, list.Resources[0].Meta.Location)
+			assert.Equal(t, "bob", list.Resources[1].UserName)
+			assert.Equal(t, "carol", list.Resources[2].UserName)
 		})
 
 		t.Run("paginates with startIndex and count", func(t *testing.T) {
@@ -149,8 +160,7 @@ func TestRFC7644(t *testing.T) {
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
-			scimErr := ReadBodyAs[scimerrors.Error](t, response)
-			assert.Equal(t, scimerrors.InvalidFilter, scimErr.ScimType)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 		})
 	})
 

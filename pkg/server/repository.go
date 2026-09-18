@@ -42,7 +42,7 @@ func (r *repository[T]) Get(_ context.Context, id string) (T, error) {
 		}
 	}
 	var zero T
-	return zero, scimerrors.ErrNotFound("resource " + id + " not found")
+	return zero, scimerrors.ErrNotFound("Not found")
 }
 
 func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
@@ -90,7 +90,7 @@ func (r *repository[T]) Replace(ctx context.Context, item T) (T, error) {
 		if existing.ResourceID() == id {
 			if version != "" && existing.GetMeta().Version != version {
 				var zero T
-				return zero, scimerrors.ErrPreconditionFailed("resource " + id + " has changed on the server")
+				return zero, scimerrors.ErrPreconditionFailed("resource has changed on the server")
 			}
 			meta := existing.GetMeta()
 			now := time.Now().UTC()
@@ -104,20 +104,20 @@ func (r *repository[T]) Replace(ctx context.Context, item T) (T, error) {
 		}
 	}
 	var zero T
-	return zero, scimerrors.ErrNotFound("resource " + id + " not found")
+	return zero, scimerrors.ErrNotFound("Not found")
 }
 
 func (r *repository[T]) Delete(_ context.Context, id string, version string) error {
 	for i, existing := range r.items {
 		if existing.ResourceID() == id {
 			if version != "" && existing.GetMeta().Version != version {
-				return scimerrors.ErrPreconditionFailed("resource " + id + " has changed on the server")
+				return scimerrors.ErrPreconditionFailed("resource has changed on the server")
 			}
 			r.items = slices.Delete(r.items, i, i+1)
 			return nil
 		}
 	}
-	return scimerrors.ErrNotFound("resource " + id + " not found")
+	return scimerrors.ErrNotFound("Not found")
 }
 
 // weakETag formats a version per RFC 7644 3.14's worked example: a quoted weak entity-tag.
