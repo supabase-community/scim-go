@@ -9,7 +9,10 @@ type Field[T Entity] struct {
 }
 
 func NewField[T Entity](attribute *core.Attribute, accessor Accessor[T]) *Field[T] {
-	return &Field[T]{Attribute: attribute, accessor: accessor}
+	return &Field[T]{
+		Attribute: attribute,
+		accessor:  accessor,
+	}
 }
 
 func (f *Field[T]) With(children ...*Field[T]) *Field[T] {
