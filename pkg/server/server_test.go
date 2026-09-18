@@ -27,7 +27,7 @@ func TestRFC7644(t *testing.T) {
 			request := Request(t, srv, http.MethodPost, basePath+"/Users",
 				WithAcceptHeader(protocol.MediaType),
 				WithContentType(protocol.MediaType),
-				WithRequestBody([]byte(`{"userName":"bjensen"}`)),
+				WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
 			)
 			response := Response(t, srv, request)
 
@@ -625,6 +625,7 @@ func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag strin
 	t.Helper()
 
 	request := Request(t, srv, http.MethodPost, basePath+"/Users",
+		WithAcceptHeader(protocol.MediaType),
 		WithContentType(protocol.MediaType),
 		WithRequestBodyAs(t, user),
 	)
