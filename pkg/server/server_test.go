@@ -60,7 +60,7 @@ func TestRFC7644(t *testing.T) {
 	t.Run("3.4.1 Retrieving a Known Resource", func(t *testing.T) {
 		t.Run("gets a created resource by id", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			id, etag := createUser(t, srv, "bjensen")
+			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType))
 			response := Response(t, srv, request)
@@ -92,9 +92,9 @@ func TestRFC7644(t *testing.T) {
 	t.Run("3.4.2 Query Resources", func(t *testing.T) {
 		t.Run("lists all created resources", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			createUser(t, srv, "alice")
-			createUser(t, srv, "bob")
-			createUser(t, srv, "carol")
+			create(t, srv, &core.User{UserName: "alice"})
+			create(t, srv, &core.User{UserName: "bob"})
+			create(t, srv, &core.User{UserName: "carol"})
 
 			request := Request(t, srv, http.MethodGet, basePath+"/Users",
 				WithContentType(protocol.MediaType),
@@ -113,9 +113,9 @@ func TestRFC7644(t *testing.T) {
 
 		t.Run("paginates with startIndex and count", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			createUser(t, srv, "alice")
-			createUser(t, srv, "bob")
-			createUser(t, srv, "carol")
+			create(t, srv, &core.User{UserName: "alice"})
+			create(t, srv, &core.User{UserName: "bob"})
+			create(t, srv, &core.User{UserName: "carol"})
 
 			path := basePath + "/Users?" + url.Values{"startIndex": {"2"}, "count": {"1"}}.Encode()
 			request := Request(t, srv, http.MethodGet, path,
@@ -135,8 +135,8 @@ func TestRFC7644(t *testing.T) {
 	t.Run("3.4.2.2 Filtering", func(t *testing.T) {
 		t.Run("filters resources by an exact match on userName", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			createUser(t, srv, "alice")
-			createUser(t, srv, "bob")
+			create(t, srv, &core.User{UserName: "alice"})
+			create(t, srv, &core.User{UserName: "bob"})
 
 			path := basePath + "/Users?" + url.Values{"filter": {`userName eq "alice"`}}.Encode()
 			request := Request(t, srv, http.MethodGet, path,
@@ -165,7 +165,88 @@ func TestRFC7644(t *testing.T) {
 	})
 
 	t.Run("3.4.2.3 Sorting", func(t *testing.T) {
-		t.Skip("sortBy/sortOrder are parsed by protocol.ParseSearchRequest but pkg/server/repository.go List never sorts; ServiceProviderConfig still advertises sort.supported=true")
+		t.Run("sorts ascending by default when only sortBy is given", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			create(t, srv, &core.User{UserName: "alice"})
+			create(t, srv, &core.User{UserName: "bob"})
+			create(t, srv, &core.User{UserName: "carol"})
+
+			path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Len(t, list.Resources, 3)
+			assert.Equal(t, "alice", list.Resources[0].UserName)
+			assert.Equal(t, "bob", list.Resources[1].UserName)
+			assert.Equal(t, "carol", list.Resources[2].UserName)
+		})
+
+		t.Run("sorts descending when sortOrder is descending", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			create(t, srv, &core.User{UserName: "alice"})
+			create(t, srv, &core.User{UserName: "bob"})
+			create(t, srv, &core.User{UserName: "carol"})
+
+			path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}, "sortOrder": {"descending"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Len(t, list.Resources, 3)
+			assert.Equal(t, "carol", list.Resources[0].UserName)
+			assert.Equal(t, "bob", list.Resources[1].UserName)
+			assert.Equal(t, "alice", list.Resources[2].UserName)
+		})
+
+		t.Run("sorts by a nested sub-attribute", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			create(t, srv, &core.User{UserName: "u1", Name: core.Name{GivenName: "Zoe"}})
+			create(t, srv, &core.User{UserName: "u2", Name: core.Name{GivenName: "Amy"}})
+
+			path := basePath + "/Users?" + url.Values{"sortBy": {"name.givenName"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Len(t, list.Resources, 2)
+			assert.Equal(t, "u2", list.Resources[0].UserName)
+			assert.Equal(t, "u1", list.Resources[1].UserName)
+		})
+
+		t.Run("resources missing the sort attribute sort last regardless of order", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+			create(t, srv, &core.User{UserName: "no-name"})
+			create(t, srv, &core.User{UserName: "has-name", Name: core.Name{GivenName: "Amy"}})
+
+			path := basePath + "/Users?" + url.Values{"sortBy": {"name.givenName"}, "sortOrder": {"descending"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Len(t, list.Resources, 2)
+			assert.Equal(t, "has-name", list.Resources[0].UserName)
+			assert.Equal(t, "no-name", list.Resources[1].UserName)
+		})
+
+		t.Run("rejects sortBy on an attribute that is not known", func(t *testing.T) {
+			srv := newTestServer(t, newUserResource())
+
+			path := basePath + "/Users?" + url.Values{"sortBy": {"bogus"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("sorts by the primary value of a multi-valued attribute", func(t *testing.T) {
+			t.Skip("sortBy on a multi-valued attribute (e.g. emails.value) is rejected as unsupported; primary-or-first selection needs a per-element accessor redesign in pkg/server (see the ValuePath stub in visitor.go)")
+		})
 	})
 
 	t.Run("3.4.3 Alternative Query with POST /.search", func(t *testing.T) {
@@ -179,7 +260,7 @@ func TestRFC7644(t *testing.T) {
 	t.Run("3.5.1 Replacing with PUT", func(t *testing.T) {
 		t.Run("replaces a resource and returns a new ETag when If-Match matches", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			id, etag := createUser(t, srv, "bjensen")
+			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
@@ -200,7 +281,7 @@ func TestRFC7644(t *testing.T) {
 
 		t.Run("replaces a resource even without If-Match", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			id, _ := createUser(t, srv, "bjensen")
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
@@ -213,7 +294,7 @@ func TestRFC7644(t *testing.T) {
 
 		t.Run("rejects a replace with a stale If-Match", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			id, _ := createUser(t, srv, "bjensen")
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
@@ -241,7 +322,7 @@ func TestRFC7644(t *testing.T) {
 	t.Run("3.5.2 Modifying with PATCH", func(t *testing.T) {
 		t.Run("patches a resource and returns the updated field with an ETag", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			id, _ := createUser(t, srv, "bjensen")
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
@@ -299,7 +380,7 @@ func TestRFC7644(t *testing.T) {
 	t.Run("3.6 Deleting Resources", func(t *testing.T) {
 		t.Run("deletes a resource and it is subsequently gone", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			id, _ := createUser(t, srv, "bjensen")
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
@@ -316,7 +397,7 @@ func TestRFC7644(t *testing.T) {
 
 		t.Run("rejects a delete with a stale If-Match and leaves the resource intact", func(t *testing.T) {
 			srv := newTestServer(t, newUserResource())
-			id, _ := createUser(t, srv, "bjensen")
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
 				WithContentType(protocol.MediaType),
@@ -540,12 +621,12 @@ func newTestServer(t *testing.T, resources ...server.Registration) *httptest.Ser
 	return Server(t, srv)
 }
 
-func createUser(t *testing.T, srv *httptest.Server, userName string) (id, etag string) {
+func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag string) {
 	t.Helper()
 
 	request := Request(t, srv, http.MethodPost, basePath+"/Users",
 		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, core.User{UserName: userName}),
+		WithRequestBodyAs(t, user),
 	)
 	response := Response(t, srv, request)
 	require.Equal(t, http.StatusCreated, response.StatusCode)

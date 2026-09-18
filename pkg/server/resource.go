@@ -101,7 +101,7 @@ func (c *Resource[T]) build(basePath string) Controller[T] {
 	if service == nil {
 		repository := c.repository
 		if repository == nil {
-			repository = NewRepository[T](c.schema(basePath), NewVisitor[T](c.fields.Accessors()))
+			repository = NewRepository[T](c.schema(basePath), c.fields.Accessors())
 		}
 		service = NewService[T](repository, c.validators...)
 	}

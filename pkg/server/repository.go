@@ -1,13 +1,16 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -24,14 +27,16 @@ type Repository[T Entity] interface {
 type repository[T Entity] struct {
 	schema    *core.Schema
 	items     []T
+	accessors Accessors[T]
 	evaluator protocol.Evaluator[specification[T]]
 }
 
-func NewRepository[T Entity](schemas *core.Schema, evaluator protocol.Evaluator[specification[T]]) Repository[T] {
+func NewRepository[T Entity](schema *core.Schema, accessors Accessors[T]) Repository[T] {
 	return &repository[T]{
-		schema:    schemas,
+		schema:    schema,
 		items:     []T{},
-		evaluator: evaluator,
+		accessors: accessors,
+		evaluator: NewVisitor[T](accessors),
 	}
 }
 
@@ -46,19 +51,9 @@ func (r *repository[T]) Get(_ context.Context, id string) (T, error) {
 }
 
 func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
-	matching := r.items
-
-	if query.Filter != "" {
-		predicate, err := protocol.Filter([]*core.Schema{r.schema}, query.Filter, r.evaluator)
-		if err != nil {
-			return []T{}, 0, err
-		}
-		matching = []T{}
-		for _, item := range r.items {
-			if predicate(item) {
-				matching = append(matching, item)
-			}
-		}
+	matching, err := r.sortBy(query)
+	if err != nil {
+		return []T{}, 0, err
 	}
 
 	total := len(matching)
@@ -120,7 +115,137 @@ func (r *repository[T]) Delete(_ context.Context, id string, version string) err
 	return scimerrors.ErrNotFound("Not found")
 }
 
-// weakETag formats a version per RFC 7644 3.14's worked example: a quoted weak entity-tag.
+func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]T, error) {
+	if query.Filter == "" {
+		return r.items, nil
+	}
+
+	predicate, err := protocol.Filter([]*core.Schema{r.schema}, query.Filter, r.evaluator)
+	if err != nil {
+		return []T{}, err
+	}
+	matching := []T{}
+	for _, item := range r.items {
+		if predicate(item) {
+			matching = append(matching, item)
+		}
+	}
+	return matching, nil
+}
+
+func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
+	matching, err := r.filterBy(query)
+	if err != nil {
+		return []T{}, err
+	}
+	if query.SortBy == "" {
+		return matching, nil
+	}
+
+	path, err := filter.NewAttrPath(query.SortBy)
+	if err != nil {
+		return []T{}, scimerrors.ErrInvalidValue(err.Error())
+	}
+
+	attribute, ok := r.schema.Resolve(path.Name)
+	if !ok {
+		return []T{}, scimerrors.ErrInvalidValue("Unknown sortBy")
+	}
+
+	if path.SubAttribute != "" {
+		attribute = attribute.SubAttribute(path.SubAttribute)
+	}
+
+	if err != nil {
+		return []T{}, err
+	}
+	accessor, ok := r.accessors[attribute]
+	if !ok {
+		return []T{}, scimerrors.ErrInvalidValue("Unknown sortBy")
+	}
+	slices.SortStableFunc(matching, func(a, b T) int {
+		return compareSortKeys(accessor(a), accessor(b), attribute.CaseExact, query.Descending())
+	})
+
+	return matching, nil
+}
+
+func compareSortKeys(a, b any, caseExact, descending bool) int {
+	aMissing, bMissing := isMissingSortValue(a), isMissingSortValue(b)
+	switch {
+	case aMissing && bMissing:
+		return 0
+	case aMissing:
+		return 1
+	case bMissing:
+		return -1
+	}
+
+	result := compareSortValue(a, b, caseExact)
+	if descending {
+		result = -result
+	}
+	return result
+}
+
+func isMissingSortValue(value any) bool {
+	switch v := value.(type) {
+	case nil:
+		return true
+	case string:
+		return v == ""
+	default:
+		return false
+	}
+}
+
+func compareSortValue(a, b any, caseExact bool) int {
+	switch av := a.(type) {
+	case string:
+		bv, ok := b.(string)
+		if !ok {
+			return 0
+		}
+		if !caseExact {
+			av, bv = strings.ToLower(av), strings.ToLower(bv)
+		}
+		return cmp.Compare(av, bv)
+	case bool:
+		bv, ok := b.(bool)
+		if !ok {
+			return 0
+		}
+		return cmp.Compare(boolSortRank(av), boolSortRank(bv))
+	case int64:
+		bv, ok := b.(int64)
+		if !ok {
+			return 0
+		}
+		return cmp.Compare(av, bv)
+	case float64:
+		bv, ok := b.(float64)
+		if !ok {
+			return 0
+		}
+		return cmp.Compare(av, bv)
+	case time.Time:
+		bv, ok := b.(time.Time)
+		if !ok {
+			return 0
+		}
+		return av.Compare(bv)
+	default:
+		return 0
+	}
+}
+
+func boolSortRank(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
 func weakETag(t time.Time) string {
 	return `W/"` + strconv.FormatInt(t.Unix(), 10) + `"`
 }
