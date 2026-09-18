@@ -156,9 +156,6 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
 		attribute = attribute.SubAttribute(path.SubAttribute)
 	}
 
-	if err != nil {
-		return []T{}, err
-	}
 	accessor, ok := r.accessors[attribute]
 	if !ok {
 		return []T{}, scimerrors.ErrInvalidValue("Unknown sortBy")
