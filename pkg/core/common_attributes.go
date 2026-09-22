@@ -12,3 +12,8 @@ var commonAttributes = Attributes{
 		NewAttribute("version", TypeString).AsCaseExact().AsReadOnly(),
 	),
 }
+
+func CommonAttribute(name string) (*Attribute, bool) {
+	attribute := commonAttributes.Lookup(name)
+	return attribute, attribute != nil
+}
