@@ -23,6 +23,10 @@ func main() {
 			NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields()).
 			WithDescription("User Account").
 			WithErrorHandler(errorHandler),
+		server.
+			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields()).
+			WithDescription("Group").
+			WithErrorHandler(errorHandler),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -98,6 +102,15 @@ func newUserFields() server.Fields[*core.User] {
 				}
 				return values
 			}),
+		),
+	)
+}
+
+func newGroupFields() server.Fields[*core.Group] {
+	return server.NewFields(
+		server.NewField(
+			core.NewAttribute("displayName", core.TypeString).AsRequired(),
+			func(g *core.Group) any { return g.DisplayName },
 		),
 	)
 }
