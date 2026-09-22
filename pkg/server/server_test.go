@@ -777,6 +777,11 @@ func TestRFC7644Sorting(t *testing.T) {
 	})
 }
 
+// 3.4.2.5 Attributes
+func TestRFC7644Attributes(t *testing.T) {
+	t.Skip("attributes/excludedAttributes are parsed into SearchRequest but never applied to List/Get responses")
+}
+
 // 3.4.3 Alternative Query with POST /.search
 func TestRFC7644AlternativeQueryWithPOSTSearch(t *testing.T) {
 	t.Skip("POST /.search is not registered by server.New; falls through to the generic unknown-path 404")
@@ -1198,17 +1203,12 @@ func TestRFC7644DeletingResources(t *testing.T) {
 	})
 }
 
-// 3.9 Attributes and excludedAttributes
-func TestRFC7644AttributesAndExcludedAttributes(t *testing.T) {
-	t.Skip("attributes/excludedAttributes are parsed into SearchRequest but never applied to List/Get responses")
-}
-
 // 3.11 Singular Resource /Me
 func TestRFC7644SingularResourceMe(t *testing.T) {
 	t.Skip("/Me is not implemented by server.New; requests to it 404 through the generic unknown-path behavior")
 }
 
-// 3.12 SCIM Errors
+// 3.12 HTTP Status and Error Response Handling
 func TestRFC7644SCIMErrors(t *testing.T) {
 	srv := newTestServer(t)
 
@@ -1228,7 +1228,7 @@ func TestRFC7644SCIMErrors(t *testing.T) {
 	assert.NotEmpty(t, scimErr.Detail)
 }
 
-// 3.14 ETags
+// 3.14 Versioning Resources
 func TestRFC7644ETags(t *testing.T) {
 	t.Run("issues a weak ETag", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -1284,7 +1284,7 @@ func TestRFC7644ETags(t *testing.T) {
 	})
 }
 
-// 4.1 Service Provider Configuration
+// 4. Service Provider Configuration Endpoints (/ServiceProviderConfig)
 func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 	srv := newTestServer(t)
 
@@ -1308,61 +1308,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 	assert.True(t, config.AuthenticationSchemes[0].Primary)
 }
 
-// 4.2 Resource Types
-func TestRFC7644ResourceTypes(t *testing.T) {
-	t.Run("lists the registered resource types", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes",
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		list := ReadBodyAs[protocol.ListResponse[*core.ResourceType]](t, response)
-		require.Equal(t, 3, list.TotalResults)
-		assert.Equal(t, core.ResourceTypeName("User"), list.Resources[0].ID)
-		assert.Equal(t, basePath+"/Users", list.Resources[0].Endpoint)
-		assert.Equal(t, core.SchemaUser, list.Resources[0].Schema)
-		assert.Equal(t, core.ResourceTypeName("Group"), list.Resources[1].ID)
-		assert.Equal(t, basePath+"/Groups", list.Resources[1].Endpoint)
-		assert.Equal(t, core.SchemaGroup, list.Resources[1].Schema)
-		assert.Equal(t, core.ResourceTypeName("Widget"), list.Resources[2].ID)
-		assert.Equal(t, basePath+"/Widgets", list.Resources[2].Endpoint)
-		assert.Equal(t, widgetSchema, list.Resources[2].Schema)
-	})
-
-	t.Run("fetches a resource type by id", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User",
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		resourceType := ReadBodyAs[core.ResourceType](t, response)
-		assert.Equal(t, core.ResourceTypeName("User"), resourceType.ID)
-		assert.Equal(t, basePath+"/Users", resourceType.Endpoint)
-		assert.Equal(t, core.SchemaUser, resourceType.Schema)
-	})
-
-	t.Run("returns 404 for an unknown resource type id", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/Bogus",
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusNotFound, response.StatusCode)
-	})
-}
-
-// 4.3 Schemas
+// 4. Service Provider Configuration Endpoints (/Schemas)
 func TestRFC7644Schemas(t *testing.T) {
 	t.Run("lists the registered schemas", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -1416,6 +1362,60 @@ func TestRFC7644Schemas(t *testing.T) {
 			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, srv, request)
+		assert.Equal(t, http.StatusNotFound, response.StatusCode)
+	})
+}
+
+// 4. Service Provider Configuration Endpoints (/ResourceTypes)
+func TestRFC7644ResourceTypes(t *testing.T) {
+	t.Run("lists the registered resource types", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.ResourceType]](t, response)
+		require.Equal(t, 3, list.TotalResults)
+		assert.Equal(t, core.ResourceTypeName("User"), list.Resources[0].ID)
+		assert.Equal(t, basePath+"/Users", list.Resources[0].Endpoint)
+		assert.Equal(t, core.SchemaUser, list.Resources[0].Schema)
+		assert.Equal(t, core.ResourceTypeName("Group"), list.Resources[1].ID)
+		assert.Equal(t, basePath+"/Groups", list.Resources[1].Endpoint)
+		assert.Equal(t, core.SchemaGroup, list.Resources[1].Schema)
+		assert.Equal(t, core.ResourceTypeName("Widget"), list.Resources[2].ID)
+		assert.Equal(t, basePath+"/Widgets", list.Resources[2].Endpoint)
+		assert.Equal(t, widgetSchema, list.Resources[2].Schema)
+	})
+
+	t.Run("fetches a resource type by id", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		resourceType := ReadBodyAs[core.ResourceType](t, response)
+		assert.Equal(t, core.ResourceTypeName("User"), resourceType.ID)
+		assert.Equal(t, basePath+"/Users", resourceType.Endpoint)
+		assert.Equal(t, core.SchemaUser, resourceType.Schema)
+	})
+
+	t.Run("returns 404 for an unknown resource type id", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/Bogus",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+		)
+		response := Response(t, srv, request)
+
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
 	})
 }
