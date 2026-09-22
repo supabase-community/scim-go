@@ -52,6 +52,7 @@ func TestNewPath(t *testing.T) {
 		for _, text := range []string{
 			"", "123bad", "emails[", `emails[type eq "work"`, "name.", ".name",
 			"name.familyName.extra", "a_b:name", "foo bar:department", "userName ",
+			`emails[type eq "work"] and displayName pr`,
 		} {
 			_, err := filter.NewPath(text)
 			require.Error(t, err, text)
