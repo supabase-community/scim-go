@@ -88,8 +88,8 @@ func TestApplyRemoveSubAttribute(t *testing.T) {
 func TestApplyImmutableSubAttributeChangeRejectedWhenPresent(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("name", core.TypeComplex, "").With(
-				core.NewAttribute("familyName", core.TypeString, "").AsImmutable(),
+			core.NewAttribute("name", core.TypeComplex).With(
+				core.NewAttribute("familyName", core.TypeString).AsImmutable(),
 			),
 		),
 	}
@@ -192,9 +192,9 @@ func TestApplyImmutableAddThenReplaceInSameBatchRejected(t *testing.T) {
 func TestApplyValuePathReadOnlySubAttributeIsNoOpNotNoTarget(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-				core.NewAttribute("value", core.TypeString, ""),
-				core.NewAttribute("primary", core.TypeBoolean, "").AsReadOnly(),
+			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("value", core.TypeString),
+				core.NewAttribute("primary", core.TypeBoolean).AsReadOnly(),
 			),
 		),
 	}
@@ -210,10 +210,10 @@ func TestApplyValuePathReadOnlySubAttributeIsNoOpNotNoTarget(t *testing.T) {
 func comparisonSchemas() []*core.Schema {
 	return []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-				core.NewAttribute("value", core.TypeString, ""),
-				core.NewAttribute("score", core.TypeDecimal, ""),
-				core.NewAttribute("active", core.TypeBoolean, ""),
+			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("value", core.TypeString),
+				core.NewAttribute("score", core.TypeDecimal),
+				core.NewAttribute("active", core.TypeBoolean),
 			),
 		),
 	}

@@ -12,13 +12,13 @@ import (
 func exampleSchema() *core.Schema {
 	schema := &core.Schema{ID: core.SchemaUser, Name: "User"}
 	return schema.With(
-		core.NewAttribute("userName", core.TypeString, "").AsRequired(),
-		core.NewAttribute("name", core.TypeComplex, "").With(
-			core.NewAttribute("familyName", core.TypeString, ""),
+		core.NewAttribute("userName", core.TypeString).AsRequired(),
+		core.NewAttribute("name", core.TypeComplex).With(
+			core.NewAttribute("familyName", core.TypeString),
 		),
-		core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-			core.NewAttribute("value", core.TypeString, ""),
-			core.NewAttribute("primary", core.TypeBoolean, ""),
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString),
+			core.NewAttribute("primary", core.TypeBoolean),
 		),
 	)
 }
@@ -31,7 +31,7 @@ func TestSchema(t *testing.T) {
 			Name:        "User",
 			Description: "User Account",
 			Attributes: []*core.Attribute{
-				core.NewAttribute("userName", core.TypeString, "A unique identifier for the user.").AsRequired(),
+				core.NewAttribute("userName", core.TypeString).DescribedAs("A unique identifier for the user.").AsRequired(),
 			},
 			Meta: core.Meta{
 				ResourceType: "Schema",

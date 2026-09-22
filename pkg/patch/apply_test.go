@@ -360,9 +360,9 @@ func TestApplyAddToAbsentMultiValuedWrapsInArray(t *testing.T) {
 func TestApplyValuePathReplaceRespectsSubAttributeMutability(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-				core.NewAttribute("type", core.TypeString, "").AsImmutable(),
-				core.NewAttribute("value", core.TypeString, ""),
+			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("type", core.TypeString).AsImmutable(),
+				core.NewAttribute("value", core.TypeString),
 			),
 		),
 	}
@@ -407,8 +407,8 @@ func TestApplyValuePathRemoveRespectsParentMutability(t *testing.T) {
 func TestApplyValuePathFilterHonorsCaseExact(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-				core.NewAttribute("value", core.TypeString, "").AsCaseExact(),
+			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("value", core.TypeString).AsCaseExact(),
 			),
 		),
 	}
@@ -489,18 +489,18 @@ func operation(kind patch.Op, path, value string) patch.Operation {
 func userSchemas() []*core.Schema {
 	return []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("userName", core.TypeString, ""),
-			core.NewAttribute("displayName", core.TypeString, ""),
-			core.NewAttribute("employeeNumber", core.TypeString, "").AsImmutable(),
-			core.NewAttribute("groups", core.TypeComplex, "").AsMultiValued().AsReadOnly().With(
-				core.NewAttribute("value", core.TypeString, ""),
+			core.NewAttribute("userName", core.TypeString),
+			core.NewAttribute("displayName", core.TypeString),
+			core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
+			core.NewAttribute("groups", core.TypeComplex).AsMultiValued().AsReadOnly().With(
+				core.NewAttribute("value", core.TypeString),
 			),
-			core.NewAttribute("name", core.TypeComplex, "").With(
-				core.NewAttribute("familyName", core.TypeString, ""),
+			core.NewAttribute("name", core.TypeComplex).With(
+				core.NewAttribute("familyName", core.TypeString),
 			),
-			core.NewAttribute("emails", core.TypeComplex, "").AsMultiValued().With(
-				core.NewAttribute("type", core.TypeString, ""),
-				core.NewAttribute("value", core.TypeString, ""),
+			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("type", core.TypeString),
+				core.NewAttribute("value", core.TypeString),
 			),
 		),
 	}
