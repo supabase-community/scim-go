@@ -565,6 +565,21 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, 1, list.TotalResults)
 		assert.Equal(t, "tagged", list.Resources[0]["Name"])
 	})
+
+	t.Run("a candidate missing the filtered attribute does not match", func(t *testing.T) {
+		srv := newTestServer(t)
+		createWidget(t, srv, &widget{Name: "has-nick", Nick: "al"})
+		createWidget(t, srv, &widget{Name: "no-nick"})
+
+		path := basePath + "/Widgets?" + url.Values{"filter": {`nick eq "al"`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[map[string]any]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "has-nick", list.Resources[0]["Name"])
+	})
 }
 
 // 3.4.2.3 Sorting
