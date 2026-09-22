@@ -7,3 +7,19 @@ type Base struct {
 	ExternalID string      `json:"externalId,omitempty"`
 	Meta       Meta        `json:"meta"`
 }
+
+func (b *Base) SetID(id string) {
+	b.ID = id
+}
+
+func (b *Base) SetSchemas(schemas []SchemaURI) {
+	b.Schemas = schemas
+}
+
+func (b *Base) GetMeta() Meta {
+	return b.Meta
+}
+
+func (b *Base) SetMeta(meta Meta) {
+	b.Meta = meta
+}
