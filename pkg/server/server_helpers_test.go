@@ -6,12 +6,69 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
+
+type widget struct {
+	core.Base
+	Name  string
+	Score int64
+	When  time.Time
+	Nick  string
+	Tags  []any
+}
+
+func (w *widget) ResourceID() string { return w.ID }
+
+func widgetFields() server.Fields[*widget] {
+	return server.NewFields(
+		server.NewField(
+			core.NewAttribute("name", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
+			func(w *widget) any { return w.Name },
+		),
+		server.NewField(
+			core.NewAttribute("score", core.TypeInteger),
+			func(w *widget) any { return w.Score },
+		),
+		server.NewField(
+			core.NewAttribute("when", core.TypeDateTime),
+			func(w *widget) any { return w.When },
+		),
+		server.NewField(
+			core.NewAttribute("nick", core.TypeString).UniqueOn(core.UniquenessServer).AsCaseExact(),
+			func(w *widget) any {
+				if w.Nick == "" {
+					return nil
+				}
+				return w.Nick
+			},
+		),
+		server.NewField(
+			core.NewAttribute("tags", core.TypeString).AsMultiValued(),
+			func(w *widget) any { return w.Tags },
+		),
+	)
+}
+
+const widgetSchema core.SchemaURI = "urn:test:widget"
+
+func createWidget(t *testing.T, srv *httptest.Server, w *widget) map[string]any {
+	t.Helper()
+
+	request := Request(t, srv, http.MethodPost, basePath+"/Widgets",
+		WithBearerToken(validToken),
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, w),
+	)
+	response := Response(t, srv, request)
+	require.Equal(t, http.StatusCreated, response.StatusCode)
+	return ReadBodyAs[map[string]any](t, response)
+}
 
 func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag string) {
 	t.Helper()
@@ -75,6 +132,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	srv := server.New(basePath).
 		WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account")).
 		WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())).
+		WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields())).
 		WithErrorHandler(func(err error) { t.Errorf("%v\n", err) }).
 		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {

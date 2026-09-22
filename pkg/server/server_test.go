@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -146,6 +147,28 @@ func TestRFC7644(t *testing.T) {
 				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusConflict, response.StatusCode)
+			assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("skips a candidate whose optional unique attribute is unset", func(t *testing.T) {
+			srv := newTestServer(t)
+			createWidget(t, srv, &widget{Name: "a"})
+			createWidget(t, srv, &widget{Name: "b"})
+		})
+
+		t.Run("a case-exact unique attribute treats different casing as distinct", func(t *testing.T) {
+			srv := newTestServer(t)
+			createWidget(t, srv, &widget{Name: "a", Nick: "Al"})
+			createWidget(t, srv, &widget{Name: "b", Nick: "al"})
+
+			request := Request(t, srv, http.MethodPost, basePath+"/Widgets",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, &widget{Name: "c", Nick: "Al"}),
 			)
 			response := Response(t, srv, request)
 
@@ -472,6 +495,73 @@ func TestRFC7644(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
 			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 		})
+
+		t.Run("filters an integer attribute with the ordering operators", func(t *testing.T) {
+			srv := newTestServer(t)
+			createWidget(t, srv, &widget{Name: "low", Score: 5})
+			createWidget(t, srv, &widget{Name: "high", Score: 50})
+
+			cases := map[string]string{
+				`score eq 5`:  "low",
+				`score ne 5`:  "high",
+				`score gt 10`: "high",
+				`score ge 50`: "high",
+				`score lt 10`: "low",
+				`score le 5`:  "low",
+			}
+			for filter, want := range cases {
+				path := basePath + "/Widgets?" + url.Values{"filter": {filter}}.Encode()
+				request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+				response := Response(t, srv, request)
+
+				require.Equal(t, http.StatusOK, response.StatusCode, "filter: %s", filter)
+				list := ReadBodyAs[protocol.ListResponse[map[string]any]](t, response)
+				require.Equal(t, 1, list.TotalResults, "filter: %s", filter)
+				assert.Equal(t, want, list.Resources[0]["Name"], "filter: %s", filter)
+			}
+		})
+
+		t.Run("filters a dateTime attribute with the ordering operators", func(t *testing.T) {
+			srv := newTestServer(t)
+			early := time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC)
+			late := time.Date(2021, 6, 1, 0, 0, 0, 0, time.UTC)
+			createWidget(t, srv, &widget{Name: "early", When: early})
+			createWidget(t, srv, &widget{Name: "late", When: late})
+
+			cases := map[string]string{
+				`when eq "2020-06-01T00:00:00Z"`: "early",
+				`when ne "2020-06-01T00:00:00Z"`: "late",
+				`when gt "2020-12-31T00:00:00Z"`: "late",
+				`when ge "2021-06-01T00:00:00Z"`: "late",
+				`when lt "2020-12-31T00:00:00Z"`: "early",
+				`when le "2020-06-01T00:00:00Z"`: "early",
+			}
+			for filter, want := range cases {
+				path := basePath + "/Widgets?" + url.Values{"filter": {filter}}.Encode()
+				request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+				response := Response(t, srv, request)
+
+				require.Equal(t, http.StatusOK, response.StatusCode, "filter: %s", filter)
+				list := ReadBodyAs[protocol.ListResponse[map[string]any]](t, response)
+				require.Equal(t, 1, list.TotalResults, "filter: %s", filter)
+				assert.Equal(t, want, list.Resources[0]["Name"], "filter: %s", filter)
+			}
+		})
+
+		t.Run("filters a multi-valued simple attribute", func(t *testing.T) {
+			srv := newTestServer(t)
+			createWidget(t, srv, &widget{Name: "tagged", Tags: []any{"red", "blue"}})
+			createWidget(t, srv, &widget{Name: "untagged", Tags: []any{"green"}})
+
+			path := basePath + "/Widgets?" + url.Values{"filter": {`tags eq "red"`}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[map[string]any]](t, response)
+			require.Equal(t, 1, list.TotalResults)
+			assert.Equal(t, "tagged", list.Resources[0]["Name"])
+		})
 	})
 
 	t.Run("3.4.2.3 Sorting", func(t *testing.T) {
@@ -627,6 +717,40 @@ func TestRFC7644(t *testing.T) {
 			assert.Equal(t, "alice", list.Resources[0].UserName)
 			assert.Equal(t, "bob", list.Resources[1].UserName)
 			assert.Equal(t, "carol", list.Resources[2].UserName)
+		})
+
+		t.Run("sorts by an integer attribute", func(t *testing.T) {
+			srv := newTestServer(t)
+			createWidget(t, srv, &widget{Name: "high", Score: 50})
+			createWidget(t, srv, &widget{Name: "low", Score: 5})
+
+			path := basePath + "/Widgets?" + url.Values{"sortBy": {"score"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[map[string]any]](t, response)
+			require.Len(t, list.Resources, 2)
+			assert.Equal(t, "low", list.Resources[0]["Name"])
+			assert.Equal(t, "high", list.Resources[1]["Name"])
+		})
+
+		t.Run("sorts by a dateTime attribute", func(t *testing.T) {
+			srv := newTestServer(t)
+			early := time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC)
+			late := time.Date(2021, 6, 1, 0, 0, 0, 0, time.UTC)
+			createWidget(t, srv, &widget{Name: "early", When: early})
+			createWidget(t, srv, &widget{Name: "late", When: late})
+
+			path := basePath + "/Widgets?" + url.Values{"sortBy": {"when"}, "sortOrder": {"descending"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[map[string]any]](t, response)
+			require.Len(t, list.Resources, 2)
+			assert.Equal(t, "late", list.Resources[0]["Name"])
+			assert.Equal(t, "early", list.Resources[1]["Name"])
 		})
 
 		t.Run("sorts by the primary value of a multi-valued attribute", func(t *testing.T) {
@@ -1168,13 +1292,16 @@ func TestRFC7644(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			list := ReadBodyAs[protocol.ListResponse[*core.ResourceType]](t, response)
-			require.Equal(t, 2, list.TotalResults)
+			require.Equal(t, 3, list.TotalResults)
 			assert.Equal(t, core.ResourceTypeName("User"), list.Resources[0].ID)
 			assert.Equal(t, basePath+"/Users", list.Resources[0].Endpoint)
 			assert.Equal(t, core.SchemaUser, list.Resources[0].Schema)
 			assert.Equal(t, core.ResourceTypeName("Group"), list.Resources[1].ID)
 			assert.Equal(t, basePath+"/Groups", list.Resources[1].Endpoint)
 			assert.Equal(t, core.SchemaGroup, list.Resources[1].Schema)
+			assert.Equal(t, core.ResourceTypeName("Widget"), list.Resources[2].ID)
+			assert.Equal(t, basePath+"/Widgets", list.Resources[2].Endpoint)
+			assert.Equal(t, widgetSchema, list.Resources[2].Schema)
 		})
 
 		t.Run("fetches a resource type by id", func(t *testing.T) {
@@ -1218,10 +1345,11 @@ func TestRFC7644(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			list := ReadBodyAs[protocol.ListResponse[*core.Schema]](t, response)
-			require.Equal(t, 2, list.TotalResults)
+			require.Equal(t, 3, list.TotalResults)
 			schema := list.Resources[0]
 			assert.Equal(t, core.SchemaUser, schema.ID)
 			assert.Equal(t, core.SchemaGroup, list.Resources[1].ID)
+			assert.Equal(t, widgetSchema, list.Resources[2].ID)
 
 			userName := schema.Attributes.Lookup("userName")
 			require.NotNil(t, userName)
