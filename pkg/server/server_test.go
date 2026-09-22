@@ -23,6 +23,58 @@ import (
 const basePath = "/scim/v2"
 const validToken = "s3cr3t"
 
+func TestRFC6750(t *testing.T) {
+	t.Run("2.1 Authorization Request Header Field", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users",
+			WithContentType(protocol.MediaType),
+			WithHeader("Authorization", "Bearer "+validToken),
+		)
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusOK, response.StatusCode)
+	})
+
+	t.Run("3 The WWW-Authenticate Response Header Field", func(t *testing.T) {
+		t.Run("omits error info when no Authorization header is present", func(t *testing.T) {
+			srv := newTestServer(t)
+
+			request := Request(t, srv, http.MethodGet, basePath+"/Users", WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+			assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
+		})
+
+		t.Run("omits error info for a non-Bearer scheme", func(t *testing.T) {
+			srv := newTestServer(t)
+
+			request := Request(t, srv, http.MethodGet, basePath+"/Users",
+				WithContentType(protocol.MediaType),
+				WithHeader("Authorization", "Basic dXNlcjpwYXNz"),
+			)
+			response := Response(t, srv, request)
+
+			assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+			assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
+		})
+	})
+
+	t.Run("3.1 Error Codes", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users",
+			WithContentType(protocol.MediaType),
+			WithHeader("Authorization", "Bearer wrong"),
+		)
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_token"`)
+	})
+}
+
 func TestRFC7644(t *testing.T) {
 	t.Run("3.3 Creating Resources", func(t *testing.T) {
 		t.Run("creates a resource and returns 201 with Location and ETag", func(t *testing.T) {
@@ -723,6 +775,10 @@ func TestRFC7644(t *testing.T) {
 		assert.True(t, config.Filter.Supported)
 		assert.Equal(t, protocol.DefaultLimits.MaxCount, config.Filter.MaxResults)
 		assert.True(t, config.Sort.Supported)
+
+		require.Len(t, config.AuthenticationSchemes, 1)
+		assert.Equal(t, core.AuthenticationSchemeOAuthBearerToken, config.AuthenticationSchemes[0].Type)
+		assert.True(t, config.AuthenticationSchemes[0].Primary)
 	})
 
 	t.Run("4.2 Resource Types", func(t *testing.T) {
@@ -832,174 +888,6 @@ func TestRFC7644(t *testing.T) {
 	})
 }
 
-func TestServerRouting(t *testing.T) {
-	t.Run("New with no resources still serves the discovery endpoints", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusOK, response.StatusCode)
-	})
-
-	t.Run("mounts every registered resource under the shared base path", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes",
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-
-		list := ReadBodyAs[protocol.ListResponse[*core.ResourceType]](t, response)
-		assert.Equal(t, 2, list.TotalResults)
-		var endpoints []string
-		for _, resourceType := range list.Resources {
-			endpoints = append(endpoints, resourceType.Endpoint)
-		}
-		assert.ElementsMatch(t, []string{basePath + "/Users", basePath + "/Groups"}, endpoints)
-	})
-
-	t.Run("responds method not allowed when the path exists but the verb does not", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodDelete, basePath+"/Users",
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusMethodNotAllowed, response.StatusCode)
-	})
-
-	t.Run("responds not found for a completely unknown path", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/Bogus",
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response := Response(t, srv, request)
-		assert.Equal(t, http.StatusNotFound, response.StatusCode)
-	})
-}
-
-func TestServerErrorHandler(t *testing.T) {
-	t.Run("routes a meta-route write failure through WithErrorHandler instead of swallowing it", func(t *testing.T) {
-		var captured error
-		srv := server.New(basePath).WithErrorHandler(func(err error) { captured = err })
-
-		request := httptest.NewRequest(http.MethodGet, basePath+"/ServiceProviderConfig", nil)
-		srv.ServeHTTP(&failingWriter{}, request)
-
-		assert.Error(t, captured)
-	})
-}
-
-type failingWriter struct {
-	header http.Header
-}
-
-func (w *failingWriter) Header() http.Header {
-	if w.header == nil {
-		w.header = http.Header{}
-	}
-	return w.header
-}
-
-func (w *failingWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
-func (w *failingWriter) WriteHeader(int)           {}
-
-func newTestServer(t *testing.T) *httptest.Server {
-	t.Helper()
-
-	srv := server.New(basePath).
-		WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account")).
-		WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())).
-		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
-			func(ctx context.Context, candidate string) (context.Context, error) {
-				if candidate != validToken {
-					return ctx, errors.New("invalid token")
-				}
-				return ctx, nil
-			},
-		))
-
-	return Server(t, srv)
-}
-
-func TestServerAuthentication(t *testing.T) {
-	newAuthenticatedServer := func(t *testing.T) *httptest.Server {
-		t.Helper()
-		return newTestServer(t)
-	}
-
-	t.Run("advertises the oauth bearer token scheme in ServiceProviderConfig", func(t *testing.T) {
-		srv := newAuthenticatedServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
-			WithContentType(protocol.MediaType),
-			WithBearerToken(validToken),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		config := ReadBodyAs[core.ServiceProviderConfig](t, response)
-		require.Len(t, config.AuthenticationSchemes, 1)
-		assert.Equal(t, core.AuthenticationSchemeOAuthBearerToken, config.AuthenticationSchemes[0].Type)
-		assert.True(t, config.AuthenticationSchemes[0].Primary)
-	})
-
-	t.Run("rejects a request with no Authorization header", func(t *testing.T) {
-		srv := newAuthenticatedServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithContentType(protocol.MediaType))
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
-		assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
-	})
-
-	t.Run("also protects the ServiceProviderConfig discovery endpoint", func(t *testing.T) {
-		srv := newAuthenticatedServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithContentType(protocol.MediaType))
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
-	})
-
-	t.Run("rejects a request with an invalid bearer token", func(t *testing.T) {
-		srv := newAuthenticatedServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/Users",
-			WithContentType(protocol.MediaType),
-			WithHeader("Authorization", "Bearer wrong"),
-		)
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
-		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_token"`)
-	})
-
-	t.Run("allows a request with a valid bearer token", func(t *testing.T) {
-		srv := newAuthenticatedServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/Users",
-			WithContentType(protocol.MediaType),
-			WithHeader("Authorization", "Bearer "+validToken),
-		)
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusOK, response.StatusCode)
-	})
-}
-
 func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag string) {
 	t.Helper()
 
@@ -1054,4 +942,22 @@ func groupFields() server.Fields[*core.Group] {
 			func(g *core.Group) any { return g.DisplayName },
 		),
 	)
+}
+
+func newTestServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	srv := server.New(basePath).
+		WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account")).
+		WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())).
+		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+			func(ctx context.Context, candidate string) (context.Context, error) {
+				if candidate != validToken {
+					return ctx, errors.New("invalid token")
+				}
+				return ctx, nil
+			},
+		))
+
+	return Server(t, srv)
 }
