@@ -293,6 +293,185 @@ func TestRFC7644(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
 			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 		})
+
+		t.Run("filters on a boolean attribute with eq and ne", func(t *testing.T) {
+			srv := newTestServer(t)
+			active := true
+			inactive := false
+			create(t, srv, &core.User{UserName: "alice", Active: &active})
+			create(t, srv, &core.User{UserName: "bob", Active: &inactive})
+
+			path := basePath + "/Users?" + url.Values{"filter": {`active eq true`}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Equal(t, 1, list.TotalResults)
+			assert.Equal(t, "alice", list.Resources[0].UserName)
+
+			path = basePath + "/Users?" + url.Values{"filter": {`active ne true`}}.Encode()
+			request = Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response = Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list = ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Equal(t, 1, list.TotalResults)
+			assert.Equal(t, "bob", list.Resources[0].UserName)
+		})
+
+		t.Run("filters with the pr operator for presence", func(t *testing.T) {
+			srv := newTestServer(t)
+			create(t, srv, &core.User{UserName: "alice"})
+
+			path := basePath + "/Users?" + url.Values{"filter": {`userName pr`}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Equal(t, 1, list.TotalResults)
+		})
+
+		t.Run("pr matches a non-string value and excludes an absent one", func(t *testing.T) {
+			srv := newTestServer(t)
+			active := true
+			create(t, srv, &core.User{UserName: "alice", Active: &active})
+			create(t, srv, &core.User{UserName: "bob"})
+
+			path := basePath + "/Users?" + url.Values{"filter": {`active pr`}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Equal(t, 1, list.TotalResults)
+			assert.Equal(t, "alice", list.Resources[0].UserName)
+		})
+
+		t.Run("rejects eq and pr on a common attribute that has no accessor registered", func(t *testing.T) {
+			srv := newTestServer(t)
+
+			path := basePath + "/Users?" + url.Values{"filter": {`id eq "x"`}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+
+			path = basePath + "/Users?" + url.Values{"filter": {`id pr`}}.Encode()
+			request = Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response = Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("filters with the co, sw, and ew string operators", func(t *testing.T) {
+			srv := newTestServer(t)
+			create(t, srv, &core.User{UserName: "alice"})
+			create(t, srv, &core.User{UserName: "bob"})
+
+			cases := []string{`userName co "li"`, `userName sw "al"`, `userName ew "ce"`}
+			for _, filter := range cases {
+				path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
+				request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+				response := Response(t, srv, request)
+
+				require.Equal(t, http.StatusOK, response.StatusCode, "filter: %s", filter)
+				list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+				require.Equal(t, 1, list.TotalResults, "filter: %s", filter)
+				assert.Equal(t, "alice", list.Resources[0].UserName, "filter: %s", filter)
+			}
+		})
+
+		t.Run("combines clauses with and", func(t *testing.T) {
+			srv := newTestServer(t)
+			active := true
+			create(t, srv, &core.User{UserName: "alice", Active: &active})
+			create(t, srv, &core.User{UserName: "bob", Active: &active})
+
+			path := basePath + "/Users?" + url.Values{"filter": {`userName eq "alice" and active eq true`}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Equal(t, 1, list.TotalResults)
+			assert.Equal(t, "alice", list.Resources[0].UserName)
+		})
+
+		t.Run("combines clauses with or", func(t *testing.T) {
+			srv := newTestServer(t)
+			create(t, srv, &core.User{UserName: "alice"})
+			create(t, srv, &core.User{UserName: "bob"})
+			create(t, srv, &core.User{UserName: "carol"})
+
+			path := basePath + "/Users?" + url.Values{"filter": {`userName eq "alice" or userName eq "carol"`}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Equal(t, 2, list.TotalResults)
+			assert.Equal(t, "alice", list.Resources[0].UserName)
+			assert.Equal(t, "carol", list.Resources[1].UserName)
+		})
+
+		t.Run("negates a clause with not", func(t *testing.T) {
+			srv := newTestServer(t)
+			create(t, srv, &core.User{UserName: "alice"})
+			create(t, srv, &core.User{UserName: "carol"})
+
+			path := basePath + "/Users?" + url.Values{"filter": {`not (userName eq "carol")`}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Equal(t, 1, list.TotalResults)
+			assert.Equal(t, "alice", list.Resources[0].UserName)
+		})
+
+		t.Run("filters with the ordering operators ne, gt, ge, lt, and le", func(t *testing.T) {
+			srv := newTestServer(t)
+			create(t, srv, &core.User{UserName: "alice"})
+			create(t, srv, &core.User{UserName: "bob"})
+			create(t, srv, &core.User{UserName: "carol"})
+
+			cases := map[string]string{
+				`userName ne "bob"`: "alice,carol",
+				`userName gt "bob"`: "carol",
+				`userName ge "bob"`: "bob,carol",
+				`userName lt "bob"`: "alice",
+				`userName le "bob"`: "alice,bob",
+			}
+			for filter, want := range cases {
+				path := basePath + "/Users?" + url.Values{"filter": {filter}, "sortBy": {"userName"}}.Encode()
+				request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+				response := Response(t, srv, request)
+
+				require.Equal(t, http.StatusOK, response.StatusCode, "filter: %s", filter)
+				list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+				names := make([]string, len(list.Resources))
+				for i, u := range list.Resources {
+					names[i] = u.UserName
+				}
+				assert.Equal(t, strings.Split(want, ","), names, "filter: %s", filter)
+			}
+		})
+
+		t.Run("rejects a value-path filter on a multi-valued attribute as unsupported", func(t *testing.T) {
+			srv := newTestServer(t)
+			create(t, srv, &core.User{UserName: "alice"})
+
+			path := basePath + "/Users?" + url.Values{"filter": {`emails[type eq "work"]`}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
 	})
 
 	t.Run("3.4.2.3 Sorting", func(t *testing.T) {
@@ -354,6 +533,22 @@ func TestRFC7644(t *testing.T) {
 			assert.Equal(t, "u1", list.Resources[1].UserName)
 		})
 
+		t.Run("resources both missing the sort attribute keep their relative order", func(t *testing.T) {
+			srv := newTestServer(t)
+			create(t, srv, &core.User{UserName: "first"})
+			create(t, srv, &core.User{UserName: "second"})
+
+			path := basePath + "/Users?" + url.Values{"sortBy": {"name.givenName"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Len(t, list.Resources, 2)
+			assert.Equal(t, "first", list.Resources[0].UserName)
+			assert.Equal(t, "second", list.Resources[1].UserName)
+		})
+
 		t.Run("resources missing the sort attribute sort last regardless of order", func(t *testing.T) {
 			srv := newTestServer(t)
 			create(t, srv, &core.User{UserName: "no-name"})
@@ -379,6 +574,59 @@ func TestRFC7644(t *testing.T) {
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
 			assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("rejects sortBy with an invalid attribute path syntax", func(t *testing.T) {
+			srv := newTestServer(t)
+
+			path := basePath + "/Users?" + url.Values{"sortBy": {"1bad"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("rejects sortBy on a common attribute that has no accessor registered", func(t *testing.T) {
+			srv := newTestServer(t)
+
+			path := basePath + "/Users?" + url.Values{"sortBy": {"id"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("sorts by a boolean attribute, with false ranking before true and missing values last", func(t *testing.T) {
+			srv := newTestServer(t)
+			active := true
+			inactive := false
+			create(t, srv, &core.User{UserName: "alice", Active: &active})
+			create(t, srv, &core.User{UserName: "bob", Active: &inactive})
+			create(t, srv, &core.User{UserName: "carol"})
+
+			path := basePath + "/Users?" + url.Values{"sortBy": {"active"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Len(t, list.Resources, 3)
+			assert.Equal(t, "bob", list.Resources[0].UserName)
+			assert.Equal(t, "alice", list.Resources[1].UserName)
+			assert.Equal(t, "carol", list.Resources[2].UserName)
+
+			path = basePath + "/Users?" + url.Values{"sortBy": {"active"}, "sortOrder": {"descending"}}.Encode()
+			request = Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response = Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			list = ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Len(t, list.Resources, 3)
+			assert.Equal(t, "alice", list.Resources[0].UserName)
+			assert.Equal(t, "bob", list.Resources[1].UserName)
+			assert.Equal(t, "carol", list.Resources[2].UserName)
 		})
 
 		t.Run("sorts by the primary value of a multi-valued attribute", func(t *testing.T) {
@@ -501,6 +749,22 @@ func TestRFC7644(t *testing.T) {
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
 			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("allows assigning an immutable attribute for the first time", func(t *testing.T) {
+			srv := newTestServer(t)
+			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", etag),
+				WithRequestBodyAs(t, core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			assert.Equal(t, "Jensen", ReadBodyAs[core.User](t, response).Name.FamilyName)
 		})
 	})
 
