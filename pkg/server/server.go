@@ -9,54 +9,92 @@ import (
 )
 
 type Server struct {
-	mux *http.ServeMux
+	mux           *http.ServeMux
+	handler       http.Handler
+	basePath      string
+	resourceTypes []*core.ResourceType
+	schemas       []*core.Schema
+	config        *core.ServiceProviderConfig
+	errorHandler  func(error)
 }
 
-func New(basePath string, resources ...Registration) (*Server, error) {
+func New(basePath string) *Server {
 	mux := http.NewServeMux()
-
-	var resourceTypes []*core.ResourceType
-	var schemas []*core.Schema
-	for _, resource := range resources {
-		resourceTypes = append(resourceTypes, resource.resourceType(basePath))
-		schemas = append(schemas, resource.schemas(basePath)...)
-
-		resource.mount(mux, basePath)
+	s := &Server{
+		mux:          mux,
+		handler:      mux,
+		basePath:     basePath,
+		config:       core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning(),
+		errorHandler: func(error) {},
 	}
 
-	config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning()
+	mux.HandleFunc("GET "+basePath+"/ServiceProviderConfig", s.handle(s.serviceProviderConfig))
+	mux.HandleFunc("GET "+basePath+"/ResourceTypes", s.handle(s.listResourceTypes))
+	mux.HandleFunc("GET "+basePath+"/ResourceTypes/{id}", s.handle(s.resourceTypeByID))
+	mux.HandleFunc("GET "+basePath+"/Schemas", s.handle(s.listSchemas))
+	mux.HandleFunc("GET "+basePath+"/Schemas/{id}", s.handle(s.schemaByID))
 
-	mux.HandleFunc("GET "+basePath+"/ServiceProviderConfig", func(w http.ResponseWriter, _ *http.Request) {
-		_ = protocol.Send(w, http.StatusOK, config)
-	})
-	mux.HandleFunc("GET "+basePath+"/ResourceTypes", func(w http.ResponseWriter, _ *http.Request) {
-		_ = protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(resourceTypes), resourceTypes))
-	})
-	mux.HandleFunc("GET "+basePath+"/ResourceTypes/{id}", func(w http.ResponseWriter, r *http.Request) {
-		for _, resourceType := range resourceTypes {
-			if r.PathValue("id") == string(resourceType.ID) {
-				_ = protocol.Send(w, http.StatusOK, resourceType)
-				return
-			}
-		}
-		_ = protocol.SendError(w, scimerrors.ErrNotFound("resource type not found"))
-	})
-	mux.HandleFunc("GET "+basePath+"/Schemas", func(w http.ResponseWriter, _ *http.Request) {
-		_ = protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(schemas), schemas))
-	})
-	mux.HandleFunc("GET "+basePath+"/Schemas/{id}", func(w http.ResponseWriter, r *http.Request) {
-		for _, schema := range schemas {
-			if r.PathValue("id") == string(schema.ID) {
-				_ = protocol.Send(w, http.StatusOK, schema)
-				return
-			}
-		}
-		_ = protocol.SendError(w, scimerrors.ErrNotFound("schema not found"))
-	})
+	return s
+}
 
-	return &Server{mux: mux}, nil
+func (s *Server) WithResource(resource Registration) *Server {
+	s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
+	s.schemas = append(s.schemas, resource.schemas(s.basePath)...)
+	resource.mount(s.mux, s.basePath)
+	return s
+}
+
+func (s *Server) WithErrorHandler(fn func(error)) *Server {
+	s.errorHandler = fn
+	return s
+}
+
+// WithAuthentication advertises scheme in ServiceProviderConfig, per RFC 7643, Section 5,
+// and enforces it by wrapping every request with middleware.
+func (s *Server) WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.Handler) http.Handler) *Server {
+	s.config.Authentication(scheme)
+	s.handler = middleware(s.handler)
+	return s
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.mux.ServeHTTP(w, r)
+	s.handler.ServeHTTP(w, r)
+}
+
+func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := fn(w, r); err != nil {
+			s.errorHandler(err)
+		}
+	}
+}
+
+func (s *Server) serviceProviderConfig(w http.ResponseWriter, _ *http.Request) error {
+	return protocol.Send(w, http.StatusOK, s.config)
+}
+
+func (s *Server) listResourceTypes(w http.ResponseWriter, _ *http.Request) error {
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.resourceTypes), s.resourceTypes))
+}
+
+func (s *Server) resourceTypeByID(w http.ResponseWriter, r *http.Request) error {
+	for _, resourceType := range s.resourceTypes {
+		if r.PathValue("id") == string(resourceType.ID) {
+			return protocol.Send(w, http.StatusOK, resourceType)
+		}
+	}
+	return protocol.SendError(w, scimerrors.ErrNotFound("resource type not found"))
+}
+
+func (s *Server) listSchemas(w http.ResponseWriter, _ *http.Request) error {
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.schemas), s.schemas))
+}
+
+func (s *Server) schemaByID(w http.ResponseWriter, r *http.Request) error {
+	for _, schema := range s.schemas {
+		if r.PathValue("id") == string(schema.ID) {
+			return protocol.Send(w, http.StatusOK, schema)
+		}
+	}
+	return protocol.SendError(w, scimerrors.ErrNotFound("schema not found"))
 }

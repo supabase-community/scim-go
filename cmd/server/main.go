@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,20 +18,26 @@ import (
 func main() {
 	basePath := "/scim/v2"
 	errorHandler := func(err error) { log.Printf("%v\n", err) }
-	srv, err := server.New(
-		basePath,
-		server.
+	token := os.Getenv("SCIM_BEARER_TOKEN")
+
+	srv := server.New(basePath).
+		WithResource(server.
 			NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields()).
 			WithDescription("User Account").
-			WithErrorHandler(errorHandler),
-		server.
+			WithErrorHandler(errorHandler)).
+		WithResource(server.
 			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields()).
 			WithDescription("Group").
-			WithErrorHandler(errorHandler),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
+			WithErrorHandler(errorHandler)).
+		WithErrorHandler(errorHandler).
+		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+			func(ctx context.Context, candidate string) (context.Context, error) {
+				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {
+					return ctx, fmt.Errorf("invalid token")
+				}
+				return ctx, nil
+			},
+		))
 
 	addr := ":8080"
 	if port := os.Getenv("PORT"); port != "" {

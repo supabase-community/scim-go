@@ -1,7 +1,9 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -830,27 +832,133 @@ func TestServerRouting(t *testing.T) {
 	})
 }
 
+func TestServerErrorHandler(t *testing.T) {
+	t.Run("routes a meta-route write failure through WithErrorHandler instead of swallowing it", func(t *testing.T) {
+		var captured error
+		srv := server.New(basePath).WithErrorHandler(func(err error) { captured = err })
+
+		request := httptest.NewRequest(http.MethodGet, basePath+"/ServiceProviderConfig", nil)
+		srv.ServeHTTP(&failingWriter{}, request)
+
+		assert.Error(t, captured)
+	})
+}
+
+// failingWriter is an http.ResponseWriter whose Write always fails, used to
+// force protocol.Send into returning an error without a real network round trip.
+type failingWriter struct {
+	header http.Header
+}
+
+func (w *failingWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = http.Header{}
+	}
+	return w.header
+}
+
+func (w *failingWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+func (w *failingWriter) WriteHeader(int)           {}
+
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
-	srv, err := server.New(
-		basePath,
-		server.NewResource[*core.User](
+	srv := server.New(basePath).
+		WithResource(server.NewResource[*core.User](
 			"User",
 			"/Users",
 			core.SchemaUser,
 			userFields(),
-		).WithDescription("User Account"),
-		server.NewResource[*core.Group](
+		).WithDescription("User Account")).
+		WithResource(server.NewResource[*core.Group](
 			"Group",
 			"/Groups",
 			core.SchemaGroup,
 			groupFields(),
-		),
-	)
-	require.NoError(t, err)
+		))
 
 	return Server(t, srv)
+}
+
+func TestServerAuthentication(t *testing.T) {
+	const validToken = "s3cr3t"
+
+	newAuthenticatedServer := func(t *testing.T) *httptest.Server {
+		t.Helper()
+
+		srv := server.New(basePath).
+			WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields())).
+			WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+				func(ctx context.Context, candidate string) (context.Context, error) {
+					if candidate != validToken {
+						return ctx, errors.New("invalid token")
+					}
+					return ctx, nil
+				},
+			))
+
+		return Server(t, srv)
+	}
+
+	t.Run("advertises the oauth bearer token scheme in ServiceProviderConfig", func(t *testing.T) {
+		srv := newAuthenticatedServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
+			WithContentType(protocol.MediaType),
+			WithHeader("Authorization", "Bearer "+validToken),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		config := ReadBodyAs[core.ServiceProviderConfig](t, response)
+		require.Len(t, config.AuthenticationSchemes, 1)
+		assert.Equal(t, core.AuthenticationSchemeOAuthBearerToken, config.AuthenticationSchemes[0].Type)
+		assert.True(t, config.AuthenticationSchemes[0].Primary)
+	})
+
+	t.Run("rejects a request with no Authorization header", func(t *testing.T) {
+		srv := newAuthenticatedServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_request"`)
+	})
+
+	t.Run("also protects the ServiceProviderConfig discovery endpoint", func(t *testing.T) {
+		srv := newAuthenticatedServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+	})
+
+	t.Run("rejects a request with an invalid bearer token", func(t *testing.T) {
+		srv := newAuthenticatedServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users",
+			WithContentType(protocol.MediaType),
+			WithHeader("Authorization", "Bearer wrong"),
+		)
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_token"`)
+	})
+
+	t.Run("allows a request with a valid bearer token", func(t *testing.T) {
+		srv := newAuthenticatedServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users",
+			WithContentType(protocol.MediaType),
+			WithHeader("Authorization", "Bearer "+validToken),
+		)
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusOK, response.StatusCode)
+	})
 }
 
 func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag string) {
