@@ -49,8 +49,7 @@ func (s *Server) WithErrorHandler(fn func(error)) *Server {
 	return s
 }
 
-// WithAuthentication advertises scheme in ServiceProviderConfig, per RFC 7643, Section 5,
-// and enforces it by wrapping every request with middleware.
+// WithAuthentication advertises and enforces scheme, per RFC 7643, Section 5.
 func (s *Server) WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.Handler) http.Handler) *Server {
 	s.config.Authentication(scheme)
 	s.handler = middleware(s.handler)

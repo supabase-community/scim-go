@@ -844,8 +844,6 @@ func TestServerErrorHandler(t *testing.T) {
 	})
 }
 
-// failingWriter is an http.ResponseWriter whose Write always fails, used to
-// force protocol.Send into returning an error without a real network round trip.
 type failingWriter struct {
 	header http.Header
 }
@@ -923,7 +921,7 @@ func TestServerAuthentication(t *testing.T) {
 		response := Response(t, srv, request)
 
 		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
-		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_request"`)
+		assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
 	})
 
 	t.Run("also protects the ServiceProviderConfig discovery endpoint", func(t *testing.T) {

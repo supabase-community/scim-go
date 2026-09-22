@@ -19,6 +19,9 @@ func main() {
 	basePath := "/scim/v2"
 	errorHandler := func(err error) { log.Printf("%v\n", err) }
 	token := os.Getenv("SCIM_BEARER_TOKEN")
+	if token == "" {
+		log.Fatal("SCIM_BEARER_TOKEN must be set")
+	}
 
 	srv := server.New(basePath).
 		WithResource(server.
