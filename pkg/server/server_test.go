@@ -21,6 +21,7 @@ import (
 )
 
 const basePath = "/scim/v2"
+const validToken = "s3cr3t"
 
 func TestRFC7644(t *testing.T) {
 	t.Run("3.3 Creating Resources", func(t *testing.T) {
@@ -30,6 +31,7 @@ func TestRFC7644(t *testing.T) {
 			request := Request(t, srv, http.MethodPost, basePath+"/Users",
 				WithAcceptHeader(protocol.MediaType),
 				WithContentType(protocol.MediaType),
+				WithBearerToken(validToken),
 				WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
 			)
 			response := Response(t, srv, request)
@@ -52,7 +54,7 @@ func TestRFC7644(t *testing.T) {
 		t.Run("rejects a malformed JSON body", func(t *testing.T) {
 			srv := newTestServer(t)
 
-			request := Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBody([]byte(`{`)))
+			request := Request(t, srv, http.MethodPost, basePath+"/Users", WithBearerToken(validToken), WithRequestBody([]byte(`{`)))
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
@@ -64,6 +66,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodPost, basePath+"/Users",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, core.User{}),
 			)
@@ -77,6 +80,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodPost, basePath+"/Users",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, core.User{UserName: "bjensen", UserType: "bogus"}),
 			)
@@ -91,6 +95,7 @@ func TestRFC7644(t *testing.T) {
 			create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPost, basePath+"/Users",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
 			)
@@ -106,7 +111,10 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
-			request := Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType))
+			request := Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+			)
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
@@ -118,6 +126,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodGet, basePath+"/Users/does-not-exist",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -141,6 +150,7 @@ func TestRFC7644(t *testing.T) {
 			create(t, srv, &core.User{UserName: "carol"})
 
 			request := Request(t, srv, http.MethodGet, basePath+"/Users",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -163,6 +173,7 @@ func TestRFC7644(t *testing.T) {
 
 			path := basePath + "/Users?" + url.Values{"startIndex": {"2"}, "count": {"1"}}.Encode()
 			request := Request(t, srv, http.MethodGet, path,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -179,6 +190,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodGet, basePath+"/Users",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -198,6 +210,7 @@ func TestRFC7644(t *testing.T) {
 
 			path := basePath + "/Users?" + url.Values{"filter": {`userName eq "alice"`}}.Encode()
 			request := Request(t, srv, http.MethodGet, path,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -213,6 +226,7 @@ func TestRFC7644(t *testing.T) {
 
 			path := basePath + "/Users?" + url.Values{"filter": {`bogus eq "x"`}}.Encode()
 			request := Request(t, srv, http.MethodGet, path,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -230,7 +244,10 @@ func TestRFC7644(t *testing.T) {
 			create(t, srv, &core.User{UserName: "carol"})
 
 			path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}}.Encode()
-			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			request := Request(t, srv, http.MethodGet, path,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+			)
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
@@ -248,7 +265,10 @@ func TestRFC7644(t *testing.T) {
 			create(t, srv, &core.User{UserName: "carol"})
 
 			path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}, "sortOrder": {"descending"}}.Encode()
-			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			request := Request(t, srv, http.MethodGet, path,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+			)
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
@@ -265,7 +285,7 @@ func TestRFC7644(t *testing.T) {
 			create(t, srv, &core.User{UserName: "u2", Name: core.Name{GivenName: "Amy"}})
 
 			path := basePath + "/Users?" + url.Values{"sortBy": {"name.givenName"}}.Encode()
-			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
@@ -281,7 +301,7 @@ func TestRFC7644(t *testing.T) {
 			create(t, srv, &core.User{UserName: "has-name", Name: core.Name{GivenName: "Amy"}})
 
 			path := basePath + "/Users?" + url.Values{"sortBy": {"name.givenName"}, "sortOrder": {"descending"}}.Encode()
-			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
@@ -295,7 +315,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			path := basePath + "/Users?" + url.Values{"sortBy": {"bogus"}}.Encode()
-			request := Request(t, srv, http.MethodGet, path, WithContentType(protocol.MediaType))
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 			response := Response(t, srv, request)
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
@@ -321,6 +341,7 @@ func TestRFC7644(t *testing.T) {
 			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", etag),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
@@ -338,6 +359,7 @@ func TestRFC7644(t *testing.T) {
 			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", etag),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
@@ -353,6 +375,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
 			)
@@ -366,6 +389,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", `W/"stale"`),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
@@ -379,6 +403,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/does-not-exist",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBody([]byte(`{"userName":"bjensen"}`)),
 			)
@@ -392,6 +417,7 @@ func TestRFC7644(t *testing.T) {
 			id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", etag),
 				WithRequestBodyAs(t, core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Smith"}}),
@@ -409,6 +435,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, protocol.PatchRequest{
 					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
@@ -435,6 +462,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodPatch, basePath+"/Users/does-not-exist",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, protocol.PatchRequest{
 					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
@@ -457,6 +485,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", `W/"stale"`),
 				WithRequestBodyAs(t, protocol.PatchRequest{
@@ -480,6 +509,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, protocol.PatchRequest{
 					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
@@ -505,6 +535,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := create(t, srv, &core.User{UserName: "bjensen", Active: &active})
 
 			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, protocol.PatchRequest{
 					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
@@ -530,6 +561,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -538,7 +570,10 @@ func TestRFC7644(t *testing.T) {
 			require.NoError(t, err)
 			assert.Empty(t, body)
 
-			getResp := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType)))
+			getResp := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+			))
 			assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
 		})
 
@@ -547,13 +582,17 @@ func TestRFC7644(t *testing.T) {
 			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", etag),
 			)
 			response := Response(t, srv, request)
 			assert.Equal(t, http.StatusNoContent, response.StatusCode)
 
-			getResp := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithContentType(protocol.MediaType)))
+			getResp := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+			))
 			assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
 		})
 
@@ -562,6 +601,7 @@ func TestRFC7644(t *testing.T) {
 			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", `W/"stale"`),
 			)
@@ -569,6 +609,7 @@ func TestRFC7644(t *testing.T) {
 			assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 
 			request = Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response = Response(t, srv, request)
@@ -579,6 +620,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodDelete, basePath+"/Users/does-not-exist",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -594,6 +636,7 @@ func TestRFC7644(t *testing.T) {
 		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodGet, basePath+"/Users/does-not-exist",
+			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, srv, request)
@@ -620,6 +663,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodPost, basePath+"/Users",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
 			)
@@ -635,6 +679,7 @@ func TestRFC7644(t *testing.T) {
 			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
 			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithHeader("If-Match", etag),
 				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
@@ -650,6 +695,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -664,6 +710,7 @@ func TestRFC7644(t *testing.T) {
 		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
+			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, srv, request)
@@ -683,6 +730,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -702,6 +750,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -717,6 +766,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/Bogus",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -730,6 +780,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodGet, basePath+"/Schemas",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -758,6 +809,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodGet, basePath+"/Schemas/"+string(core.SchemaUser),
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -771,6 +823,7 @@ func TestRFC7644(t *testing.T) {
 			srv := newTestServer(t)
 
 			request := Request(t, srv, http.MethodGet, basePath+"/Schemas/urn:bogus",
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 			)
 			response := Response(t, srv, request)
@@ -784,6 +837,7 @@ func TestServerRouting(t *testing.T) {
 		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
+			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, srv, request)
@@ -795,6 +849,7 @@ func TestServerRouting(t *testing.T) {
 		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes",
+			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, srv, request)
@@ -814,6 +869,7 @@ func TestServerRouting(t *testing.T) {
 		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodDelete, basePath+"/Users",
+			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, srv, request)
@@ -825,6 +881,7 @@ func TestServerRouting(t *testing.T) {
 		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodGet, basePath+"/Bogus",
+			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 		)
 		response := Response(t, srv, request)
@@ -862,40 +919,24 @@ func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	srv := server.New(basePath).
-		WithResource(server.NewResource[*core.User](
-			"User",
-			"/Users",
-			core.SchemaUser,
-			userFields(),
-		).WithDescription("User Account")).
-		WithResource(server.NewResource[*core.Group](
-			"Group",
-			"/Groups",
-			core.SchemaGroup,
-			groupFields(),
+		WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account")).
+		WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())).
+		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+			func(ctx context.Context, candidate string) (context.Context, error) {
+				if candidate != validToken {
+					return ctx, errors.New("invalid token")
+				}
+				return ctx, nil
+			},
 		))
 
 	return Server(t, srv)
 }
 
 func TestServerAuthentication(t *testing.T) {
-	const validToken = "s3cr3t"
-
 	newAuthenticatedServer := func(t *testing.T) *httptest.Server {
 		t.Helper()
-
-		srv := server.New(basePath).
-			WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields())).
-			WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
-				func(ctx context.Context, candidate string) (context.Context, error) {
-					if candidate != validToken {
-						return ctx, errors.New("invalid token")
-					}
-					return ctx, nil
-				},
-			))
-
-		return Server(t, srv)
+		return newTestServer(t)
 	}
 
 	t.Run("advertises the oauth bearer token scheme in ServiceProviderConfig", func(t *testing.T) {
@@ -903,7 +944,7 @@ func TestServerAuthentication(t *testing.T) {
 
 		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
 			WithContentType(protocol.MediaType),
-			WithHeader("Authorization", "Bearer "+validToken),
+			WithBearerToken(validToken),
 		)
 		response := Response(t, srv, request)
 
@@ -963,6 +1004,7 @@ func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag strin
 	t.Helper()
 
 	request := Request(t, srv, http.MethodPost, basePath+"/Users",
+		WithBearerToken(validToken),
 		WithAcceptHeader(protocol.MediaType),
 		WithContentType(protocol.MediaType),
 		WithRequestBodyAs(t, user),

@@ -52,6 +52,10 @@ func WithContentType(value string) Option[*http.Request] {
 	return WithHeader("Content-Type", value)
 }
 
+func WithBearerToken(token string) Option[*http.Request] {
+	return WithHeader("Authorization", "Bearer "+token)
+}
+
 func WithHeader(key, value string) Option[*http.Request] {
 	return func(r *http.Request) *http.Request {
 		r.Header.Set(key, value)
