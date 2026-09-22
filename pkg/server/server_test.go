@@ -177,21 +177,6 @@ func TestRFC7644CreatingResources(t *testing.T) {
 	})
 }
 
-// 3.4.3 Alternative Query with POST /.search
-func TestRFC7644AlternativeQueryWithPOSTSearch(t *testing.T) {
-	t.Skip("POST /.search is not registered by server.New; falls through to the generic unknown-path 404")
-}
-
-// 3.9 Attributes and excludedAttributes
-func TestRFC7644AttributesAndExcludedAttributes(t *testing.T) {
-	t.Skip("attributes/excludedAttributes are parsed into SearchRequest but never applied to List/Get responses")
-}
-
-// 3.11 Singular Resource /Me
-func TestRFC7644SingularResourceMe(t *testing.T) {
-	t.Skip("/Me is not implemented by server.New; requests to it 404 through the generic unknown-path behavior")
-}
-
 // 3.4.1 Retrieving a Known Resource
 func TestRFC7644RetrievingAKnownResource(t *testing.T) {
 	t.Run("gets a created resource by id", func(t *testing.T) {
@@ -777,6 +762,11 @@ func TestRFC7644Sorting(t *testing.T) {
 	})
 }
 
+// 3.4.3 Alternative Query with POST /.search
+func TestRFC7644AlternativeQueryWithPOSTSearch(t *testing.T) {
+	t.Skip("POST /.search is not registered by server.New; falls through to the generic unknown-path 404")
+}
+
 // 3.5.1 Replacing with PUT
 func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	t.Run("replaces a resource and returns a new ETag when If-Match matches", func(t *testing.T) {
@@ -1191,6 +1181,16 @@ func TestRFC7644DeletingResources(t *testing.T) {
 		response := Response(t, srv, request)
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
 	})
+}
+
+// 3.9 Attributes and excludedAttributes
+func TestRFC7644AttributesAndExcludedAttributes(t *testing.T) {
+	t.Skip("attributes/excludedAttributes are parsed into SearchRequest but never applied to List/Get responses")
+}
+
+// 3.11 Singular Resource /Me
+func TestRFC7644SingularResourceMe(t *testing.T) {
+	t.Skip("/Me is not implemented by server.New; requests to it 404 through the generic unknown-path behavior")
 }
 
 // 3.12 SCIM Errors
