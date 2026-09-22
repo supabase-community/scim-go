@@ -24,9 +24,11 @@ func exampleSchema() *core.Schema {
 
 func TestSchema(t *testing.T) {
 	t.Run("serializes to JSON correctly", func(t *testing.T) {
-		schema := core.NewSchema(core.SchemaUser).WithName("User").WithLocation("http://example.com/scim/v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:User").WithDescription("User Account").With(
-			core.NewAttribute("userName", core.TypeString).DescribedAs("A unique identifier for the user.").AsRequired(),
-		)
+		schema := core.NewSchema(core.SchemaUser).
+			WithName("User").
+			WithLocation("http://example.com/scim/v2/Schemas/urn:ietf:params:scim:schemas:core:2.0:User").
+			WithDescription("User Account").
+			With(core.NewAttribute("userName", core.TypeString).DescribedAs("A unique identifier for the user.").AsRequired())
 
 		body, err := json.Marshal(schema)
 
