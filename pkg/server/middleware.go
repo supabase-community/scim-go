@@ -10,17 +10,16 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// BearerTokenValidator resolves an RFC 6750 bearer token into a context to continue with, or an error.
-type BearerTokenValidator func(ctx context.Context, token string) (context.Context, error)
+// TokenValidator resolves an RFC 6750 bearer token into a context to continue with, or an error.
+type TokenValidator func(ctx context.Context, token string) (context.Context, error)
 
 // RequireBearerToken enforces RFC 6750 Bearer Token Usage.
-func RequireBearerToken(validate BearerTokenValidator) func(http.Handler) http.Handler {
+func RequireBearerToken(validate TokenValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			scheme, token, hasScheme := strings.Cut(r.Header.Get("Authorization"), " ")
 
 			if !hasScheme || !strings.EqualFold(scheme, "Bearer") {
-				// RFC 6750 S3.1: no credentials presented -- omit error info.
 				w.Header().Set("WWW-Authenticate", "Bearer")
 				_ = protocol.SendError(w, scimerrors.ErrUnauthorized("authentication required"))
 				return
