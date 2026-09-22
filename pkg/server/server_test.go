@@ -252,6 +252,17 @@ func TestRFC7644(t *testing.T) {
 			assert.Equal(t, 0, list.TotalResults)
 			assert.Empty(t, list.Resources)
 		})
+
+		t.Run("rejects a query with a non-integer startIndex", func(t *testing.T) {
+			srv := newTestServer(t)
+
+			path := basePath + "/Users?" + url.Values{"startIndex": {"bogus"}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
 	})
 
 	t.Run("3.4.2.2 Filtering", func(t *testing.T) {
@@ -464,6 +475,22 @@ func TestRFC7644(t *testing.T) {
 			assert.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
 
+		t.Run("rejects a replace with a malformed JSON body", func(t *testing.T) {
+			srv := newTestServer(t)
+			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", etag),
+				WithRequestBody([]byte(`{not-json`)),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
 		t.Run("rejects a replace that changes an immutable attribute", func(t *testing.T) {
 			srv := newTestServer(t)
 			id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
@@ -508,6 +535,94 @@ func TestRFC7644(t *testing.T) {
 			patched := ReadBodyAs[core.User](t, response)
 			require.NotNil(t, patched.Active)
 			assert.True(t, *patched.Active)
+		})
+
+		t.Run("rejects a patch with a malformed JSON body", func(t *testing.T) {
+			srv := newTestServer(t)
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBody([]byte(`{not-json`)),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("rejects a patch that targets an unknown attribute", func(t *testing.T) {
+			srv := newTestServer(t)
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{
+						{
+							Op:    patch.OpReplace,
+							Path:  "bogus",
+							Value: json.RawMessage(`"x"`),
+						},
+					},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.InvalidPath, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("rejects a patch that changes an immutable attribute", func(t *testing.T) {
+			srv := newTestServer(t)
+			id, _ := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
+
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{
+						{
+							Op:    patch.OpReplace,
+							Path:  "name.familyName",
+							Value: json.RawMessage(`"Smith"`),
+						},
+					},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+
+		t.Run("rejects a patch that collides with another resource's unique value", func(t *testing.T) {
+			srv := newTestServer(t)
+			create(t, srv, &core.User{UserName: "alice"})
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{
+						{
+							Op:    patch.OpReplace,
+							Path:  "userName",
+							Value: json.RawMessage(`"alice"`),
+						},
+					},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusConflict, response.StatusCode)
+			assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 		})
 
 		t.Run("patching an unknown id returns 404", func(t *testing.T) {
