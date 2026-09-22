@@ -14,7 +14,3 @@ type Group struct {
 	DisplayName string   `json:"displayName"`
 	Members     []Member `json:"members,omitempty"`
 }
-
-func (g *Group) ResourceID() string {
-	return g.ID
-}

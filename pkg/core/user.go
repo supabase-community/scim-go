@@ -102,7 +102,3 @@ func (u User) MarshalJSON() ([]byte, error) {
 	clone.Password = ""
 	return json.Marshal(clone)
 }
-
-func (u *User) ResourceID() string {
-	return u.ID
-}

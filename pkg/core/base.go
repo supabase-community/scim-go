@@ -8,6 +8,10 @@ type Base struct {
 	Meta       Meta        `json:"meta"`
 }
 
+func (b *Base) ResourceID() string {
+	return b.ID
+}
+
 func (b *Base) SetID(id string) {
 	b.ID = id
 }
