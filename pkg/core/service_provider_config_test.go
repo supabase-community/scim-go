@@ -49,4 +49,12 @@ func TestNewServiceProviderConfig(t *testing.T) {
 			"meta": {"resourceType": "ServiceProviderConfig"}
 		}`, string(body))
 	})
+
+	t.Run("Authentication appends the given schemes", func(t *testing.T) {
+		config := core.NewServiceProviderConfig().Authentication(core.NewOAuthBearerToken().AsPrimary())
+
+		require.Len(t, config.AuthenticationSchemes, 1)
+		assert.Equal(t, core.AuthenticationSchemeOAuthBearerToken, config.AuthenticationSchemes[0].Type)
+		assert.True(t, config.AuthenticationSchemes[0].Primary)
+	})
 }

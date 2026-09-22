@@ -63,3 +63,9 @@ func (c *ServiceProviderConfig) Versioning() *ServiceProviderConfig {
 	c.ETag.Supported = true
 	return c
 }
+
+// Authentication advertises the given schemes, per RFC 7643, Section 5.
+func (c *ServiceProviderConfig) Authentication(schemes ...*AuthenticationScheme) *ServiceProviderConfig {
+	c.AuthenticationSchemes = append(c.AuthenticationSchemes, schemes...)
+	return c
+}
