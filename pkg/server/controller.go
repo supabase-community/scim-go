@@ -1,0 +1,129 @@
+package server
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
+)
+
+// Controller handles the HTTP requests for one SCIM resource type, per RFC 7644, Section 3.
+type Controller[T Entity] interface {
+	List(http.ResponseWriter, *http.Request) error
+	ByID(http.ResponseWriter, *http.Request) error
+	Create(http.ResponseWriter, *http.Request) error
+	Replace(http.ResponseWriter, *http.Request) error
+	Patch(http.ResponseWriter, *http.Request) error
+	Delete(http.ResponseWriter, *http.Request) error
+}
+
+type controller[T Entity] struct {
+	path    string
+	schema  *core.Schema
+	service Service[T]
+}
+
+func NewController[T Entity](service Service[T], schema *core.Schema, path string) Controller[T] {
+	return &controller[T]{
+		path:    path,
+		schema:  schema,
+		service: service,
+	}
+}
+
+func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
+	query, err := protocol.DefaultLimits.ParseSearchRequest(r.URL.Query())
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	items, total, err := c.service.List(r.Context(), query)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	for i, item := range items {
+		items[i] = c.withLocation(item)
+	}
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, items))
+}
+
+func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
+	resource, err := c.service.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	resource = c.withLocation(resource)
+	w.Header().Set("ETag", resource.GetMeta().Version)
+	return protocol.Send(w, http.StatusOK, resource)
+}
+
+func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
+	var resource T
+	if err := json.NewDecoder(r.Body).Decode(&resource); err != nil {
+		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
+	}
+	created, err := c.service.Create(r.Context(), resource)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	created = c.withLocation(created)
+	w.Header().Set("Location", created.GetMeta().Location)
+	w.Header().Set("ETag", created.GetMeta().Version)
+	return protocol.Send(w, http.StatusCreated, created)
+}
+
+func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
+	var resource T
+	if err := json.NewDecoder(r.Body).Decode(&resource); err != nil {
+		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
+	}
+	resource.SetID(r.PathValue("id"))
+	resource.SetMeta(core.Meta{Version: r.Header.Get("If-Match")})
+	replaced, err := c.service.Replace(r.Context(), resource)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	replaced = c.withLocation(replaced)
+	w.Header().Set("ETag", replaced.GetMeta().Version)
+	return protocol.Send(w, http.StatusOK, replaced)
+}
+
+func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
+	id := r.PathValue("id")
+	resource, err := c.service.Get(r.Context(), id)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	if match := r.Header.Get("If-Match"); match != "" && resource.GetMeta().Version != match {
+		return protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
+	}
+	var req protocol.PatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
+	}
+	if err := req.Apply(resource, []*core.Schema{c.schema}); err != nil {
+		return protocol.SendError(w, err)
+	}
+	replaced, err := c.service.Replace(r.Context(), resource)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	replaced = c.withLocation(replaced)
+	w.Header().Set("ETag", replaced.GetMeta().Version)
+	return protocol.Send(w, http.StatusOK, replaced)
+}
+
+func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
+	if err := c.service.Delete(r.Context(), r.PathValue("id"), r.Header.Get("If-Match")); err != nil {
+		return protocol.SendError(w, err)
+	}
+	return protocol.Send(w, http.StatusNoContent, nil)
+}
+
+func (c *controller[T]) withLocation(item T) T {
+	meta := item.GetMeta()
+	meta.Location = c.path + "/" + item.ResourceID()
+	item.SetMeta(meta)
+	return item
+}
