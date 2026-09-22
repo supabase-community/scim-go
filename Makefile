@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := build
 
 COVERAGE := coverage.out
-COVER_MIN := 80
+COVER_MIN := 95
 COVER_EXCLUDE := /pkg/scimtest/|/internal/|/cmd/server/
 
 .PHONY: clean
