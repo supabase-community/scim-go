@@ -20,7 +20,7 @@ alice_id=$(jq -r .id <<<"$alice")
 bob_id=$(jq -r .id <<<"$bob")
 
 echo "== list all =="
-curl -sS "$BASE_URL/Users" | jq '.Resources | length'
+curl -sS -H "Authorization: Bearer $SCIM_BEARER_TOKEN" "$BASE_URL/Users" | jq '.Resources | length'
 
 echo "== filter: userName eq \"alice\" =="
 filter 'userName eq "alice"' | jq '.Resources[].userName'
@@ -41,16 +41,16 @@ echo "== filter: userName pr =="
 filter 'userName pr' | jq '.Resources | length'
 
 echo "== get by id =="
-curl -sS "$BASE_URL/Users/$alice_id" | jq '.userName'
+curl -sS -H "Authorization: Bearer $SCIM_BEARER_TOKEN" "$BASE_URL/Users/$alice_id" | jq '.userName'
 
 echo "== replace: deactivate bob =="
-curl -sS -X PUT "$BASE_URL/Users/$bob_id" -H 'Content-Type: application/scim+json' -d '{"userName":"bob","active":false,"name":{"givenName":"Bob","familyName":"Brown"}}' | jq '.active'
+curl -sS -H "Authorization: Bearer $SCIM_BEARER_TOKEN" -X PUT "$BASE_URL/Users/$bob_id" -H 'Content-Type: application/scim+json' -d '{"userName":"bob","active":false,"name":{"givenName":"Bob","familyName":"Brown"}}' | jq '.active'
 
 echo "== filter after update: active eq false =="
 filter 'active eq false' | jq '.Resources[].userName'
 
 echo "== delete carol =="
-curl -sS -o /dev/null -w '%{http_code}\n' -X DELETE "$BASE_URL/Users/$(jq -r .id <<<"$carol")"
+curl -sS -H "Authorization: Bearer $SCIM_BEARER_TOKEN" -o /dev/null -w '%{http_code}\n' -X DELETE "$BASE_URL/Users/$(jq -r .id <<<"$carol")"
 
 echo "== list after delete =="
-curl -sS "$BASE_URL/Users" | jq '.Resources | length'
+curl -sS -H "Authorization: Bearer $SCIM_BEARER_TOKEN" "$BASE_URL/Users" | jq '.Resources | length'
