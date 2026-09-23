@@ -138,6 +138,20 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	t.Run("rejects an element missing a required sub-attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Widgets",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, &widget{Name: "gear", Parts: []part{{Serial: "s-1"}, {}}}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
 	t.Run("rejects a value outside the declared canonical values", func(t *testing.T) {
 		srv := newTestServer(t)
 

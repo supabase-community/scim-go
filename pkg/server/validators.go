@@ -16,12 +16,19 @@ import (
 func Required[T Entity](accessors Accessors[T]) Validator[T] {
 	return func(_ context.Context, candidate T) error {
 		for attribute, accessor := range accessors {
-			if attribute.Required && isEmpty(accessor(candidate)) {
+			if attribute.Required && isMissing(attribute, accessor(candidate)) {
 				return scimerrors.ErrInvalidValue(strconv.Quote(attribute.Name) + " is required")
 			}
 		}
 		return nil
 	}
+}
+
+func isMissing(attribute *core.Attribute, value any) bool {
+	if attribute.MultiValued {
+		return isEmpty(value)
+	}
+	return slices.ContainsFunc(valuesOf(value), isEmpty)
 }
 
 // CanonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.

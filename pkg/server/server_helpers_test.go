@@ -21,6 +21,11 @@ type widget struct {
 	When  time.Time
 	Nick  string
 	Tags  []any
+	Parts []part
+}
+
+type part struct {
+	Serial string
 }
 
 func (w *widget) ResourceID() string { return w.ID }
@@ -51,6 +56,11 @@ func widgetFields() server.Fields[*widget] {
 		server.NewField(
 			core.NewAttribute("tags", core.TypeString).AsMultiValued(),
 			func(w *widget) any { return w.Tags },
+		),
+		server.NewElements(
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued(),
+			func(w *widget) []part { return w.Parts },
+			server.NewElementField(core.NewAttribute("serial", core.TypeString).AsRequired(), func(p part) any { return p.Serial }),
 		),
 	)
 }
