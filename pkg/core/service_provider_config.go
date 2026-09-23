@@ -17,6 +17,7 @@ type FilterFeature struct {
 
 // ServiceProviderConfig is the schema defined in RFC 7643, Section 5.
 type ServiceProviderConfig struct {
+	basePath              string
 	Schemas               []SchemaURI             `json:"schemas"`
 	DocumentationURI      string                  `json:"documentationUri,omitempty"`
 	Patch                 SupportedFeature        `json:"patch"`
@@ -29,15 +30,25 @@ type ServiceProviderConfig struct {
 	Meta                  Meta                    `json:"meta"`
 }
 
-func NewServiceProviderConfig() *ServiceProviderConfig {
+func NewServiceProviderConfig(basePath string) *ServiceProviderConfig {
 	return &ServiceProviderConfig{
-		Schemas: []SchemaURI{SchemaServiceProviderConfig},
+		basePath: basePath,
+		Schemas:  []SchemaURI{SchemaServiceProviderConfig},
 		Meta: Meta{
 			ResourceType: "ServiceProviderConfig",
+			Location:     basePath + "/ServiceProviderConfig",
 		},
 		AuthenticationSchemes: []*AuthenticationScheme{},
 	}
 }
+
+// BasePath is the URL prefix this provider mounts its endpoints under.
+func (c *ServiceProviderConfig) BasePath() string { return c.basePath }
+
+func (c *ServiceProviderConfig) SupportsPatch() bool      { return c.Patch.Supported }
+func (c *ServiceProviderConfig) SupportsFilter() bool     { return c.Filter.Supported }
+func (c *ServiceProviderConfig) SupportsSort() bool       { return c.Sort.Supported }
+func (c *ServiceProviderConfig) SupportsVersioning() bool { return c.ETag.Supported }
 
 // Sorting states that this provider honours "sortBy" and "sortOrder", per RFC 7644, Section 3.4.2.3.
 func (c *ServiceProviderConfig) Sorting() *ServiceProviderConfig {

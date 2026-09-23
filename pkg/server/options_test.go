@@ -18,7 +18,7 @@ func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("broken p
 
 func TestErrorHandlerOption(t *testing.T) {
 	var reported []error
-	srv := server.New(basePath,
+	srv := server.New(fullServiceProviderConfig(),
 		server.ErrorHandler(func(err error) { reported = append(reported, err) }),
 		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields())),
 	)
@@ -34,7 +34,7 @@ func TestWithRepository(t *testing.T) {
 	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
 	require.NoError(t, err)
 
-	srv := Server(t, server.New(basePath, server.WithResource(
+	srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(
 		server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository),
 	)))
 

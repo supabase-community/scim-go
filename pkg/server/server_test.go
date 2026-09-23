@@ -365,7 +365,7 @@ func TestRFC7644QueryResources(t *testing.T) {
 	})
 
 	t.Run("pages with a custom default count", func(t *testing.T) {
-		srv := newTestServer(t, server.Limits(protocol.Limits{DefaultCount: 1, MaxCount: 2}))
+		srv := newTestServer(t, server.DefaultCount(1))
 		create(t, srv, &core.User{UserName: "alice"})
 		create(t, srv, &core.User{UserName: "bob"})
 
@@ -377,7 +377,8 @@ func TestRFC7644QueryResources(t *testing.T) {
 	})
 
 	t.Run("caps the count at a custom maximum", func(t *testing.T) {
-		srv := newTestServer(t, server.Limits(protocol.Limits{DefaultCount: 1, MaxCount: 2}))
+		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(2).Patching().Versioning()
+		srv := Server(t, server.New(config, standardOptions(t)...))
 		create(t, srv, &core.User{UserName: "alice"})
 		create(t, srv, &core.User{UserName: "bob"})
 		create(t, srv, &core.User{UserName: "carol"})
@@ -1768,8 +1769,18 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.True(t, config.AuthenticationSchemes[0].Primary)
 	})
 
-	t.Run("advertises a custom max results from Limits", func(t *testing.T) {
-		srv := newTestServer(t, server.Limits(protocol.Limits{DefaultCount: 1, MaxCount: 2}))
+	t.Run("advertises its own location", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithBearerToken(validToken))
+		config := ReadBodyAs[core.ServiceProviderConfig](t, Response(t, srv, request))
+
+		assert.Equal(t, basePath+"/ServiceProviderConfig", config.Meta.Location)
+	})
+
+	t.Run("advertises the custom max results configured via Filtering", func(t *testing.T) {
+		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(2).Patching().Versioning()
+		srv := Server(t, server.New(config, standardOptions(t)...))
 
 		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithBearerToken(validToken))
 		response := Response(t, srv, request)
@@ -1778,19 +1789,107 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.Equal(t, 2, ReadBodyAs[core.ServiceProviderConfig](t, response).Filter.MaxResults)
 	})
 
-	// RFC 7643 Section 5: a ServiceProviderConfig option customizes the advertised capabilities.
-	t.Run("applies a ServiceProviderConfig option", func(t *testing.T) {
-		srv := newTestServer(t, server.ServiceProviderConfig(func(config *core.ServiceProviderConfig) {
-			config.DocumentationURI = "https://example.com/help/scim.html"
-			config.Sort.Supported = false
-		}))
+	// RFC 7643 Section 5: the config a caller builds is exactly what the server advertises.
+	t.Run("advertises a mutated config directly", func(t *testing.T) {
+		config := core.NewServiceProviderConfig(basePath).Patching().Filtering(protocol.DefaultLimits.MaxCount)
+		config.DocumentationURI = "https://example.com/help/scim.html"
+		srv := Server(t, server.New(config, standardOptions(t)...))
 
 		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithBearerToken(validToken))
-		config := ReadBodyAs[core.ServiceProviderConfig](t, Response(t, srv, request))
+		advertised := ReadBodyAs[core.ServiceProviderConfig](t, Response(t, srv, request))
 
-		assert.Equal(t, "https://example.com/help/scim.html", config.DocumentationURI)
-		assert.False(t, config.Sort.Supported)
-		assert.True(t, config.Patch.Supported)
+		assert.Equal(t, "https://example.com/help/scim.html", advertised.DocumentationURI)
+		assert.False(t, advertised.Sort.Supported)
+		assert.True(t, advertised.Patch.Supported)
+	})
+}
+
+// The endpoints and behavior a provider exposes follow the ServiceProviderConfig it advertises, per RFC 7643, Section 5.
+func TestRFC7644CapabilitiesFollowServiceProviderConfig(t *testing.T) {
+	t.Run("PATCH is declined when Patch.Supported is false", func(t *testing.T) {
+		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Versioning()
+		srv := Server(t, server.New(config, standardOptions(t)...))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
+			}),
+		)
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+	})
+
+	t.Run("filter is declined when Filter.Supported is false", func(t *testing.T) {
+		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+
+		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "bjensen"`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+	})
+
+	t.Run("plain listing still works when Filter.Supported is false", func(t *testing.T) {
+		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusOK, response.StatusCode)
+	})
+
+	t.Run("sortBy is declined when Sort.Supported is false", func(t *testing.T) {
+		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+
+		path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+	})
+
+	t.Run("no ETag header when ETag.Supported is false, and a stale If-Match is ignored", func(t *testing.T) {
+		config := core.NewServiceProviderConfig(basePath).Patching()
+		srv := Server(t, server.New(config, standardOptions(t)...))
+
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		assert.Empty(t, created.Header.Get("ETag"))
+		id := ReadBodyAs[core.User](t, created).ID
+
+		replace := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken), WithContentType(protocol.MediaType),
+			WithHeader("If-Match", `W/"stale"`), WithRequestBody([]byte(`{"userName":"bjensen2"}`))))
+		assert.Equal(t, http.StatusOK, replace.StatusCode)
+
+		patch := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken), WithContentType(protocol.MediaType), WithHeader("If-Match", `W/"stale"`),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "userName", Value: json.RawMessage(`"bjensen3"`)}},
+			})))
+		assert.Equal(t, http.StatusOK, patch.StatusCode)
+
+		del := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
+			WithBearerToken(validToken), WithHeader("If-Match", `W/"stale"`)))
+		assert.Equal(t, http.StatusNoContent, del.StatusCode)
+	})
+
+	t.Run("runs a minimal server with only CRUD end to end", func(t *testing.T) {
+		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		get := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		assert.Equal(t, http.StatusOK, get.StatusCode)
+
+		del := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		assert.Equal(t, http.StatusNoContent, del.StatusCode)
 	})
 }
 

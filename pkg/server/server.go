@@ -21,22 +21,14 @@ type Server struct {
 
 type Option[T any] func(T)
 
-// Limits sets the pagination bounds of every resource type, per RFC 7644, Section 3.4.2.4.
-func Limits(limits protocol.Limits) Option[*Server] {
-	return func(s *Server) {
-		s.limits = limits
-		s.config.Filtering(limits.MaxCount)
-	}
-}
-
 // ErrorHandler receives the errors the server could not send to a client.
 func ErrorHandler(fn func(error)) Option[*Server] {
 	return func(s *Server) { s.errorHandler = fn }
 }
 
-// ServiceProviderConfig changes the capabilities the server advertises, per RFC 7643, Section 5.
-func ServiceProviderConfig(fn func(*core.ServiceProviderConfig)) Option[*Server] {
-	return func(s *Server) { fn(s.config) }
+// DefaultCount sets the page size used when a client omits "count", per RFC 7644, Section 3.4.2.4.
+func DefaultCount(n int) Option[*Server] {
+	return func(s *Server) { s.limits.DefaultCount = n }
 }
 
 func WithResource(resource Registration) Option[*Server] {
@@ -56,27 +48,36 @@ func WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.
 	}
 }
 
-func New(basePath string, options ...Option[*Server]) *Server {
+func New(config *core.ServiceProviderConfig, options ...Option[*Server]) *Server {
 	mux := http.NewServeMux()
 	s := &Server{
 		mux:          mux,
 		handler:      mux,
-		basePath:     basePath,
-		limits:       protocol.DefaultLimits,
+		basePath:     config.BasePath(),
+		config:       config,
+		limits:       limitsFrom(config),
 		errorHandler: func(error) {},
-		config:       core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning(),
 	}
 	for _, option := range options {
 		option(s)
 	}
 
-	mux.HandleFunc("GET "+basePath+"/ServiceProviderConfig", s.handle(s.serviceProviderConfig))
-	mux.HandleFunc("GET "+basePath+"/ResourceTypes", s.handle(s.listResourceTypes))
-	mux.HandleFunc("GET "+basePath+"/ResourceTypes/{id}", s.handle(s.resourceTypeByID))
-	mux.HandleFunc("GET "+basePath+"/Schemas", s.handle(s.listSchemas))
-	mux.HandleFunc("GET "+basePath+"/Schemas/{id}", s.handle(s.schemaByID))
+	mux.HandleFunc("GET "+s.basePath+"/ServiceProviderConfig", s.handle(s.serviceProviderConfig))
+	mux.HandleFunc("GET "+s.basePath+"/ResourceTypes", s.handle(s.listResourceTypes))
+	mux.HandleFunc("GET "+s.basePath+"/ResourceTypes/{id}", s.handle(s.resourceTypeByID))
+	mux.HandleFunc("GET "+s.basePath+"/Schemas", s.handle(s.listSchemas))
+	mux.HandleFunc("GET "+s.basePath+"/Schemas/{id}", s.handle(s.schemaByID))
 
 	return s
+}
+
+// limitsFrom derives the page-size cap from the advertised filter.maxResults, per RFC 7643, Section 5.
+func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
+	limits := protocol.DefaultLimits
+	if config.Filter.MaxResults > 0 {
+		limits.MaxCount = config.Filter.MaxResults
+	}
+	return limits
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

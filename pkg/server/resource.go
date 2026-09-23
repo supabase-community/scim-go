@@ -96,7 +96,7 @@ func (c *Resource[T]) mount(s *Server, schemas []*core.Schema) {
 		repository = NewRepository(path, schemas[0], fields)
 	}
 	service := NewService(repository, Validators(fields, repository)...)
-	controller := NewController(service, schemas, s.limits)
+	controller := NewController(service, schemas, s.limits, s.config)
 
 	s.mux.HandleFunc("GET "+path, s.handle(controller.List))
 	s.mux.HandleFunc("POST "+path, s.handle(controller.Create))

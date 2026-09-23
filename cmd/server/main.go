@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
@@ -23,7 +24,13 @@ func main() {
 		log.Fatal("SCIM_BEARER_TOKEN must be set")
 	}
 
-	srv := server.New(basePath,
+	config := core.NewServiceProviderConfig(basePath).
+		Sorting().
+		Filtering(protocol.DefaultLimits.MaxCount).
+		Patching().
+		Versioning()
+
+	srv := server.New(config,
 		server.ErrorHandler(errorHandler),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields())),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields())),

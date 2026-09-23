@@ -132,11 +132,15 @@ func groupFields() server.Fields[*core.Group] {
 	)
 }
 
-func newTestServer(t *testing.T, options ...server.Option[*server.Server]) *httptest.Server {
+func fullServiceProviderConfig() *core.ServiceProviderConfig {
+	return core.NewServiceProviderConfig(basePath).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning()
+}
+
+func standardOptions(t *testing.T) []server.Option[*server.Server] {
 	t.Helper()
 
-	options = append([]server.Option[*server.Server]{server.ErrorHandler(func(err error) { t.Errorf("%v\n", err) })}, options...)
-	options = append(options,
+	return []server.Option[*server.Server]{
+		server.ErrorHandler(func(err error) { t.Errorf("%v\n", err) }),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithExtension(core.SchemaEnterpriseUser, enterpriseFields())),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())),
 		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields())),
@@ -148,8 +152,13 @@ func newTestServer(t *testing.T, options ...server.Option[*server.Server]) *http
 				return ctx, nil
 			},
 		)),
-	)
-	srv := server.New(basePath, options...)
+	}
+}
+
+func newTestServer(t *testing.T, options ...server.Option[*server.Server]) *httptest.Server {
+	t.Helper()
+
+	srv := server.New(fullServiceProviderConfig(), append(options, standardOptions(t)...)...)
 
 	return Server(t, srv)
 }
