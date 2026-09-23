@@ -1,4 +1,4 @@
-package peg
+package peg_test
 
 import (
 	"fmt"
@@ -6,10 +6,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/filter/internal/peg"
 )
 
 func TestSpace(t *testing.T) {
-	atom := Space()
+	atom := peg.Space()
 
 	tt := []struct {
 		stream   string
@@ -25,11 +26,11 @@ func TestSpace(t *testing.T) {
 	}
 	for _, expected := range tt {
 		t.Run(fmt.Sprintf("%s %d", expected.stream, expected.position), func(t *testing.T) {
-			ctx := NewContext(expected.stream)
+			ctx := peg.NewContext(expected.stream)
 			item, err := atom(ctx)
 
 			require.Nil(t, item)
-			assert.Equal(t, expected.position, ctx.position)
+			assert.Equal(t, expected.position, ctx.Position())
 			require.NoError(t, err)
 		})
 	}

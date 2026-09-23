@@ -1,4 +1,4 @@
-package peg
+package peg_test
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/supabase-community/scim-go/pkg/filter/internal/peg"
 )
 
 func TestMatch(t *testing.T) {
@@ -30,12 +31,12 @@ func TestMatch(t *testing.T) {
 	}
 	for _, expected := range tt {
 		t.Run(fmt.Sprintf("%s %d", expected.stream, expected.position), func(t *testing.T) {
-			atom := Match(regexp.MustCompile(expected.re))
-			ctx := NewContext(expected.stream)
+			atom := peg.Match(regexp.MustCompile(expected.re))
+			ctx := peg.NewContext(expected.stream)
 			result, err := atom(ctx)
 
 			assert.Equal(t, expected.ok, err == nil)
-			assert.Equal(t, expected.position, ctx.position)
+			assert.Equal(t, expected.position, ctx.Position())
 			assert.Equal(t, expected.result, result)
 		})
 	}

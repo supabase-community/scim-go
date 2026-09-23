@@ -1,10 +1,11 @@
-package peg
+package peg_test
 
 import (
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/supabase-community/scim-go/pkg/filter/internal/peg"
 )
 
 func TestStr(t *testing.T) {
@@ -23,12 +24,12 @@ func TestStr(t *testing.T) {
 	}
 	for _, expected := range tt {
 		t.Run(fmt.Sprintf("%s %d", expected.stream, expected.position), func(t *testing.T) {
-			atom := Str(expected.input)
-			ctx := NewContext(expected.stream)
+			atom := peg.Str(expected.input)
+			ctx := peg.NewContext(expected.stream)
 			result, err := atom(ctx)
 
 			assert.Equal(t, expected.ok, err == nil)
-			assert.Equal(t, expected.position, ctx.position)
+			assert.Equal(t, expected.position, ctx.Position())
 			assert.Equal(t, expected.result, result)
 		})
 	}

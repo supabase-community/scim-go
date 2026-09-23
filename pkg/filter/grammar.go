@@ -60,7 +60,7 @@ func (g *grammar) Parse(text string) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	node := newNode(raw)
+	node := NewNode(raw)
 	if node == nil {
 		return nil, NewParseError(text, len(text))
 	}
