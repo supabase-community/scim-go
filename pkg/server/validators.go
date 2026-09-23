@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"reflect"
 	"slices"
 	"strconv"
@@ -12,8 +14,19 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+// Validators enforces the attribute characteristics of RFC 7643, Section 7.
+func Validators[T Entity](fields Fields[T], repo Repository[T]) []Validator[T] {
+	return []Validator[T]{
+		Required(fields),
+		CanonicalValues(fields),
+		Mutability(fields, repo),
+		Uniqueness(fields, repo),
+	}
+}
+
 // Required rejects a candidate missing a value for an attribute marked "required", per RFC 7643, Section 7.
-func Required[T Entity](accessors Accessors[T]) Validator[T] {
+func Required[T Entity](fields Fields[T]) Validator[T] {
+	accessors := fields.Accessors()
 	return func(_ context.Context, candidate T) error {
 		for attribute, accessor := range accessors {
 			if attribute.Required && isMissing(attribute, accessor(candidate)) {
@@ -32,7 +45,8 @@ func isMissing(attribute *core.Attribute, value any) bool {
 }
 
 // CanonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.
-func CanonicalValues[T Entity](accessors Accessors[T]) Validator[T] {
+func CanonicalValues[T Entity](fields Fields[T]) Validator[T] {
+	accessors := fields.Accessors()
 	return func(_ context.Context, candidate T) error {
 		for attribute, accessor := range accessors {
 			if len(attribute.CanonicalValues) == 0 {
@@ -58,7 +72,8 @@ func valuesOf(raw any) []any {
 }
 
 // Mutability rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7643, Section 7.
-func Mutability[T Entity](accessors Accessors[T], repo Repository[T]) Validator[T] {
+func Mutability[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
+	accessors := fields.Accessors()
 	return func(ctx context.Context, candidate T) error {
 		existing, err := repo.Get(ctx, candidate.ResourceID())
 		if err != nil {
@@ -79,17 +94,23 @@ func Mutability[T Entity](accessors Accessors[T], repo Repository[T]) Validator[
 }
 
 // Uniqueness rejects a value already used by another resource when an attribute requires "server" or "global" uniqueness, per RFC 7643, Section 7.
-func Uniqueness[T Entity](accessors Accessors[T], repo Repository[T]) Validator[T] {
+func Uniqueness[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
+	accessors := fields.Accessors()
+	paths := fields.paths()
 	return func(ctx context.Context, candidate T) error {
-		items, _, err := repo.List(ctx, &protocol.SearchRequest{Count: 1 << 30})
-		if err != nil {
-			return err
-		}
 		for attribute, accessor := range accessors {
 			if attribute.Uniqueness == core.UniquenessNone {
 				continue
 			}
-			if collidesWithAnother(candidate, items, accessor, attribute.CaseExact) {
+			query := uniqueQuery(paths[attribute], accessor(candidate))
+			if query == "" {
+				continue
+			}
+			items, _, err := repo.List(ctx, &protocol.SearchRequest{Filter: query, Count: 2})
+			if err != nil {
+				return err
+			}
+			if slices.ContainsFunc(items, func(item T) bool { return item.ResourceID() != candidate.ResourceID() }) {
 				return scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
 			}
 		}
@@ -97,17 +118,30 @@ func Uniqueness[T Entity](accessors Accessors[T], repo Repository[T]) Validator[
 	}
 }
 
-func collidesWithAnother[T Entity](candidate T, items []T, accessor Accessor[T], caseExact bool) bool {
-	value := accessor(candidate)
-	if isEmpty(value) {
-		return false
-	}
-	for _, item := range items {
-		if item.ResourceID() != candidate.ResourceID() && sameValue(value, accessor(item), caseExact) {
-			return true
+// RFC 7644 Section 3.4.2.2: a filter that matches any resource holding one of the values.
+func uniqueQuery(path string, value any) string {
+	var terms []string
+	for _, item := range valuesOf(value) {
+		if isEmpty(item) {
+			continue
+		}
+		literal, ok := filterLiteral(item)
+		if ok {
+			terms = append(terms, path+" eq "+literal)
 		}
 	}
-	return false
+	return strings.Join(terms, " or ")
+}
+
+func filterLiteral(value any) (string, bool) {
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return "", false
+	}
+	literal := strings.TrimSpace(buffer.String())
+	return literal, literal[0] != '{' && literal[0] != '['
 }
 
 func isEmpty(value any) bool {

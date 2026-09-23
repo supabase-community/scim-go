@@ -121,16 +121,10 @@ func (c *Resource[T]) build(basePath string) Controller[T] {
 	if service == nil {
 		repository := c.repository
 		fields := c.allFields()
-		accessors := fields.Accessors()
 		if repository == nil {
 			repository = NewRepository(basePath+c.endpoint, schemas[0], fields)
 		}
-		service = NewService[T](repository,
-			Required(accessors),
-			CanonicalValues(accessors),
-			Mutability(accessors, repository),
-			Uniqueness(accessors, repository),
-		)
+		service = NewService[T](repository, Validators(fields, repository)...)
 	}
 	return NewController[T](service, schemas, basePath+c.endpoint)
 }

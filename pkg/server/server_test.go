@@ -1886,6 +1886,12 @@ func TestConcurrentRequests(t *testing.T) {
 type recordingRepository struct {
 	server.Repository[*core.User]
 	replaced []*core.User
+	queries  []*protocol.SearchRequest
+}
+
+func (r *recordingRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
+	r.queries = append(r.queries, query)
+	return r.Repository.List(ctx, query)
 }
 
 func (r *recordingRepository) Replace(ctx context.Context, item *core.User) (*core.User, error) {
@@ -1973,4 +1979,20 @@ func TestRFC7644IgnoresReadOnlyAttributes(t *testing.T) {
 
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
 	})
+}
+
+func TestUniquenessQueriesOnlyMatchingResources(t *testing.T) {
+	fields := userFields()
+	repository := &recordingRepository{Repository: server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)}
+	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
+
+	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+		WithContentType(protocol.MediaType),
+		WithRequestBody([]byte(`{"userName":"b\"jensen"}`)),
+	))
+
+	require.Equal(t, http.StatusCreated, response.StatusCode)
+	require.Len(t, repository.queries, 1)
+	assert.Equal(t, `userName eq "b\"jensen"`, repository.queries[0].Filter)
+	assert.Equal(t, 2, repository.queries[0].Count)
 }
