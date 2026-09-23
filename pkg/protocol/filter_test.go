@@ -165,6 +165,12 @@ func TestFilter(t *testing.T) {
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
+	// RFC 7644 Section 3.4.2.2: for complex attributes, a fully qualified sub-attribute MUST be specified.
+	t.Run("rejects a comparison on a complex attribute without a sub-attribute", func(t *testing.T) {
+		_, err := protocol.Filter[clause](schemas, `emails co "example.com"`, sqlEvaluator{})
+		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
+	})
+
 	t.Run("resolves presence of an unknown attribute to invalidFilter", func(t *testing.T) {
 		_, err := protocol.Filter[clause](schemas, `nickName pr`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
