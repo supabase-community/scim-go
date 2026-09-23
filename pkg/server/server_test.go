@@ -1951,6 +1951,17 @@ func TestRFC7644Schemas(t *testing.T) {
 		response := Response(t, srv, request)
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
 	})
+
+	// RFC 7644 Section 4: a "filter" on this endpoint SHOULD be rejected with 403, not silently ignored.
+	t.Run("rejects a filter query parameter with 403", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		path := basePath + "/Schemas?" + url.Values{"filter": {`id eq "x"`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusForbidden, response.StatusCode)
+	})
 }
 
 // 4. Service Provider Configuration Endpoints (/ResourceTypes)
@@ -2005,6 +2016,17 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 		response := Response(t, srv, request)
 
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
+	})
+
+	// RFC 7644 Section 4: a "filter" on this endpoint SHOULD be rejected with 403, not silently ignored.
+	t.Run("rejects a filter query parameter with 403", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		path := basePath + "/ResourceTypes?" + url.Values{"filter": {`id eq "x"`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusForbidden, response.StatusCode)
 	})
 }
 

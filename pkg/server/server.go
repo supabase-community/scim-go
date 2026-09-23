@@ -96,7 +96,10 @@ func (s *Server) serviceProviderConfig(w http.ResponseWriter, _ *http.Request) e
 	return protocol.Send(w, http.StatusOK, s.config)
 }
 
-func (s *Server) listResourceTypes(w http.ResponseWriter, _ *http.Request) error {
+func (s *Server) listResourceTypes(w http.ResponseWriter, r *http.Request) error {
+	if err := rejectFilter(r); err != nil {
+		return protocol.SendError(w, err)
+	}
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.resourceTypes), s.resourceTypes))
 }
 
@@ -109,7 +112,10 @@ func (s *Server) resourceTypeByID(w http.ResponseWriter, r *http.Request) error 
 	return protocol.SendError(w, scimerrors.ErrNotFound("resource type not found"))
 }
 
-func (s *Server) listSchemas(w http.ResponseWriter, _ *http.Request) error {
+func (s *Server) listSchemas(w http.ResponseWriter, r *http.Request) error {
+	if err := rejectFilter(r); err != nil {
+		return protocol.SendError(w, err)
+	}
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.schemas), s.schemas))
 }
 
@@ -120,4 +126,12 @@ func (s *Server) schemaByID(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	return protocol.SendError(w, scimerrors.ErrNotFound("schema not found"))
+}
+
+// rejectFilter forbids "filter" on /ResourceTypes and /Schemas, per RFC 7644, Section 4.
+func rejectFilter(r *http.Request) error {
+	if r.URL.Query().Get("filter") != "" {
+		return scimerrors.ErrForbidden(`"filter" is not supported on this endpoint`)
+	}
+	return nil
 }
