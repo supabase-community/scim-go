@@ -90,7 +90,7 @@ func (c *Resource[T]) allFields() Fields[T] {
 
 func (c *Resource[T]) mount(s *Server) {
 	if c.repository == nil {
-		panic("server: resource " + c.name + " needs WithRepository")
+		c.repository = NewMemoryRepository(c)
 	}
 	c.basePath = s.basePath
 	service := NewService(c.repository, Validators(c.allFields(), c.repository)...)

@@ -2003,9 +2003,13 @@ func TestUniquenessQueriesOnlyMatchingResources(t *testing.T) {
 }
 
 func TestResourceWithoutRepository(t *testing.T) {
-	assert.PanicsWithValue(t, "server: resource User needs WithRepository", func() {
-		server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields()))
-	})
+	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields())))
+	id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id))
+
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
 }
 
 func TestServerOptions(t *testing.T) {

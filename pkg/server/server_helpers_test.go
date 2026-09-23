@@ -136,9 +136,9 @@ func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	srv := server.New(basePath, server.ErrorHandler(func(err error) { t.Errorf("%v\n", err) })).
-		WithResource(inMemory(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account").WithExtension(core.SchemaEnterpriseUser, enterpriseFields()))).
-		WithResource(inMemory(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields()))).
-		WithResource(inMemory(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields()))).
+		WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account").WithExtension(core.SchemaEnterpriseUser, enterpriseFields())).
+		WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())).
+		WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields())).
 		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if candidate != validToken {
@@ -149,10 +149,6 @@ func newTestServer(t *testing.T) *httptest.Server {
 		))
 
 	return Server(t, srv)
-}
-
-func inMemory[T server.Entity](resource *server.Resource[T]) *server.Resource[T] {
-	return resource.WithRepository(server.NewMemoryRepository(resource))
 }
 
 func enterpriseFields() server.Fields[*core.User] {

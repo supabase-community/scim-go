@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
@@ -24,14 +23,13 @@ func main() {
 		log.Fatal("SCIM_BEARER_TOKEN must be set")
 	}
 
-	users := server.NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields()).
-		WithDescription("User Account")
-	groups := server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields()).
-		WithDescription("Group")
-
-	srv := server.New(basePath, server.Limits(protocol.DefaultLimits), server.ErrorHandler(errorHandler)).
-		WithResource(users.WithRepository(server.NewMemoryRepository(users))).
-		WithResource(groups.WithRepository(server.NewMemoryRepository(groups))).
+	srv := server.New(basePath, server.ErrorHandler(errorHandler)).
+		WithResource(server.
+			NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields()).
+			WithDescription("User Account")).
+		WithResource(server.
+			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields()).
+			WithDescription("Group")).
 		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {
