@@ -87,14 +87,14 @@ func (c *Resource[T]) allFields() Fields[T] {
 	return fields
 }
 
-func (c *Resource[T]) mount(s *Server) {
-	schemas := c.schemas(s.basePath)
+func (c *Resource[T]) mount(s *Server, schemas []*core.Schema) {
 	fields := c.allFields()
 	path := s.basePath + c.endpoint
-	if c.repository == nil {
-		c.repository = NewRepository(path, schemas[0], fields)
+	repository := c.repository
+	if repository == nil {
+		repository = NewRepository(path, schemas[0], fields)
 	}
-	service := NewService(c.repository, Validators(fields, c.repository)...)
+	service := NewService(repository, Validators(fields, repository)...)
 	controller := NewController(service, schemas, s.limits)
 
 	s.mux.HandleFunc("GET "+path, s.handle(controller.List))

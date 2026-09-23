@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"slices"
 	"strconv"
@@ -77,7 +78,10 @@ func Mutability[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
 	return func(ctx context.Context, candidate T) error {
 		existing, err := repo.Get(ctx, candidate.ResourceID())
 		if err != nil {
-			return nil
+			if errors.Is(err, scimerrors.ErrNotFound("")) {
+				return nil
+			}
+			return err
 		}
 		for attribute, accessor := range accessors {
 			if attribute.Mutability != core.MutabilityImmutable {

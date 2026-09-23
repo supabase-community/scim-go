@@ -17,14 +17,16 @@ type Server struct {
 	config        *core.ServiceProviderConfig
 	limits        protocol.Limits
 	errorHandler  func(error)
-	configure     []func(*core.ServiceProviderConfig)
 }
 
 type Option func(*Server)
 
 // Limits sets the pagination bounds of every resource type, per RFC 7644, Section 3.4.2.4.
 func Limits(limits protocol.Limits) Option {
-	return func(s *Server) { s.limits = limits }
+	return func(s *Server) {
+		s.limits = limits
+		s.config.Filtering(limits.MaxCount)
+	}
 }
 
 // ErrorHandler receives the errors the server could not send to a client.
@@ -34,7 +36,7 @@ func ErrorHandler(fn func(error)) Option {
 
 // ServiceProviderConfig changes the capabilities the server advertises, per RFC 7643, Section 5.
 func ServiceProviderConfig(fn func(*core.ServiceProviderConfig)) Option {
-	return func(s *Server) { s.configure = append(s.configure, fn) }
+	return func(s *Server) { fn(s.config) }
 }
 
 func New(basePath string, options ...Option) *Server {
@@ -45,13 +47,10 @@ func New(basePath string, options ...Option) *Server {
 		basePath:     basePath,
 		limits:       protocol.DefaultLimits,
 		errorHandler: func(error) {},
+		config:       core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning(),
 	}
 	for _, option := range options {
 		option(s)
-	}
-	s.config = core.NewServiceProviderConfig().Sorting().Filtering(s.limits.MaxCount).Patching().Versioning()
-	for _, fn := range s.configure {
-		fn(s.config)
 	}
 
 	mux.HandleFunc("GET "+basePath+"/ServiceProviderConfig", s.handle(s.serviceProviderConfig))
@@ -64,9 +63,10 @@ func New(basePath string, options ...Option) *Server {
 }
 
 func (s *Server) WithResource(resource Registration) *Server {
+	schemas := resource.schemas(s.basePath)
 	s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
-	s.schemas = append(s.schemas, resource.schemas(s.basePath)...)
-	resource.mount(s)
+	s.schemas = append(s.schemas, schemas...)
+	resource.mount(s, schemas)
 	return s
 }
 
