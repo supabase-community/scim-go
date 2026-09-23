@@ -165,6 +165,20 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	t.Run("rejects a resource missing a required multi-valued attribute", func(t *testing.T) {
+		srv := newTestServer(t, server.WithResource(server.NewResource[*widget]("Kit", "/Kits", kitSchema, kitFields())))
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Kits",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, &widget{Name: "gear"}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
 	t.Run("rejects a value outside the declared canonical values", func(t *testing.T) {
 		srv := newTestServer(t)
 

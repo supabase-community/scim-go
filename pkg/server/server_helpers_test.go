@@ -67,6 +67,18 @@ func widgetFields() server.Fields[*widget] {
 
 const widgetSchema core.SchemaURI = "urn:test:widget"
 
+const kitSchema core.SchemaURI = "urn:test:kit"
+
+func kitFields() server.Fields[*widget] {
+	return server.NewFields(
+		server.NewElements(
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().AsRequired(),
+			func(w *widget) []part { return w.Parts },
+			server.NewField(core.NewAttribute("serial", core.TypeString).AsRequired(), func(p part) any { return p.Serial }),
+		),
+	)
+}
+
 func createWidget(t *testing.T, srv *httptest.Server, w *widget) map[string]any {
 	t.Helper()
 

@@ -28,9 +28,15 @@ func Validators[T Entity](fields Fields[T], repo Repository[T]) []Validator[T] {
 // Required rejects a candidate missing a value for an attribute marked "required", per RFC 7643, Section 7.
 func Required[T Entity](fields Fields[T]) Validator[T] {
 	accessors := fields.accessors()
+	elements := fields.elements()
 	return func(_ context.Context, candidate T) error {
 		for attribute, accessor := range accessors {
 			if attribute.Required && isMissing(attribute, accessor(candidate)) {
+				return scimerrors.ErrInvalidValue(strconv.Quote(attribute.Name) + " is required")
+			}
+		}
+		for attribute, list := range elements {
+			if attribute.Required && len(list(candidate)) == 0 {
 				return scimerrors.ErrInvalidValue(strconv.Quote(attribute.Name) + " is required")
 			}
 		}
