@@ -46,10 +46,15 @@ func (p Projection) Apply(resource any, schemas []*core.Schema) (map[string]any,
 	if len(schemas) == 0 {
 		return map[string]any{}, nil
 	}
-	s, err := newSelector(p, schemas)
+	included, err := qualify(schemas, p.Attributes)
 	if err != nil {
 		return nil, err
 	}
+	excluded, err := qualify(schemas, p.ExcludedAttributes)
+	if err != nil {
+		return nil, err
+	}
+	s := &selection{schemas: schemas, included: included, excluded: excluded}
 	out := map[string]any{}
 	for key, value := range document {
 		if key == "schemas" {
@@ -61,43 +66,36 @@ func (p Projection) Apply(resource any, schemas []*core.Schema) (map[string]any,
 	return out, nil
 }
 
-type selector struct {
-	base      *core.Schema
-	schemas   []*core.Schema
-	selecting bool
-	requested []filter.AttrPath
-	excluded  []filter.AttrPath
-	wanted    []core.SchemaURI
-	unwanted  []core.SchemaURI
-}
+// names holds fully qualified, lowercase attribute paths: "<schema uri>:<name>[.<sub-name>]",
+// or a bare lowercase schema URI when a whole schema/extension was selected.
+type names []string
 
-func newSelector(p Projection, schemas []*core.Schema) (*selector, error) {
-	s := &selector{base: schemas[0], schemas: schemas, selecting: len(p.Attributes) > 0}
-	var err error
-	if s.requested, s.wanted, err = parsePaths(p.Attributes, schemas); err != nil {
-		return nil, err
-	}
-	if s.excluded, s.unwanted, err = parsePaths(p.ExcludedAttributes, schemas); err != nil {
-		return nil, err
-	}
-	return s, nil
-}
-
-func parsePaths(names []string, schemas []*core.Schema) ([]filter.AttrPath, []core.SchemaURI, error) {
-	var paths []filter.AttrPath
-	var whole []core.SchemaURI
-	for _, name := range names {
-		if schema := schemaNamed(schemas, name); schema != nil {
-			whole = append(whole, schema.ID)
+func qualify(schemas []*core.Schema, list []string) (names, error) {
+	out := make(names, 0, len(list))
+	for _, raw := range list {
+		if schema := schemaNamed(schemas, raw); schema != nil {
+			out = append(out, strings.ToLower(string(schema.ID)))
 			continue
 		}
-		path, err := filter.NewAttrPath(name)
+		path, err := filter.NewAttrPath(raw)
 		if err != nil {
-			return nil, nil, invalidName(name)
+			return nil, invalidName(raw)
 		}
-		paths = append(paths, path)
+		uri := path.URI
+		if uri == "" {
+			uri = string(schemas[0].ID)
+		}
+		qualified := qualifiedKey(core.SchemaURI(uri), path.Name)
+		if path.SubAttribute != "" {
+			qualified += "." + strings.ToLower(path.SubAttribute)
+		}
+		out = append(out, qualified)
 	}
-	return paths, whole, nil
+	return out, nil
+}
+
+func qualifiedKey(uri core.SchemaURI, name string) string {
+	return strings.ToLower(string(uri)) + ":" + strings.ToLower(name)
 }
 
 func schemaNamed(schemas []*core.Schema, name string) *core.Schema {
@@ -109,9 +107,29 @@ func schemaNamed(schemas []*core.Schema, name string) *core.Schema {
 	return nil
 }
 
-func (s *selector) project(key string, value any) (any, bool) {
-	if attribute, ok := s.base.Resolve(key); ok {
-		return s.attribute(s.base.ID, attribute, value, false)
+// covers reports whether name is selected: an exact match, or nested under a selected
+// schema ("<e>:...") or a selected complex attribute ("<e>....").
+func (n names) covers(name string) bool {
+	return slices.ContainsFunc(n, func(e string) bool {
+		return name == e || strings.HasPrefix(name, e+":") || strings.HasPrefix(name, e+".")
+	})
+}
+
+// within reports whether a selected entry reaches inside name, so name must be
+// traversed even though it is not itself selected.
+func (n names) within(name string) bool {
+	return slices.ContainsFunc(n, func(e string) bool { return strings.HasPrefix(e, name+".") })
+}
+
+type selection struct {
+	schemas  []*core.Schema
+	included names
+	excluded names
+}
+
+func (s *selection) project(key string, value any) (any, bool) {
+	if attribute, ok := s.schemas[0].Resolve(key); ok {
+		return s.value(attribute, qualifiedKey(s.schemas[0].ID, attribute.Name), value)
 	}
 	if extension := schemaNamed(s.schemas[1:], key); extension != nil {
 		return s.extension(extension, value)
@@ -119,85 +137,56 @@ func (s *selector) project(key string, value any) (any, bool) {
 	return nil, false
 }
 
-func (s *selector) extension(schema *core.Schema, value any) (any, bool) {
+func (s *selection) extension(schema *core.Schema, value any) (any, bool) {
 	object, ok := value.(map[string]any)
-	if !ok || slices.Contains(s.unwanted, schema.ID) {
+	if !ok {
 		return nil, false
 	}
-	whole := slices.Contains(s.wanted, schema.ID)
 	out := map[string]any{}
 	for key, item := range object {
-		if attribute := schema.Attributes.Lookup(key); attribute != nil {
-			if projected, ok := s.attribute(schema.ID, attribute, item, whole); ok {
-				out[key] = projected
-			}
+		attribute := schema.Attributes.Lookup(key)
+		if attribute == nil {
+			continue
+		}
+		if projected, ok := s.value(attribute, qualifiedKey(schema.ID, attribute.Name), item); ok {
+			out[key] = projected
 		}
 	}
 	return out, len(out) > 0
 }
 
 // RFC 7643 Section 7: "returned" decides whether an attribute can appear in a response.
-func (s *selector) attribute(uri core.SchemaURI, attribute *core.Attribute, value any, whole bool) (any, bool) {
+func (s *selection) returns(attribute *core.Attribute, name string) bool {
 	switch {
 	case attribute.Returned == core.ReturnedNever:
-		return nil, false
+		return false
 	case attribute.Returned == core.ReturnedAlways:
-		return value, true
-	case s.selecting:
-		keepAll := whole || s.names(s.requested, uri, attribute.Name)
-		keep := s.subsOf(s.requested, uri, attribute.Name)
-		if !keepAll && len(keep) == 0 {
-			return nil, false
-		}
-		return subAttributes(attribute, value, choice{all: keepAll, keep: keep})
-	case attribute.Returned == core.ReturnedRequest, s.names(s.excluded, uri, attribute.Name):
-		return nil, false
+		return true
+	case attribute.Returned == core.ReturnedRequest:
+		return slices.Contains(s.included, name) || s.included.within(name)
+	case len(s.included) > 0:
+		return s.included.covers(name) || s.included.within(name)
 	default:
-		return subAttributes(attribute, value, choice{all: true, drop: s.subsOf(s.excluded, uri, attribute.Name)})
+		return !s.excluded.covers(name)
 	}
 }
 
-func (s *selector) names(paths []filter.AttrPath, uri core.SchemaURI, name string) bool {
-	return slices.ContainsFunc(paths, func(path filter.AttrPath) bool {
-		return path.SubAttribute == "" && s.matches(path, uri, name)
-	})
-}
-
-func (s *selector) subsOf(paths []filter.AttrPath, uri core.SchemaURI, name string) []string {
-	var subs []string
-	for _, path := range paths {
-		if path.SubAttribute != "" && s.matches(path, uri, name) {
-			subs = append(subs, path.SubAttribute)
-		}
+func (s *selection) value(attribute *core.Attribute, name string, value any) (any, bool) {
+	if !s.returns(attribute, name) {
+		return nil, false
 	}
-	return subs
-}
-
-// RFC 7644 Section 3.10: an unqualified name belongs to the base schema.
-func (s *selector) matches(path filter.AttrPath, uri core.SchemaURI, name string) bool {
-	inSchema := path.URI == "" && uri == s.base.ID || strings.EqualFold(path.URI, string(uri))
-	return inSchema && strings.EqualFold(path.Name, name)
-}
-
-type choice struct {
-	all  bool
-	keep []string
-	drop []string
-}
-
-func subAttributes(attribute *core.Attribute, value any, c choice) (any, bool) {
 	if len(attribute.SubAttributes) == 0 {
 		return value, true
 	}
 	switch v := value.(type) {
 	case map[string]any:
-		object := subObject(attribute, v, c)
+		object := s.object(attribute, name, v)
 		return object, len(object) > 0
 	case []any:
 		elements := make([]any, 0, len(v))
 		for _, element := range v {
 			if object, ok := element.(map[string]any); ok {
-				element = subObject(attribute, object, c)
+				element = s.object(attribute, name, object)
 			}
 			elements = append(elements, element)
 		}
@@ -206,28 +195,16 @@ func subAttributes(attribute *core.Attribute, value any, c choice) (any, bool) {
 	return value, true
 }
 
-func subObject(attribute *core.Attribute, object map[string]any, c choice) map[string]any {
+func (s *selection) object(attribute *core.Attribute, parentName string, object map[string]any) map[string]any {
 	out := map[string]any{}
 	for key, value := range object {
-		if sub := attribute.SubAttribute(key); sub != nil && c.keeps(sub) {
-			out[key] = value
+		sub := attribute.SubAttribute(key)
+		if sub == nil {
+			continue
+		}
+		if projected, ok := s.value(sub, parentName+"."+strings.ToLower(sub.Name), value); ok {
+			out[key] = projected
 		}
 	}
 	return out
-}
-
-func (c choice) keeps(sub *core.Attribute) bool {
-	named := func(names []string) bool {
-		return slices.ContainsFunc(names, func(name string) bool { return strings.EqualFold(name, sub.Name) })
-	}
-	switch {
-	case sub.Returned == core.ReturnedNever:
-		return false
-	case sub.Returned == core.ReturnedAlways:
-		return true
-	case !c.all || sub.Returned == core.ReturnedRequest:
-		return named(c.keep)
-	default:
-		return !named(c.drop)
-	}
 }
