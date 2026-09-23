@@ -24,15 +24,15 @@ type Controller[T Entity] interface {
 
 type controller[T Entity] struct {
 	path    string
-	schema  *core.Schema
+	schemas []*core.Schema
 	service Service[T]
 	limits  protocol.Limits
 }
 
-func NewController[T Entity](service Service[T], schema *core.Schema, path string) Controller[T] {
+func NewController[T Entity](service Service[T], schemas []*core.Schema, path string) Controller[T] {
 	return &controller[T]{
 		path:    path,
-		schema:  schema,
+		schemas: schemas,
 		service: service,
 		limits:  protocol.DefaultLimits,
 	}
@@ -107,7 +107,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
 	}
-	if err := req.Apply(resource, []*core.Schema{c.schema}); err != nil {
+	if err := req.Apply(resource, c.schemas); err != nil {
 		return protocol.SendError(w, err)
 	}
 	replaced, err := c.service.Replace(r.Context(), resource)

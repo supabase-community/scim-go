@@ -1595,11 +1595,12 @@ func TestRFC7644Schemas(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.Schema]](t, response)
-		require.Equal(t, 3, list.TotalResults)
+		require.Equal(t, 4, list.TotalResults)
 		schema := list.Resources[0]
 		assert.Equal(t, core.SchemaUser, schema.ID)
-		assert.Equal(t, core.SchemaGroup, list.Resources[1].ID)
-		assert.Equal(t, widgetSchema, list.Resources[2].ID)
+		assert.Equal(t, core.SchemaEnterpriseUser, list.Resources[1].ID)
+		assert.Equal(t, core.SchemaGroup, list.Resources[2].ID)
+		assert.Equal(t, widgetSchema, list.Resources[3].ID)
 
 		userName := schema.Attributes.Lookup("userName")
 		require.NotNil(t, userName)
@@ -1718,6 +1719,26 @@ func TestRFC7643EnterpriseUserExtension(t *testing.T) {
 	require.NotNil(t, user.EnterpriseUser)
 	assert.Equal(t, "1234", user.EnterpriseUser.EmployeeNumber)
 	assert.Equal(t, "Tour Operations", user.EnterpriseUser.Department)
+
+	// RFC 7643 Section 6: a resource type lists the schema extensions it accepts.
+	t.Run("advertises the extension on the resource type", func(t *testing.T) {
+		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User", WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		resourceType := ReadBodyAs[core.ResourceType](t, response)
+		assert.Equal(t, []core.SchemaExtension{{Schema: core.SchemaEnterpriseUser}}, resourceType.SchemaExtensions)
+	})
+
+	t.Run("publishes the extension schema", func(t *testing.T) {
+		request := Request(t, srv, http.MethodGet, basePath+"/Schemas/"+string(core.SchemaEnterpriseUser), WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		schema := ReadBodyAs[core.Schema](t, response)
+		assert.NotNil(t, schema.Attributes.Lookup("employeeNumber"))
+		assert.Equal(t, basePath+"/Schemas/"+string(core.SchemaEnterpriseUser), schema.Meta.Location)
+	})
 }
 
 // RFC 7643 7 Schema Definition (writeOnly mutability)

@@ -136,7 +136,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
 	srv := server.New(basePath).
-		WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account")).
+		WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account").WithExtension(core.SchemaEnterpriseUser, enterpriseFields())).
 		WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())).
 		WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields())).
 		WithErrorHandler(func(err error) { t.Errorf("%v\n", err) }).
@@ -150,4 +150,19 @@ func newTestServer(t *testing.T) *httptest.Server {
 		))
 
 	return Server(t, srv)
+}
+
+func enterpriseFields() server.Fields[*core.User] {
+	enterprise := func(read func(*core.EnterpriseUser) any) server.Accessor[*core.User] {
+		return func(u *core.User) any {
+			if u.EnterpriseUser == nil {
+				return nil
+			}
+			return read(u.EnterpriseUser)
+		}
+	}
+	return server.NewFields(
+		server.NewField(core.NewAttribute("employeeNumber", core.TypeString), enterprise(func(e *core.EnterpriseUser) any { return e.EmployeeNumber })),
+		server.NewField(core.NewAttribute("department", core.TypeString), enterprise(func(e *core.EnterpriseUser) any { return e.Department })),
+	)
 }

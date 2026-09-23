@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"slices"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 )
@@ -12,6 +13,7 @@ type Resource[T Entity] struct {
 	id           core.SchemaURI
 	description  string
 	fields       Fields[T]
+	extensions   []extension[T]
 	errorHandler func(error)
 	repository   Repository[T]
 	service      Service[T]
@@ -50,6 +52,17 @@ func (c *Resource[T]) WithService(service Service[T]) *Resource[T] {
 	return c
 }
 
+type extension[T Entity] struct {
+	id     core.SchemaURI
+	fields Fields[T]
+}
+
+// WithExtension adds a schema extension to the resource type, per RFC 7643, Section 6.
+func (c *Resource[T]) WithExtension(id core.SchemaURI, fields Fields[T]) *Resource[T] {
+	c.extensions = append(c.extensions, extension[T]{id: id, fields: fields})
+	return c
+}
+
 func (c *Resource[T]) schema(basePath string) *core.Schema {
 	return core.NewSchema(c.id).
 		WithName(core.ResourceTypeName(c.name)).
@@ -59,17 +72,35 @@ func (c *Resource[T]) schema(basePath string) *core.Schema {
 }
 
 func (c *Resource[T]) resourceType(basePath string) *core.ResourceType {
-	return &core.ResourceType{
+	resourceType := &core.ResourceType{
 		Schemas:  []core.SchemaURI{core.SchemaResourceType},
 		ID:       core.ResourceTypeName(c.name),
 		Name:     core.ResourceTypeName(c.name),
 		Endpoint: basePath + c.endpoint,
 		Schema:   c.id,
 	}
+	for _, extension := range c.extensions {
+		resourceType.Extend(core.SchemaExtension{Schema: extension.id})
+	}
+	return resourceType
 }
 
 func (c *Resource[T]) schemas(basePath string) []*core.Schema {
-	return []*core.Schema{c.schema(basePath)}
+	schemas := []*core.Schema{c.schema(basePath)}
+	for _, extension := range c.extensions {
+		schemas = append(schemas, core.NewSchema(extension.id).
+			WithLocation(basePath+"/Schemas/"+string(extension.id)).
+			With(extension.fields.Attributes()...))
+	}
+	return schemas
+}
+
+func (c *Resource[T]) allFields() Fields[T] {
+	fields := slices.Clone(c.fields)
+	for _, extension := range c.extensions {
+		fields = append(fields, extension.fields...)
+	}
+	return fields
 }
 
 func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
@@ -86,12 +117,13 @@ func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
 
 func (c *Resource[T]) build(basePath string) Controller[T] {
 	service := c.service
-	schema := c.schema(basePath)
+	schemas := c.schemas(basePath)
 	if service == nil {
 		repository := c.repository
-		accessors := c.fields.Accessors()
+		fields := c.allFields()
+		accessors := fields.Accessors()
 		if repository == nil {
-			repository = NewRepository(basePath+c.endpoint, schema, c.fields)
+			repository = NewRepository(basePath+c.endpoint, schemas[0], fields)
 		}
 		service = NewService[T](repository,
 			Required(accessors),
@@ -100,7 +132,7 @@ func (c *Resource[T]) build(basePath string) Controller[T] {
 			Uniqueness(accessors, repository),
 		)
 	}
-	return NewController[T](service, schema, basePath+c.endpoint)
+	return NewController[T](service, schemas, basePath+c.endpoint)
 }
 
 func (c *Resource[T]) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
