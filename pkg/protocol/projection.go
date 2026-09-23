@@ -208,3 +208,16 @@ func (s *selection) object(attribute *core.Attribute, parentName string, object 
 	}
 	return out
 }
+
+func listParam(values url.Values, name string) []string {
+	var list []string
+
+	for _, value := range values[name] {
+		for item := range strings.SplitSeq(value, ",") {
+			if item = strings.TrimSpace(item); item != "" {
+				list = append(list, item)
+			}
+		}
+	}
+	return list
+}
