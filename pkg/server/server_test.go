@@ -19,8 +19,10 @@ import (
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
-const basePath = "/scim/v2"
-const validToken = "s3cr3t"
+const (
+	basePath   = "/scim/v2"
+	validToken = "s3cr3t"
+)
 
 func TestRFC6750(t *testing.T) {
 	t.Run("2.1 Authorization Request Header Field", func(t *testing.T) {

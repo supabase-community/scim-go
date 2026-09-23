@@ -2,8 +2,10 @@ package peg
 
 import "errors"
 
-type ASTNode any
-type Token map[string]ASTNode
-type Parser func(c *Context) (ASTNode, error)
+type (
+	ASTNode any
+	Token   map[string]ASTNode
+	Parser  func(c *Context) (ASTNode, error)
+)
 
 var ErrNoMatch = errors.New("peg: no match")

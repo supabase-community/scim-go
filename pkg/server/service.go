@@ -11,7 +11,7 @@ type Service[T Entity] interface {
 	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
 	Replace(ctx context.Context, item T) (T, error)
-	Delete(ctx context.Context, id string, version string) error
+	Delete(ctx context.Context, id, version string) error
 }
 
 type service[T Entity] struct {
@@ -47,7 +47,7 @@ func (s *service[T]) Replace(ctx context.Context, item T) (T, error) {
 	return s.repo.Replace(ctx, item)
 }
 
-func (s *service[T]) Delete(ctx context.Context, id string, version string) error {
+func (s *service[T]) Delete(ctx context.Context, id, version string) error {
 	return s.repo.Delete(ctx, id, version)
 }
 

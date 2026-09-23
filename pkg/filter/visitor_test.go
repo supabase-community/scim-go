@@ -84,8 +84,10 @@ func TestVisitPropagatesErrors(t *testing.T) {
 
 type countingVisitor struct{}
 
-func (countingVisitor) VisitAnd(left, right int) (int, error)                    { return left + right, nil }
-func (countingVisitor) VisitOr(left, right int) (int, error)                     { return left + right, nil }
+func (countingVisitor) VisitAnd(left, right int) (int, error) { return left + right, nil }
+
+func (countingVisitor) VisitOr(left, right int) (int, error) { return left + right, nil }
+
 func (countingVisitor) VisitNot(operand int) (int, error)                        { return operand + 100, nil }
 func (countingVisitor) VisitEquals(filter.AttrPath, any) (int, error)            { return 1, nil }
 func (countingVisitor) VisitNotEquals(filter.AttrPath, any) (int, error)         { return 1, nil }
@@ -146,27 +148,35 @@ func (v *scopeVisitor) VisitNot(o string) (string, error)    { return "NOT " + o
 func (v *scopeVisitor) VisitEquals(a filter.AttrPath, _ any) (string, error) {
 	return v.qualify(a) + " = ?", nil
 }
+
 func (v *scopeVisitor) VisitNotEquals(a filter.AttrPath, _ any) (string, error) {
 	return v.qualify(a), nil
 }
+
 func (v *scopeVisitor) VisitContains(a filter.AttrPath, _ any) (string, error) {
 	return v.qualify(a), nil
 }
+
 func (v *scopeVisitor) VisitStartsWith(a filter.AttrPath, _ any) (string, error) {
 	return v.qualify(a), nil
 }
+
 func (v *scopeVisitor) VisitEndsWith(a filter.AttrPath, _ any) (string, error) {
 	return v.qualify(a), nil
 }
+
 func (v *scopeVisitor) VisitGreaterThan(a filter.AttrPath, _ any) (string, error) {
 	return v.qualify(a), nil
 }
+
 func (v *scopeVisitor) VisitGreaterThanEquals(a filter.AttrPath, _ any) (string, error) {
 	return v.qualify(a), nil
 }
+
 func (v *scopeVisitor) VisitLessThan(a filter.AttrPath, _ any) (string, error) {
 	return v.qualify(a), nil
 }
+
 func (v *scopeVisitor) VisitLessThanEquals(a filter.AttrPath, _ any) (string, error) {
 	return v.qualify(a), nil
 }
