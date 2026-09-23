@@ -14,6 +14,7 @@ formatters:
 linters:
   default: standard
   enable:
+    - bidichk
     - bodyclose
     - contextcheck
     - dupl
@@ -24,15 +25,17 @@ linters:
     - goconst
     - gocritic
     - gocyclo
+    - godoclint
     - gosec
     - makezero
     - modernize
     - musttag
     - nestif
-    # - nilerr
     - nolintlint
+    - prealloc
     - revive
     - testifylint
+    - testpackage
   settings:
     dupl:
       threshold: 150
