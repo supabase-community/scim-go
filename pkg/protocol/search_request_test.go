@@ -149,10 +149,21 @@ func TestSearchRequest(t *testing.T) {
 		schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString))}
 		request := &protocol.SearchRequest{Attributes: []string{"userName"}}
 
-		raw, err := json.Marshal(request.Projection(schemas).Of(map[string]any{"userName": "bjensen", "id": "1"}))
+		projection, err := request.Projection(schemas)
+		require.NoError(t, err)
 
+		raw, err := json.Marshal(projection.Of(map[string]any{"userName": "bjensen", "id": "1"}))
 		require.NoError(t, err)
 		assert.JSONEq(t, `{"userName": "bjensen", "id": "1"}`, string(raw))
+	})
+
+	t.Run("reports an invalid attribute name instead of panicking", func(t *testing.T) {
+		schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString))}
+		request := &protocol.SearchRequest{Attributes: []string{"1bad"}}
+
+		_, err := request.Projection(schemas)
+
+		require.Error(t, err)
 	})
 
 	t.Run("serializes as the SearchRequest of RFC 7644, Section 3.4.3", func(t *testing.T) {

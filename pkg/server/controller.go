@@ -46,11 +46,15 @@ func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	projection, err := query.Projection(c.schemas)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
 	items, total, err := c.service.List(r.Context(), query)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	resources := query.Projection(c.schemas).All(items)
+	resources := projection.All(items)
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, resources))
 }
 
