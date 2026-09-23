@@ -20,6 +20,10 @@ func (b *Base) SetSchemas(schemas []SchemaURI) {
 	b.Schemas = schemas
 }
 
+func (b *Base) GetExternalID() string {
+	return b.ExternalID
+}
+
 func (b *Base) GetMeta() Meta {
 	return b.Meta
 }

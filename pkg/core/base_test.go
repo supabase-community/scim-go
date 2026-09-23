@@ -26,4 +26,9 @@ func TestBase(t *testing.T) {
 		base.SetMeta(meta)
 		assert.Equal(t, meta, base.GetMeta())
 	})
+
+	t.Run("GetExternalID returns the externalId", func(t *testing.T) {
+		base := core.Base{ExternalID: "ext-1"}
+		assert.Equal(t, "ext-1", base.GetExternalID())
+	})
 }
