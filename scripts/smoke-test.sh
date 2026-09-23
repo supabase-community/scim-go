@@ -4,11 +4,11 @@ set -euo pipefail
 BASE_URL="${BASE_URL:-http://localhost:8080/scim/v2}"
 
 post_user() {
-	curl -sS -X POST "$BASE_URL/Users" -H 'Content-Type: application/json' -d "$1"
+	curl -sS -X POST "$BASE_URL/Users" -H 'Content-Type: application/scim+json' -H "Authorization: Bearer $SCIM_BEARER_TOKEN" -d "$1"
 }
 
 filter() {
-	curl -sS -G "$BASE_URL/Users" --data-urlencode "filter=$1"
+	curl -sS -G "$BASE_URL/Users" -H 'Content-Type: application/scim+json' -H "Authorization: Bearer $SCIM_BEARER_TOKEN" --data-urlencode "filter=$1"
 }
 
 echo "== create users =="
@@ -44,8 +44,7 @@ echo "== get by id =="
 curl -sS "$BASE_URL/Users/$alice_id" | jq '.userName'
 
 echo "== replace: deactivate bob =="
-curl -sS -X PUT "$BASE_URL/Users/$bob_id" -H 'Content-Type: application/json' \
-	-d '{"userName":"bob","active":false,"name":{"givenName":"Bob","familyName":"Brown"}}' | jq '.active'
+curl -sS -X PUT "$BASE_URL/Users/$bob_id" -H 'Content-Type: application/scim+json' -d '{"userName":"bob","active":false,"name":{"givenName":"Bob","familyName":"Brown"}}' | jq '.active'
 
 echo "== filter after update: active eq false =="
 filter 'active eq false' | jq '.Resources[].userName'
