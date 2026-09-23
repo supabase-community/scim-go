@@ -16,7 +16,7 @@ type Resource[T Entity] struct {
 	extensions   []extension[T]
 	errorHandler func(error)
 	repository   Repository[T]
-	service      Service[T]
+	basePath     string
 }
 
 func NewResource[T Entity](name, endpoint string, id core.SchemaURI, fields Fields[T]) *Resource[T] {
@@ -39,16 +39,9 @@ func (c *Resource[T]) WithErrorHandler(fn func(error)) *Resource[T] {
 	return c
 }
 
+// WithRepository sets the datastore of the resource type; the server validates every write before it.
 func (c *Resource[T]) WithRepository(repository Repository[T]) *Resource[T] {
-	if c.service != nil {
-		panic("server: WithRepository cannot be combined with WithService")
-	}
 	c.repository = repository
-	return c
-}
-
-func (c *Resource[T]) WithService(service Service[T]) *Resource[T] {
-	c.service = service
 	return c
 }
 
@@ -104,6 +97,10 @@ func (c *Resource[T]) allFields() Fields[T] {
 }
 
 func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
+	if c.repository == nil {
+		panic("server: resource " + c.name + " needs WithRepository")
+	}
+	c.basePath = basePath
 	controller := c.build(basePath)
 
 	path := basePath + c.endpoint
@@ -116,17 +113,8 @@ func (c *Resource[T]) mount(mux *http.ServeMux, basePath string) {
 }
 
 func (c *Resource[T]) build(basePath string) Controller[T] {
-	service := c.service
-	schemas := c.schemas(basePath)
-	if service == nil {
-		repository := c.repository
-		fields := c.allFields()
-		if repository == nil {
-			repository = NewRepository(basePath+c.endpoint, schemas[0], fields)
-		}
-		service = NewService[T](repository, Validators(fields, repository)...)
-	}
-	return NewController[T](service, schemas, basePath+c.endpoint)
+	service := NewService(c.repository, Validators(c.allFields(), c.repository)...)
+	return NewController(service, c.schemas(basePath), basePath+c.endpoint)
 }
 
 func (c *Resource[T]) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {

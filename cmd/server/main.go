@@ -23,15 +23,16 @@ func main() {
 		log.Fatal("SCIM_BEARER_TOKEN must be set")
 	}
 
+	users := server.NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields()).
+		WithDescription("User Account").
+		WithErrorHandler(errorHandler)
+	groups := server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields()).
+		WithDescription("Group").
+		WithErrorHandler(errorHandler)
+
 	srv := server.New(basePath).
-		WithResource(server.
-			NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields()).
-			WithDescription("User Account").
-			WithErrorHandler(errorHandler)).
-		WithResource(server.
-			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields()).
-			WithDescription("Group").
-			WithErrorHandler(errorHandler)).
+		WithResource(users.WithRepository(server.NewMemoryRepository(users))).
+		WithResource(groups.WithRepository(server.NewMemoryRepository(groups))).
 		WithErrorHandler(errorHandler).
 		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {

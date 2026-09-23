@@ -26,8 +26,10 @@ type Repository[T Entity] interface {
 	Delete(ctx context.Context, id string, version string) error
 }
 
-type repository[T Entity] struct {
+type memoryRepository[T Entity] struct {
 	mu               sync.RWMutex
+	once             sync.Once
+	resource         *Resource[T]
 	endpoint         string
 	schema           *core.Schema
 	items            []T
@@ -37,19 +39,25 @@ type repository[T Entity] struct {
 	evaluator        protocol.Evaluator[predicate]
 }
 
-func NewRepository[T Entity](endpoint string, schema *core.Schema, fields Fields[T]) Repository[T] {
-	return &repository[T]{
-		endpoint:         endpoint,
-		schema:           schema,
-		items:            []T{},
-		accessors:        withCommonAccessors(fields.Accessors()),
-		elementAccessors: fields.ElementAccessors(),
-		elements:         fields.Elements(),
-		evaluator:        NewVisitor(fields),
-	}
+// NewMemoryRepository stores the resources of resource in memory, for tests and reference servers.
+func NewMemoryRepository[T Entity](resource *Resource[T]) Repository[T] {
+	return &memoryRepository[T]{resource: resource, items: []T{}}
 }
 
-func (r *repository[T]) Get(_ context.Context, id string) (T, error) {
+func (r *memoryRepository[T]) ready() {
+	r.once.Do(func() {
+		fields := r.resource.allFields()
+		r.endpoint = r.resource.basePath + r.resource.endpoint
+		r.schema = r.resource.schema(r.resource.basePath)
+		r.accessors = withCommonAccessors(fields.Accessors())
+		r.elementAccessors = fields.ElementAccessors()
+		r.elements = fields.Elements()
+		r.evaluator = NewVisitor(fields)
+	})
+}
+
+func (r *memoryRepository[T]) Get(_ context.Context, id string) (T, error) {
+	r.ready()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, item := range r.items {
@@ -61,7 +69,8 @@ func (r *repository[T]) Get(_ context.Context, id string) (T, error) {
 	return zero, scimerrors.ErrNotFound("Not found")
 }
 
-func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
+func (r *memoryRepository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
+	r.ready()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	matching, err := r.sortBy(query)
@@ -79,7 +88,8 @@ func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) (
 	return page, total, nil
 }
 
-func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
+func (r *memoryRepository[T]) Create(_ context.Context, item T) (T, error) {
+	r.ready()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	item = copyOf(item)
@@ -99,7 +109,8 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 	return copyOf(item), nil
 }
 
-func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
+func (r *memoryRepository[T]) Replace(_ context.Context, item T) (T, error) {
+	r.ready()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	item = copyOf(item)
@@ -126,7 +137,8 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 	return zero, scimerrors.ErrNotFound("Not found")
 }
 
-func (r *repository[T]) Delete(_ context.Context, id string, version string) error {
+func (r *memoryRepository[T]) Delete(_ context.Context, id string, version string) error {
+	r.ready()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for i, existing := range r.items {
@@ -141,7 +153,7 @@ func (r *repository[T]) Delete(_ context.Context, id string, version string) err
 	return scimerrors.ErrNotFound("Not found")
 }
 
-func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]T, error) {
+func (r *memoryRepository[T]) filterBy(query *protocol.SearchRequest) ([]T, error) {
 	if query.Filter == "" {
 		return slices.Clone(r.items), nil
 	}
@@ -159,7 +171,7 @@ func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]T, error) {
 	return matching, nil
 }
 
-func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
+func (r *memoryRepository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
 	matching, err := r.filterBy(query)
 	if err != nil {
 		return []T{}, err
@@ -195,7 +207,7 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
 }
 
 // RFC 7644 Section 3.4.2.3: a multi-valued attribute sorts by its primary value, or else its first value.
-func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (Accessor[T], bool) {
+func (r *memoryRepository[T]) sortKey(parent, attribute *core.Attribute) (Accessor[T], bool) {
 	elements, multiValued := r.elements[parent]
 	read, readable := r.elementAccessors[attribute]
 	if !multiValued || !readable {

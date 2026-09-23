@@ -1902,8 +1902,9 @@ func (r *recordingRepository) Replace(ctx context.Context, item *core.User) (*co
 // RFC 7644 Section 3.5.2: a PATCH changes only the attributes it targets.
 func TestRFC7644PatchKeepsWriteOnlyAttributes(t *testing.T) {
 	fields := userFields()
-	repository := &recordingRepository{Repository: server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)}
-	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
+	users := server.NewResource("User", "/Users", core.SchemaUser, fields)
+	repository := &recordingRepository{Repository: server.NewMemoryRepository(users)}
+	srv := Server(t, server.New(basePath).WithResource(users.WithRepository(repository)))
 
 	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
 		WithContentType(protocol.MediaType),
@@ -1930,8 +1931,9 @@ func TestRFC7644IgnoresReadOnlyAttributes(t *testing.T) {
 		core.NewAttribute("groups", core.TypeComplex).AsMultiValued().AsReadOnly().With(core.NewAttribute("value", core.TypeString)),
 		func(u *core.User) any { return u.Groups },
 	))...)
-	repository := server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)
-	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
+	users := server.NewResource("User", "/Users", core.SchemaUser, fields)
+	repository := server.NewMemoryRepository(users)
+	srv := Server(t, server.New(basePath).WithResource(users.WithRepository(repository)))
 	staff := []core.GroupMembership{{Value: "staff"}}
 	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen", Groups: staff})
 	require.NoError(t, err)
@@ -1983,8 +1985,9 @@ func TestRFC7644IgnoresReadOnlyAttributes(t *testing.T) {
 
 func TestUniquenessQueriesOnlyMatchingResources(t *testing.T) {
 	fields := userFields()
-	repository := &recordingRepository{Repository: server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)}
-	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
+	users := server.NewResource("User", "/Users", core.SchemaUser, fields)
+	repository := &recordingRepository{Repository: server.NewMemoryRepository(users)}
+	srv := Server(t, server.New(basePath).WithResource(users.WithRepository(repository)))
 
 	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
 		WithContentType(protocol.MediaType),
@@ -1995,4 +1998,10 @@ func TestUniquenessQueriesOnlyMatchingResources(t *testing.T) {
 	require.Len(t, repository.queries, 1)
 	assert.Equal(t, `userName eq "b\"jensen"`, repository.queries[0].Filter)
 	assert.Equal(t, 2, repository.queries[0].Count)
+}
+
+func TestResourceWithoutRepository(t *testing.T) {
+	assert.PanicsWithValue(t, "server: resource User needs WithRepository", func() {
+		server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields()))
+	})
 }
