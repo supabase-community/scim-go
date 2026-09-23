@@ -41,6 +41,10 @@ func (s *SearchRequest) Descending() bool {
 	return s.SortOrder == SortDescending
 }
 
+func (s *SearchRequest) Projection() Projection {
+	return Projection{Attributes: s.Attributes, ExcludedAttributes: s.ExcludedAttributes}
+}
+
 // Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4.
 type Limits struct {
 	DefaultCount int
@@ -66,10 +70,15 @@ func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {
 		return nil, err
 	}
 
+	projection, err := ParseProjection(values)
+	if err != nil {
+		return nil, err
+	}
+
 	return &SearchRequest{
 		Schemas:            []core.SchemaURI{SchemaSearchRequest},
-		Attributes:         listParam(values, "attributes"),
-		ExcludedAttributes: listParam(values, "excludedAttributes"),
+		Attributes:         projection.Attributes,
+		ExcludedAttributes: projection.ExcludedAttributes,
 		Filter:             values.Get("filter"),
 		SortBy:             values.Get("sortBy"),
 		SortOrder:          sortOrder,

@@ -83,12 +83,20 @@ func TestParseSearchRequest(t *testing.T) {
 			want:  protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount, SortOrder: protocol.SortDescending},
 		},
 		{
-			name:  "reads the attribute lists as the comma separated values they are",
-			query: "attributes=userName,active&excludedAttributes=meta,groups",
+			name:  "reads the attributes as the comma separated values they are",
+			query: "attributes=userName,active",
+			want: protocol.SearchRequest{
+				StartIndex: 1,
+				Count:      protocol.DefaultLimits.DefaultCount,
+				Attributes: []string{"userName", "active"},
+			},
+		},
+		{
+			name:  "reads the excluded attributes as the comma separated values they are",
+			query: "excludedAttributes=meta,groups",
 			want: protocol.SearchRequest{
 				StartIndex:         1,
 				Count:              protocol.DefaultLimits.DefaultCount,
-				Attributes:         []string{"userName", "active"},
 				ExcludedAttributes: []string{"meta", "groups"},
 			},
 		},
@@ -109,6 +117,7 @@ func TestParseSearchRequest(t *testing.T) {
 		{"a start index that is not a number", "startIndex=first", "startIndex"},
 		{"a count that is not a number", "count=all", "count"},
 		{"an order that is neither ascending nor descending", "sortBy=userName&sortOrder=sideways", "sortOrder"},
+		{"attributes together with excluded attributes", "attributes=userName&excludedAttributes=meta", "mutually exclusive"},
 	} {
 		t.Run("rejects "+tc.name, func(t *testing.T) {
 			request, err := parseQuery(t, tc.query)
