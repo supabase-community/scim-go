@@ -14,7 +14,6 @@ type Resource[T Entity] struct {
 	fields      Fields[T]
 	extensions  []extension[T]
 	repository  Repository[T]
-	basePath    string
 }
 
 func NewResource[T Entity](name, endpoint string, id core.SchemaURI, fields Fields[T]) *Resource[T] {
@@ -89,14 +88,15 @@ func (c *Resource[T]) allFields() Fields[T] {
 }
 
 func (c *Resource[T]) mount(s *Server) {
-	if c.repository == nil {
-		c.repository = NewMemoryRepository(c)
-	}
-	c.basePath = s.basePath
-	service := NewService(c.repository, Validators(c.allFields(), c.repository)...)
-	controller := NewController(service, c.schemas(s.basePath), s.basePath+c.endpoint, s.limits)
-
+	schemas := c.schemas(s.basePath)
+	fields := c.allFields()
 	path := s.basePath + c.endpoint
+	if c.repository == nil {
+		c.repository = NewRepository(path, schemas[0], fields)
+	}
+	service := NewService(c.repository, Validators(fields, c.repository)...)
+	controller := NewController(service, schemas, path, s.limits)
+
 	s.mux.HandleFunc("GET "+path, s.handle(controller.List))
 	s.mux.HandleFunc("POST "+path, s.handle(controller.Create))
 	s.mux.HandleFunc("GET "+path+"/{id}", s.handle(controller.ByID))

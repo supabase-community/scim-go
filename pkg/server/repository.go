@@ -26,10 +26,8 @@ type Repository[T Entity] interface {
 	Delete(ctx context.Context, id string, version string) error
 }
 
-type memoryRepository[T Entity] struct {
-	mu               sync.RWMutex
-	once             sync.Once
-	resource         *Resource[T]
+type repository[T Entity] struct {
+	mu               sync.Mutex
 	endpoint         string
 	schema           *core.Schema
 	items            []T
@@ -39,41 +37,33 @@ type memoryRepository[T Entity] struct {
 	evaluator        protocol.Evaluator[predicate]
 }
 
-// NewMemoryRepository stores the resources of resource in memory, for tests and reference servers.
-func NewMemoryRepository[T Entity](resource *Resource[T]) Repository[T] {
-	return &memoryRepository[T]{resource: resource, items: []T{}}
-}
-
-func (r *memoryRepository[T]) ready() {
-	r.once.Do(func() {
-		fields := r.resource.allFields()
-		r.endpoint = r.resource.basePath + r.resource.endpoint
-		r.schema = r.resource.schema(r.resource.basePath)
-		r.accessors = withCommonAccessors(fields.accessors())
-		r.elementAccessors = fields.elementAccessors()
-		r.elements = fields.elements()
-		r.evaluator = newVisitor(fields)
-	})
-}
-
-func (r *memoryRepository[T]) Get(_ context.Context, id string) (T, error) {
-	r.ready()
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	for _, item := range r.items {
-		if item.ResourceID() == id {
-			return copyOf(item), nil
-		}
+// NewRepository stores resources in memory, for tests and reference servers.
+func NewRepository[T Entity](endpoint string, schema *core.Schema, fields Fields[T]) Repository[T] {
+	return &repository[T]{
+		endpoint:         endpoint,
+		schema:           schema,
+		items:            []T{},
+		accessors:        withCommonAccessors(fields.accessors()),
+		elementAccessors: fields.elementAccessors(),
+		elements:         fields.elements(),
+		evaluator:        newVisitor(fields),
 	}
-	var zero T
-	return zero, scimerrors.ErrNotFound("Not found")
 }
 
-func (r *memoryRepository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
-	r.ready()
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	matching, err := r.sortBy(query)
+func (r *repository[T]) Get(_ context.Context, id string) (item T, err error) {
+	r.withLock(func() {
+		var i int
+		if i, err = r.locate(id, ""); err == nil {
+			item = r.items[i]
+		}
+	})
+	return copyOf(item), err
+}
+
+func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
+	var matching []T
+	var err error
+	r.withLock(func() { matching, err = r.sortBy(query) })
 	if err != nil {
 		return []T{}, 0, err
 	}
@@ -88,10 +78,7 @@ func (r *memoryRepository[T]) List(_ context.Context, query *protocol.SearchRequ
 	return page, total, nil
 }
 
-func (r *memoryRepository[T]) Create(_ context.Context, item T) (T, error) {
-	r.ready()
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 	item = copyOf(item)
 	now := time.Now().UTC()
 	id := uuid.NewV7().String()
@@ -105,55 +92,62 @@ func (r *memoryRepository[T]) Create(_ context.Context, item T) (T, error) {
 		Version:      weakETag(now),
 	})
 
-	r.items = append(r.items, item)
+	r.withLock(func() { r.items = append(r.items, item) })
 	return copyOf(item), nil
 }
 
-func (r *memoryRepository[T]) Replace(_ context.Context, item T) (T, error) {
-	r.ready()
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 	item = copyOf(item)
-	id := item.ResourceID()
-	version := item.GetMeta().Version
-	for i, existing := range r.items {
-		if existing.ResourceID() == id {
-			if version != "" && existing.GetMeta().Version != version {
-				var zero T
-				return zero, scimerrors.ErrPreconditionFailed("resource has changed on the server")
-			}
-			meta := existing.GetMeta()
-			now := time.Now().UTC()
-			meta.LastModified = now
-			meta.Version = weakETag(now)
-			item.SetMeta(meta)
-			item.SetSchemas([]core.SchemaURI{r.schema.ID})
-
-			r.items[i] = item
-			return copyOf(item), nil
+	var err error
+	r.withLock(func() {
+		var i int
+		if i, err = r.locate(item.ResourceID(), item.GetMeta().Version); err != nil {
+			return
 		}
+		meta := r.items[i].GetMeta()
+		now := time.Now().UTC()
+		meta.LastModified = now
+		meta.Version = weakETag(now)
+		item.SetMeta(meta)
+		item.SetSchemas([]core.SchemaURI{r.schema.ID})
+		r.items[i] = item
+	})
+	if err != nil {
+		var zero T
+		return zero, err
 	}
-	var zero T
-	return zero, scimerrors.ErrNotFound("Not found")
+	return copyOf(item), nil
 }
 
-func (r *memoryRepository[T]) Delete(_ context.Context, id string, version string) error {
-	r.ready()
+func (r *repository[T]) Delete(_ context.Context, id string, version string) (err error) {
+	r.withLock(func() {
+		var i int
+		if i, err = r.locate(id, version); err == nil {
+			r.items = slices.Delete(r.items, i, i+1)
+		}
+	})
+	return err
+}
+
+func (r *repository[T]) withLock(fn func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for i, existing := range r.items {
-		if existing.ResourceID() == id {
-			if version != "" && existing.GetMeta().Version != version {
-				return scimerrors.ErrPreconditionFailed("resource has changed on the server")
-			}
-			r.items = slices.Delete(r.items, i, i+1)
-			return nil
-		}
-	}
-	return scimerrors.ErrNotFound("Not found")
+	fn()
 }
 
-func (r *memoryRepository[T]) filterBy(query *protocol.SearchRequest) ([]T, error) {
+// RFC 7644 Section 3.14: a non-empty version must match the stored one.
+func (r *repository[T]) locate(id, version string) (int, error) {
+	i := slices.IndexFunc(r.items, func(item T) bool { return item.ResourceID() == id })
+	switch {
+	case i < 0:
+		return i, scimerrors.ErrNotFound("Not found")
+	case version != "" && r.items[i].GetMeta().Version != version:
+		return i, scimerrors.ErrPreconditionFailed("resource has changed on the server")
+	}
+	return i, nil
+}
+
+func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]T, error) {
 	if query.Filter == "" {
 		return slices.Clone(r.items), nil
 	}
@@ -171,7 +165,7 @@ func (r *memoryRepository[T]) filterBy(query *protocol.SearchRequest) ([]T, erro
 	return matching, nil
 }
 
-func (r *memoryRepository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
+func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
 	matching, err := r.filterBy(query)
 	if err != nil {
 		return []T{}, err
@@ -207,7 +201,7 @@ func (r *memoryRepository[T]) sortBy(query *protocol.SearchRequest) ([]T, error)
 }
 
 // RFC 7644 Section 3.4.2.3: a multi-valued attribute sorts by its primary value, or else its first value.
-func (r *memoryRepository[T]) sortKey(parent, attribute *core.Attribute) (Accessor[T], bool) {
+func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (Accessor[T], bool) {
 	elements, multiValued := r.elements[parent]
 	read, readable := r.elementAccessors[attribute]
 	if !multiValued || !readable {
