@@ -16,13 +16,13 @@ type Server struct {
 	schemas       []*core.Schema
 	config        *core.ServiceProviderConfig
 	limits        protocol.Limits
-	errorHandler  func(error)
+	errorHandler  func(*http.Request, error)
 }
 
 type Option[T any] func(T)
 
-// ErrorHandler receives the errors the server could not send to a client.
-func ErrorHandler(fn func(error)) Option[*Server] {
+// ErrorHandler receives the request and error the server could not send to the client.
+func ErrorHandler(fn func(*http.Request, error)) Option[*Server] {
 	return func(s *Server) { s.errorHandler = fn }
 }
 
@@ -56,7 +56,7 @@ func New(config *core.ServiceProviderConfig, options ...Option[*Server]) *Server
 		basePath:     config.BasePath(),
 		config:       config,
 		limits:       limitsFrom(config),
-		errorHandler: func(error) {},
+		errorHandler: func(*http.Request, error) {},
 	}
 	for _, option := range options {
 		option(s)
@@ -87,7 +87,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := fn(w, r); err != nil {
-			s.errorHandler(err)
+			s.errorHandler(r, err)
 		}
 	}
 }

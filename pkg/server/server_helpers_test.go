@@ -140,7 +140,7 @@ func standardOptions(t *testing.T) []server.Option[*server.Server] {
 	t.Helper()
 
 	return []server.Option[*server.Server]{
-		server.ErrorHandler(func(err error) { t.Errorf("%v\n", err) }),
+		server.ErrorHandler(func(_ *http.Request, err error) { t.Errorf("%v\n", err) }),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithExtension(core.SchemaEnterpriseUser, enterpriseFields())),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())),
 		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields())),

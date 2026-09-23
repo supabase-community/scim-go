@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -18,7 +19,11 @@ import (
 
 func main() {
 	basePath := "/scim/v2"
-	errorHandler := func(err error) { log.Printf("%v\n", err) }
+	logError := func(err error) { log.Printf("%v\n", err) }
+	errorHandler := func(r *http.Request, err error) {
+		method, path := strconv.Quote(r.Method), strconv.Quote(r.URL.Path)
+		log.Printf("%s %s: %v\n", method, path, err)
+	}
 	token := os.Getenv("SCIM_BEARER_TOKEN")
 	if token == "" {
 		log.Fatal("SCIM_BEARER_TOKEN must be set")
@@ -71,7 +76,7 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		errorHandler(err)
+		logError(err)
 	}
 }
 
