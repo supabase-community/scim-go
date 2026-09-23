@@ -56,3 +56,35 @@ func TestConcurrentRequests(t *testing.T) {
 	list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, srv, request))
 	assert.Equal(t, 9, list.TotalResults)
 }
+
+// RFC 7644 Section 3.12: concurrent creates of the same unique value must not all succeed.
+func TestConcurrentUniqueCreates(t *testing.T) {
+	srv := newTestServer(t)
+
+	const attempts = 16
+	statuses := make([]int, attempts)
+	var wg sync.WaitGroup
+	for i := range attempts {
+		wg.Go(func() {
+			request := Request(t, srv, http.MethodPost, basePath+"/Users",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+			)
+			statuses[i] = Response(t, srv, request).StatusCode
+		})
+	}
+	wg.Wait()
+
+	created, conflicted := 0, 0
+	for _, status := range statuses {
+		switch status {
+		case http.StatusCreated:
+			created++
+		case http.StatusConflict:
+			conflicted++
+		}
+	}
+	assert.Equal(t, 1, created)
+	assert.Equal(t, attempts-1, conflicted)
+}

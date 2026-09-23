@@ -1,9 +1,7 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"reflect"
 	"slices"
@@ -11,17 +9,15 @@ import (
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Validators enforces the attribute characteristics of RFC 7643, Section 7.
+// Validators enforces the attribute characteristics of RFC 7643, Section 7, except uniqueness, which the Repository enforces atomically with the write.
 func Validators[T Entity](fields Fields[T], repo Repository[T]) []Validator[T] {
 	return []Validator[T]{
 		Required(fields),
 		CanonicalValues(fields),
 		Mutability(fields, repo),
-		Uniqueness(fields, repo),
 	}
 }
 
@@ -82,6 +78,9 @@ func valuesOf(raw any) []any {
 func Mutability[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
 	accessors := fields.accessors()
 	return func(ctx context.Context, candidate T) error {
+		if candidate.ResourceID() == "" {
+			return nil
+		}
 		existing, err := repo.Get(ctx, candidate.ResourceID())
 		if err != nil {
 			if errors.Is(err, scimerrors.ErrNotFound("")) {
@@ -89,69 +88,25 @@ func Mutability[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
 			}
 			return err
 		}
-		for attribute, accessor := range accessors {
-			if attribute.Mutability != core.MutabilityImmutable {
-				continue
-			}
-			previous := accessor(existing)
-			if isEmpty(previous) || reflect.DeepEqual(previous, accessor(candidate)) {
-				continue
-			}
+		if attribute := changedImmutable(accessors, existing, candidate); attribute != nil {
 			return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
 		}
 		return nil
 	}
 }
 
-// Uniqueness rejects a value already used by another resource when an attribute requires "server" or "global" uniqueness, per RFC 7643, Section 7.
-func Uniqueness[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
-	accessors := fields.accessors()
-	paths := fields.paths()
-	return func(ctx context.Context, candidate T) error {
-		for attribute, accessor := range accessors {
-			if attribute.Uniqueness == core.UniquenessNone {
-				continue
-			}
-			query := uniqueQuery(paths[attribute], accessor(candidate))
-			if query == "" {
-				continue
-			}
-			items, _, err := repo.List(ctx, &protocol.SearchRequest{Filter: query, Count: 2})
-			if err != nil {
-				return err
-			}
-			if slices.ContainsFunc(items, func(item T) bool { return item.ResourceID() != candidate.ResourceID() }) {
-				return scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
-			}
-		}
-		return nil
-	}
-}
-
-// RFC 7644 Section 3.4.2.2: a filter that matches any resource holding one of the values.
-func uniqueQuery(path string, value any) string {
-	var terms []string
-	for _, item := range valuesOf(value) {
-		if isEmpty(item) {
+func changedImmutable[T Entity](accessors accessorSet[T], existing, candidate T) *core.Attribute {
+	for attribute, accessor := range accessors {
+		if attribute.Mutability != core.MutabilityImmutable {
 			continue
 		}
-		literal, ok := filterLiteral(item)
-		if ok {
-			terms = append(terms, path+" eq "+literal)
+		previous := accessor(existing)
+		if isEmpty(previous) || reflect.DeepEqual(previous, accessor(candidate)) {
+			continue
 		}
+		return attribute
 	}
-	return strings.Join(terms, " or ")
-}
-
-func filterLiteral(value any) (string, bool) {
-	var buffer bytes.Buffer
-	encoder := json.NewEncoder(&buffer)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(value); err != nil {
-		return "", false
-	}
-	literal := strings.TrimSpace(buffer.String())
-	return literal, literal[0] != '{' && literal[0] != '['
+	return nil
 }
 
 func isEmpty(value any) bool {

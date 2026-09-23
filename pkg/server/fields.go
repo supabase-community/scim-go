@@ -62,21 +62,6 @@ func (fs Fields[T]) readers() readers[T] {
 	}
 }
 
-// RFC 7644 Section 3.10: the attribute notation of every attribute that has an accessor.
-func (fs Fields[T]) paths() map[*core.Attribute]string {
-	paths := map[*core.Attribute]string{}
-	for _, field := range fs {
-		paths[field.Attribute] = field.Name
-		for _, child := range field.children {
-			paths[child.Attribute] = field.Name + "." + child.Name
-		}
-		for attribute := range field.elementAccessors {
-			paths[attribute] = field.Name + "." + attribute.Name
-		}
-	}
-	return paths
-}
-
 func (fs Fields[T]) walk(visit func(*Field[T])) {
 	for _, field := range fs {
 		visit(field)
