@@ -26,6 +26,7 @@ type controller[T Entity] struct {
 	path    string
 	schema  *core.Schema
 	service Service[T]
+	limits  protocol.Limits
 }
 
 func NewController[T Entity](service Service[T], schema *core.Schema, path string) Controller[T] {
@@ -33,11 +34,12 @@ func NewController[T Entity](service Service[T], schema *core.Schema, path strin
 		path:    path,
 		schema:  schema,
 		service: service,
+		limits:  protocol.DefaultLimits,
 	}
 }
 
 func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
-	query, err := protocol.DefaultLimits.ParseSearchRequest(r.URL.Query())
+	query, err := c.limits.ParseSearchRequest(r.URL.Query())
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
