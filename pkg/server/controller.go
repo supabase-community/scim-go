@@ -12,15 +12,24 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// controller handles the HTTP requests for one SCIM resource type, per RFC 7644, Section 3.
+// Controller handles the HTTP requests for one SCIM resource type, per RFC 7644, Section 3.
+type Controller[T Entity] interface {
+	List(http.ResponseWriter, *http.Request) error
+	ByID(http.ResponseWriter, *http.Request) error
+	Create(http.ResponseWriter, *http.Request) error
+	Replace(http.ResponseWriter, *http.Request) error
+	Patch(http.ResponseWriter, *http.Request) error
+	Delete(http.ResponseWriter, *http.Request) error
+}
+
 type controller[T Entity] struct {
 	path    string
 	schemas []*core.Schema
-	service *service[T]
+	service Service[T]
 	limits  protocol.Limits
 }
 
-func newController[T Entity](service *service[T], schemas []*core.Schema, path string, limits protocol.Limits) *controller[T] {
+func NewController[T Entity](service Service[T], schemas []*core.Schema, path string, limits protocol.Limits) Controller[T] {
 	return &controller[T]{
 		path:    path,
 		schemas: schemas,
