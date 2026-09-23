@@ -32,11 +32,12 @@ type repository[T Entity] struct {
 }
 
 func NewRepository[T Entity](schema *core.Schema, accessors Accessors[T]) Repository[T] {
+	merged := withCommonAccessors(accessors)
 	return &repository[T]{
 		schema:    schema,
 		items:     []T{},
-		accessors: accessors,
-		evaluator: NewVisitor[T](accessors),
+		accessors: merged,
+		evaluator: NewVisitor[T](merged),
 	}
 }
 
