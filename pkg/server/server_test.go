@@ -2044,3 +2044,16 @@ func TestServerOptions(t *testing.T) {
 type failingWriter struct{ *httptest.ResponseRecorder }
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+func TestServiceProviderConfigOption(t *testing.T) {
+	srv := Server(t, server.New(basePath, server.ServiceProviderConfig(func(config *core.ServiceProviderConfig) {
+		config.DocumentationURI = "https://example.com/help/scim.html"
+		config.Sort.Supported = false
+	})))
+
+	config := ReadBodyAs[core.ServiceProviderConfig](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig")))
+
+	assert.Equal(t, "https://example.com/help/scim.html", config.DocumentationURI)
+	assert.False(t, config.Sort.Supported)
+	assert.True(t, config.Patch.Supported)
+}

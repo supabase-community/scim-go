@@ -6,20 +6,12 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
-type Service[T Entity] interface {
-	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
-	Get(ctx context.Context, id string) (T, error)
-	Create(ctx context.Context, item T) (T, error)
-	Replace(ctx context.Context, item T) (T, error)
-	Delete(ctx context.Context, id string, version string) error
-}
-
 type service[T Entity] struct {
 	repo       Repository[T]
 	validators []Validator[T]
 }
 
-func NewService[T Entity](repo Repository[T], validators ...Validator[T]) Service[T] {
+func newService[T Entity](repo Repository[T], validators ...Validator[T]) *service[T] {
 	return &service[T]{repo: repo, validators: validators}
 }
 

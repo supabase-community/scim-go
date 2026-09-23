@@ -8,15 +8,15 @@ import (
 
 type Accessor[T Entity] func(item T) any
 
-type Accessors[T Entity] map[*core.Attribute]Accessor[T]
+type accessorSet[T Entity] map[*core.Attribute]Accessor[T]
 
 // commonAccessors resolves id, externalId, and meta.*, per RFC 7643, Section 3.1, so they are filterable and sortable like any other attribute.
-func commonAccessors[T Entity]() Accessors[T] {
+func commonAccessors[T Entity]() accessorSet[T] {
 	id, _ := core.CommonAttribute("id")
 	externalID, _ := core.CommonAttribute("externalId")
 	meta, _ := core.CommonAttribute("meta")
 
-	return Accessors[T]{
+	return accessorSet[T]{
 		id:                                func(item T) any { return item.ResourceID() },
 		externalID:                        func(item T) any { return item.GetExternalID() },
 		meta.SubAttribute("resourceType"): func(item T) any { return item.GetMeta().ResourceType },
@@ -27,8 +27,8 @@ func commonAccessors[T Entity]() Accessors[T] {
 	}
 }
 
-func withCommonAccessors[T Entity](accessors Accessors[T]) Accessors[T] {
-	merged := Accessors[T]{}
+func withCommonAccessors[T Entity](accessors accessorSet[T]) accessorSet[T] {
+	merged := accessorSet[T]{}
 	maps.Copy(merged, accessors)
 	maps.Copy(merged, commonAccessors[T]())
 	return merged

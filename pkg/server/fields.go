@@ -20,8 +20,8 @@ func (fs Fields[T]) Attributes() core.Attributes {
 	return attributes
 }
 
-func (fs Fields[T]) Accessors() Accessors[T] {
-	accessors := Accessors[T]{}
+func (fs Fields[T]) accessors() accessorSet[T] {
+	accessors := accessorSet[T]{}
 	fs.walk(func(field *Field[T]) {
 		if field.accessor != nil {
 			accessors[field.Attribute] = field.accessor
@@ -33,7 +33,7 @@ func (fs Fields[T]) Accessors() Accessors[T] {
 	return accessors
 }
 
-func (fs Fields[T]) ElementAccessors() map[*core.Attribute]func(any) any {
+func (fs Fields[T]) elementAccessors() map[*core.Attribute]func(any) any {
 	accessors := map[*core.Attribute]func(any) any{}
 	fs.walk(func(field *Field[T]) {
 		maps.Copy(accessors, field.elementAccessors)
@@ -41,7 +41,7 @@ func (fs Fields[T]) ElementAccessors() map[*core.Attribute]func(any) any {
 	return accessors
 }
 
-func (fs Fields[T]) Elements() map[*core.Attribute]func(T) []any {
+func (fs Fields[T]) elements() map[*core.Attribute]func(T) []any {
 	elements := map[*core.Attribute]func(T) []any{}
 	fs.walk(func(field *Field[T]) {
 		if field.elements != nil {

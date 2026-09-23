@@ -17,6 +17,7 @@ type Server struct {
 	config        *core.ServiceProviderConfig
 	limits        protocol.Limits
 	errorHandler  func(error)
+	configure     []func(*core.ServiceProviderConfig)
 }
 
 type Option func(*Server)
@@ -29,6 +30,11 @@ func Limits(limits protocol.Limits) Option {
 // ErrorHandler receives the errors the server could not send to a client.
 func ErrorHandler(fn func(error)) Option {
 	return func(s *Server) { s.errorHandler = fn }
+}
+
+// ServiceProviderConfig changes the capabilities the server advertises, per RFC 7643, Section 5.
+func ServiceProviderConfig(fn func(*core.ServiceProviderConfig)) Option {
+	return func(s *Server) { s.configure = append(s.configure, fn) }
 }
 
 func New(basePath string, options ...Option) *Server {
@@ -44,6 +50,9 @@ func New(basePath string, options ...Option) *Server {
 		option(s)
 	}
 	s.config = core.NewServiceProviderConfig().Sorting().Filtering(s.limits.MaxCount).Patching().Versioning()
+	for _, fn := range s.configure {
+		fn(s.config)
+	}
 
 	mux.HandleFunc("GET "+basePath+"/ServiceProviderConfig", s.handle(s.serviceProviderConfig))
 	mux.HandleFunc("GET "+basePath+"/ResourceTypes", s.handle(s.listResourceTypes))

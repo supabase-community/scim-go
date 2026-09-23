@@ -15,16 +15,16 @@ import (
 type predicate func(row any) bool
 
 type evaluator[T Entity] struct {
-	accessors        Accessors[T]
+	accessors        accessorSet[T]
 	elementAccessors map[*core.Attribute]func(any) any
 	elements         map[*core.Attribute]func(T) []any
 }
 
-func NewVisitor[T Entity](fields Fields[T]) protocol.Evaluator[predicate] {
+func newVisitor[T Entity](fields Fields[T]) protocol.Evaluator[predicate] {
 	return &evaluator[T]{
-		accessors:        withCommonAccessors(fields.Accessors()),
-		elementAccessors: fields.ElementAccessors(),
-		elements:         fields.Elements(),
+		accessors:        withCommonAccessors(fields.accessors()),
+		elementAccessors: fields.elementAccessors(),
+		elements:         fields.elements(),
 	}
 }
 

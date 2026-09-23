@@ -93,8 +93,8 @@ func (c *Resource[T]) mount(s *Server) {
 		panic("server: resource " + c.name + " needs WithRepository")
 	}
 	c.basePath = s.basePath
-	service := NewService(c.repository, Validators(c.allFields(), c.repository)...)
-	controller := NewController(service, c.schemas(s.basePath), s.basePath+c.endpoint, s.limits)
+	service := newService(c.repository, Validators(c.allFields(), c.repository)...)
+	controller := newController(service, c.schemas(s.basePath), s.basePath+c.endpoint, s.limits)
 
 	path := s.basePath + c.endpoint
 	s.mux.HandleFunc("GET "+path, s.handle(controller.List))

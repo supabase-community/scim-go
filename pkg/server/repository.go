@@ -33,7 +33,7 @@ type memoryRepository[T Entity] struct {
 	endpoint         string
 	schema           *core.Schema
 	items            []T
-	accessors        Accessors[T]
+	accessors        accessorSet[T]
 	elementAccessors map[*core.Attribute]func(any) any
 	elements         map[*core.Attribute]func(T) []any
 	evaluator        protocol.Evaluator[predicate]
@@ -49,10 +49,10 @@ func (r *memoryRepository[T]) ready() {
 		fields := r.resource.allFields()
 		r.endpoint = r.resource.basePath + r.resource.endpoint
 		r.schema = r.resource.schema(r.resource.basePath)
-		r.accessors = withCommonAccessors(fields.Accessors())
-		r.elementAccessors = fields.ElementAccessors()
-		r.elements = fields.Elements()
-		r.evaluator = NewVisitor(fields)
+		r.accessors = withCommonAccessors(fields.accessors())
+		r.elementAccessors = fields.elementAccessors()
+		r.elements = fields.elements()
+		r.evaluator = newVisitor(fields)
 	})
 }
 

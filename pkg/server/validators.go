@@ -26,7 +26,7 @@ func Validators[T Entity](fields Fields[T], repo Repository[T]) []Validator[T] {
 
 // Required rejects a candidate missing a value for an attribute marked "required", per RFC 7643, Section 7.
 func Required[T Entity](fields Fields[T]) Validator[T] {
-	accessors := fields.Accessors()
+	accessors := fields.accessors()
 	return func(_ context.Context, candidate T) error {
 		for attribute, accessor := range accessors {
 			if attribute.Required && isMissing(attribute, accessor(candidate)) {
@@ -46,7 +46,7 @@ func isMissing(attribute *core.Attribute, value any) bool {
 
 // CanonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.
 func CanonicalValues[T Entity](fields Fields[T]) Validator[T] {
-	accessors := fields.Accessors()
+	accessors := fields.accessors()
 	return func(_ context.Context, candidate T) error {
 		for attribute, accessor := range accessors {
 			if len(attribute.CanonicalValues) == 0 {
@@ -73,7 +73,7 @@ func valuesOf(raw any) []any {
 
 // Mutability rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7643, Section 7.
 func Mutability[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
-	accessors := fields.Accessors()
+	accessors := fields.accessors()
 	return func(ctx context.Context, candidate T) error {
 		existing, err := repo.Get(ctx, candidate.ResourceID())
 		if err != nil {
@@ -95,7 +95,7 @@ func Mutability[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
 
 // Uniqueness rejects a value already used by another resource when an attribute requires "server" or "global" uniqueness, per RFC 7643, Section 7.
 func Uniqueness[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
-	accessors := fields.Accessors()
+	accessors := fields.accessors()
 	paths := fields.paths()
 	return func(ctx context.Context, candidate T) error {
 		for attribute, accessor := range accessors {
