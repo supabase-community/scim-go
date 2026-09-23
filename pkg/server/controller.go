@@ -47,23 +47,34 @@ func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	resources := make([]map[string]any, len(items))
 	for i, item := range items {
-		items[i] = c.withLocation(item)
+		if resources[i], err = query.Projection().Apply(c.withLocation(item), c.schemas); err != nil {
+			return protocol.SendError(w, err)
+		}
 	}
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, items))
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, resources))
 }
 
 func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
+	projection, err := protocol.ParseProjection(r.URL.Query())
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
 	resource, err := c.service.Get(r.Context(), r.PathValue("id"))
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
 	resource = c.withLocation(resource)
 	w.Header().Set("ETag", resource.GetMeta().Version)
-	return protocol.Send(w, http.StatusOK, resource)
+	return c.send(w, http.StatusOK, resource, projection)
 }
 
 func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
+	projection, err := protocol.ParseProjection(r.URL.Query())
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
 	resource, err := c.decode[T](r.Body)
 	if err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
@@ -75,10 +86,14 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	created = c.withLocation(created)
 	w.Header().Set("Location", created.GetMeta().Location)
 	w.Header().Set("ETag", created.GetMeta().Version)
-	return protocol.Send(w, http.StatusCreated, created)
+	return c.send(w, http.StatusCreated, created, projection)
 }
 
 func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
+	projection, err := protocol.ParseProjection(r.URL.Query())
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
 	resource, err := c.decode[T](r.Body)
 	if err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
@@ -91,10 +106,14 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	}
 	replaced = c.withLocation(replaced)
 	w.Header().Set("ETag", replaced.GetMeta().Version)
-	return protocol.Send(w, http.StatusOK, replaced)
+	return c.send(w, http.StatusOK, replaced, projection)
 }
 
 func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
+	projection, err := protocol.ParseProjection(r.URL.Query())
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
 	id := r.PathValue("id")
 	resource, err := c.service.Get(r.Context(), id)
 	if err != nil {
@@ -116,7 +135,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	}
 	replaced = c.withLocation(replaced)
 	w.Header().Set("ETag", replaced.GetMeta().Version)
-	return protocol.Send(w, http.StatusOK, replaced)
+	return c.send(w, http.StatusOK, replaced, projection)
 }
 
 func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
@@ -124,6 +143,14 @@ func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	return protocol.Send(w, http.StatusNoContent, nil)
+}
+
+func (c *controller[T]) send(w http.ResponseWriter, status int, resource T, projection protocol.Projection) error {
+	body, err := projection.Apply(resource, c.schemas)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	return protocol.Send(w, status, body)
 }
 
 func (c *controller[T]) withLocation(item T) T {

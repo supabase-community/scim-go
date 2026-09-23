@@ -1021,8 +1021,96 @@ func TestRFC7644Sorting(t *testing.T) {
 }
 
 // 3.4.2.5 Attributes
+// RFC 7644 Sections 3.4.2.5 and 3.9: attributes and excludedAttributes shape every returned resource.
 func TestRFC7644Attributes(t *testing.T) {
-	t.Skip("attributes/excludedAttributes are parsed into SearchRequest but never applied to List/Get responses")
+	srv := newTestServer(t)
+	id, _ := create(t, srv, &core.User{
+		UserName:    "bjensen",
+		DisplayName: "Babs Jensen",
+		Emails:      []core.Email{{Value: "bjensen@example.com", Type: "work"}},
+	})
+	get := func(t *testing.T, path string) (int, map[string]any) {
+		t.Helper()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+path, WithBearerToken(validToken)))
+		return response.StatusCode, ReadBodyAs[map[string]any](t, response)
+	}
+
+	t.Run("lists only the minimum set and the requested attributes", func(t *testing.T) {
+		status, body := get(t, "/Users?attributes=userName")
+		require.Equal(t, http.StatusOK, status)
+		resources := body["Resources"].([]any)
+		require.Len(t, resources, 1)
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(resources[0].(map[string]any)))
+	})
+
+	t.Run("fetches a resource without the excluded attributes", func(t *testing.T) {
+		status, body := get(t, "/Users/"+id+"?excludedAttributes=emails,meta")
+		require.Equal(t, http.StatusOK, status)
+		assert.Equal(t, "bjensen", body["userName"])
+		assert.NotContains(t, body, "emails")
+		assert.NotContains(t, body, "meta")
+	})
+
+	t.Run("omits attributes the schema does not declare", func(t *testing.T) {
+		_, body := get(t, "/Users/"+id)
+		assert.NotContains(t, body, "displayName")
+	})
+
+	t.Run("rejects attributes together with excludedAttributes", func(t *testing.T) {
+		status, _ := get(t, "/Users/"+id+"?attributes=userName&excludedAttributes=emails")
+		assert.Equal(t, http.StatusBadRequest, status)
+	})
+
+	t.Run("rejects both parameters on a write before changing anything", func(t *testing.T) {
+		query := "?attributes=userName&excludedAttributes=emails"
+		for method, path := range map[string]string{
+			http.MethodPost:  "/Users" + query,
+			http.MethodPut:   "/Users/" + id + query,
+			http.MethodPatch: "/Users/" + id + query,
+		} {
+			response := Response(t, srv, Request(t, srv, method, basePath+path,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.User{UserName: "mallory"}),
+			))
+			assert.Equal(t, http.StatusBadRequest, response.StatusCode, method)
+		}
+		_, body := get(t, "/Users?filter=userName%20eq%20%22mallory%22")
+		assert.InDelta(t, 0, body["totalResults"], 0)
+	})
+
+	t.Run("shapes the resource returned by a create", func(t *testing.T) {
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users?attributes=userName",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "alice", Emails: []core.Email{{Value: "a@example.com"}}}),
+		))
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(ReadBodyAs[map[string]any](t, response)))
+	})
+
+	t.Run("shapes the resource returned by a patch", func(t *testing.T) {
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id+"?excludedAttributes=emails",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "userType", Value: json.RawMessage(`"employee"`)}},
+			}),
+		))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		body := ReadBodyAs[map[string]any](t, response)
+		assert.Equal(t, "employee", body["userType"])
+		assert.NotContains(t, body, "emails")
+	})
+}
+
+func keysOf(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // 3.4.3 Alternative Query with POST /.search

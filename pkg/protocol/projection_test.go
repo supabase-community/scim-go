@@ -21,6 +21,11 @@ func TestProjection(t *testing.T) {
 			core.NewAttribute("familyName", core.TypeString),
 		),
 		core.NewMultiValuedAttribute("emails"),
+		core.NewAttribute("credential", core.TypeComplex).With(
+			core.NewAttribute("id", core.TypeString).ReturnedAs(core.ReturnedAlways),
+			core.NewAttribute("secret", core.TypeString).ReturnedAs(core.ReturnedNever),
+			core.NewAttribute("hint", core.TypeString).ReturnedAs(core.ReturnedRequest),
+		),
 	)
 	enterprise := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
 		core.NewAttribute("employeeNumber", core.TypeString),
@@ -37,6 +42,7 @@ func TestProjection(t *testing.T) {
 		"displayName": "Babs Jensen",
 		"name":        map[string]any{"givenName": "Barbara", "familyName": "Jensen"},
 		"emails":      []any{map[string]any{"value": "bjensen@example.com", "type": "work"}},
+		"credential":  map[string]any{"id": "c-1", "secret": "s3cr3t", "hint": "pet"},
 		string(core.SchemaEnterpriseUser): map[string]any{
 			"employeeNumber": "701984",
 			"department":     "Tour Operations",
@@ -55,7 +61,7 @@ func TestProjection(t *testing.T) {
 
 	t.Run("returns the default set without parameters", func(t *testing.T) {
 		out := apply(t, "")
-		assert.ElementsMatch(t, []string{"schemas", "id", "meta", "userName", "name", "emails", string(core.SchemaEnterpriseUser)}, keys(out))
+		assert.ElementsMatch(t, []string{"schemas", "id", "meta", "userName", "name", "emails", "credential", string(core.SchemaEnterpriseUser)}, keys(out))
 	})
 
 	t.Run("never returns a returned:never attribute", func(t *testing.T) {
@@ -87,7 +93,7 @@ func TestProjection(t *testing.T) {
 	})
 
 	t.Run("removes excluded attributes from the default set", func(t *testing.T) {
-		assert.ElementsMatch(t, []string{"schemas", "id", "userName", "name", string(core.SchemaEnterpriseUser)}, keys(apply(t, "excludedAttributes=emails,meta")))
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName", "name", string(core.SchemaEnterpriseUser)}, keys(apply(t, "excludedAttributes=emails,meta,credential")))
 	})
 
 	t.Run("does not exclude a returned:always attribute", func(t *testing.T) {
@@ -115,6 +121,29 @@ func TestProjection(t *testing.T) {
 		assert.NotContains(t, out, "password")
 	})
 
+	t.Run("applies returned to sub-attributes", func(t *testing.T) {
+		assert.Equal(t, map[string]any{"id": "c-1"}, apply(t, "")["credential"])
+		assert.Equal(t, map[string]any{"id": "c-1", "hint": "pet"}, apply(t, "attributes=credential.hint")["credential"])
+		assert.Equal(t, map[string]any{"id": "c-1"}, apply(t, "excludedAttributes=credential.id")["credential"])
+	})
+
+	t.Run("drops an extension whose value is not an object", func(t *testing.T) {
+		out, err := protocol.Projection{}.Apply(map[string]any{string(core.SchemaEnterpriseUser): "oops"}, schemas)
+		require.NoError(t, err)
+		assert.Empty(t, out)
+	})
+
+	t.Run("returns nothing without schemas", func(t *testing.T) {
+		out, err := protocol.Projection{}.Apply(resource, nil)
+		require.NoError(t, err)
+		assert.Empty(t, out)
+	})
+
+	t.Run("reports a resource that cannot be encoded", func(t *testing.T) {
+		_, err := protocol.Projection{}.Apply(map[string]any{"id": make(chan int)}, schemas)
+		require.ErrorIs(t, err, scimerrors.ErrInternal(""))
+	})
+
 	// RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.
 	t.Run("rejects both parameters together", func(t *testing.T) {
 		_, err := protocol.ParseProjection(url.Values{"attributes": {"userName"}, "excludedAttributes": {"emails"}})
@@ -123,6 +152,12 @@ func TestProjection(t *testing.T) {
 
 	t.Run("rejects an attribute name that is not valid attribute notation", func(t *testing.T) {
 		_, err := protocol.Projection{Attributes: []string{"1bad"}}.Apply(resource, schemas)
+		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
+
+		_, err = protocol.Projection{ExcludedAttributes: []string{"1bad"}}.Apply(resource, schemas)
+		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
+
+		_, err = protocol.ParseProjection(url.Values{"excludedAttributes": {"1bad"}})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 	})
 }

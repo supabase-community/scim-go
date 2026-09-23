@@ -27,7 +27,16 @@ func ParseProjection(values url.Values) (Projection, error) {
 	if len(projection.Attributes) > 0 && len(projection.ExcludedAttributes) > 0 {
 		return Projection{}, scimerrors.ErrInvalidValue(`"attributes" and "excludedAttributes" are mutually exclusive`)
 	}
+	for _, name := range slices.Concat(projection.Attributes, projection.ExcludedAttributes) {
+		if _, err := filter.NewAttrPath(name); err != nil {
+			return Projection{}, invalidName(name)
+		}
+	}
 	return projection, nil
+}
+
+func invalidName(name string) error {
+	return scimerrors.ErrInvalidValue(`"` + name + `" is not a valid attribute name`)
 }
 
 // Apply keeps the declared attributes of resource that schemas return, where schemas[0] is the base schema.
@@ -100,7 +109,7 @@ func parsePaths(names []string, schemas []*core.Schema) ([]filter.AttrPath, []co
 		}
 		path, err := filter.NewAttrPath(name)
 		if err != nil {
-			return nil, nil, scimerrors.ErrInvalidValue(`"` + name + `" is not a valid attribute name`)
+			return nil, nil, invalidName(name)
 		}
 		paths = append(paths, path)
 	}
