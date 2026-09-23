@@ -128,6 +128,16 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, scimErr.ScimType)
 	})
 
+	t.Run("rejects a body that does not match the resource", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users", WithBearerToken(validToken), WithRequestBody([]byte(`{"userName":5}`)))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
 	t.Run("rejects a resource missing a required attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1906,4 +1916,61 @@ func TestRFC7644PatchKeepsWriteOnlyAttributes(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.StatusCode)
 	require.Len(t, repository.replaced, 1)
 	assert.Equal(t, "t1meMa$heen", repository.replaced[0].Password)
+}
+
+// RFC 7644 Sections 3.3 and 3.5.1: values provided for readOnly attributes SHALL be ignored.
+func TestRFC7644IgnoresReadOnlyAttributes(t *testing.T) {
+	fields := server.NewFields(append(userFields(), server.NewField(
+		core.NewAttribute("groups", core.TypeComplex).AsMultiValued().AsReadOnly().With(core.NewAttribute("value", core.TypeString)),
+		func(u *core.User) any { return u.Groups },
+	))...)
+	repository := server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)
+	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
+	staff := []core.GroupMembership{{Value: "staff"}}
+	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen", Groups: staff})
+	require.NoError(t, err)
+
+	t.Run("POST ignores readOnly values", func(t *testing.T) {
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"id":"client-chosen","userName":"alice","groups":[{"value":"admins"}]}`)),
+		))
+
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		created := ReadBodyAs[core.User](t, response)
+		assert.NotEqual(t, "client-chosen", created.ID)
+		assert.Empty(t, created.Groups)
+	})
+
+	t.Run("PUT keeps the stored readOnly values", func(t *testing.T) {
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+existing.ID,
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"userName":"bjensen2","groups":[{"value":"admins"}],"meta":{"created":"2000-01-01T00:00:00Z"}}`)),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		replaced := ReadBodyAs[core.User](t, response)
+		assert.Equal(t, "bjensen2", replaced.UserName)
+		assert.Equal(t, staff, replaced.Groups)
+		assert.Equal(t, existing.Meta.Created, replaced.Meta.Created)
+	})
+
+	t.Run("PUT keeps stored readOnly values the body leaves out", func(t *testing.T) {
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+existing.ID,
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"userName":"bjensen3"}`)),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, staff, ReadBodyAs[core.User](t, response).Groups)
+	})
+
+	t.Run("PUT to an unknown resource returns 404", func(t *testing.T) {
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/unknown",
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"userName":"ghost"}`)),
+		))
+
+		assert.Equal(t, http.StatusNotFound, response.StatusCode)
+	})
 }

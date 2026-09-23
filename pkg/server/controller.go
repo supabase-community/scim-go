@@ -75,9 +75,13 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	resource, err := c.decode[T](r.Body)
+	document, err := readDocument(r.Body)
 	if err != nil {
-		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
+		return protocol.SendError(w, err)
+	}
+	resource, err := c.writable(document, nil)
+	if err != nil {
+		return protocol.SendError(w, err)
 	}
 	created, err := c.service.Create(r.Context(), resource)
 	if err != nil {
@@ -94,9 +98,17 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	resource, err := c.decode[T](r.Body)
+	document, err := readDocument(r.Body)
 	if err != nil {
-		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
+		return protocol.SendError(w, err)
+	}
+	existing, err := c.service.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	resource, err := c.writable(document, existing)
+	if err != nil {
+		return protocol.SendError(w, err)
 	}
 	resource.SetID(r.PathValue("id"))
 	resource.SetMeta(core.Meta{Version: r.Header.Get("If-Match")})
@@ -158,6 +170,32 @@ func (c *controller[T]) withLocation(item T) T {
 	meta.Location = c.path + "/" + item.ResourceID()
 	item.SetMeta(meta)
 	return item
+}
+
+func readDocument(r io.Reader) (map[string]any, error) {
+	var document map[string]any
+	decoder := json.NewDecoder(r)
+	decoder.UseNumber()
+	if err := decoder.Decode(&document); err != nil || document == nil {
+		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
+	}
+	return document, nil
+}
+
+func (c *controller[T]) writable(document map[string]any, existing any) (T, error) {
+	var item T
+	document, err := protocol.Writable(document, existing, c.schemas)
+	if err != nil {
+		return item, err
+	}
+	raw, err := json.Marshal(document)
+	if err != nil {
+		return item, scimerrors.ErrInternal("could not encode the request body")
+	}
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return item, scimerrors.ErrInvalidSyntax("request body does not match the resource")
+	}
+	return item, nil
 }
 
 func (c *controller[T]) decode[K any](r io.Reader) (K, error) {
