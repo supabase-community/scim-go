@@ -47,7 +47,7 @@ func ErrSensitive(detail string) *Error {
 	return NewError(http.StatusForbidden, Sensitive, detail)
 }
 
-// The errors of Table 8, Section 3.12 that carry no scimType.
+// ErrNotFound is one of the errors of Table 8, Section 3.12 that carry no scimType.
 func ErrNotFound(detail string) *Error {
 	return NewError(http.StatusNotFound, "", detail)
 }

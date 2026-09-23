@@ -18,7 +18,7 @@ type Projection struct {
 	excluded names
 }
 
-// RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.
+// ParseProjection reads "attributes"/"excludedAttributes"; RFC 7644 Section 3.9: they are mutually exclusive.
 func ParseProjection(values url.Values, schemas []*core.Schema) (Projection, error) {
 	attributes, excluded, err := parseAttributeParams(values)
 	if err != nil {

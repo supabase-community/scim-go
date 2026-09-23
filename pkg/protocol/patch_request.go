@@ -15,7 +15,7 @@ type PatchRequest struct {
 	Operations []patch.Operation `json:"Operations"`
 }
 
-// RFC 7644 Section 3.5.2: the request body MUST be a JSON object.
+// DecodePatchRequest reads a PATCH request body, per RFC 7644 Section 3.5.2: it MUST be a JSON object.
 func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	req, err := Decode[*PatchRequest](body)
 	if err != nil {
@@ -32,7 +32,7 @@ func (r *PatchRequest) Apply(resource any, schemas []*core.Schema) error {
 	return patch.Apply(resource, r.Operations, schemas)
 }
 
-// RFC 7644 Section 3.5.2: returns a new resource; resource is left unchanged.
+// Patch returns a new resource; resource is left unchanged, per RFC 7644 Section 3.5.2.
 func (r *PatchRequest) Patch[T any](resource T, schemas []*core.Schema) (T, error) {
 	var zero T
 	existing, err := toDocument(resource)

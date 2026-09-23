@@ -1,4 +1,4 @@
-// Package scim implements a parser for the SCIM RFC-7644 filter grammar.
+// Package filter implements a parser for the SCIM RFC-7644 filter grammar.
 package filter
 
 import (

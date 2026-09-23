@@ -6,7 +6,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// RFC 7644 Sections 3.3 and 3.5.1: values provided for readOnly attributes SHALL be ignored.
+// DecodeResource decodes a resource body; RFC 7644 Sections 3.3 and 3.5.1: readOnly attribute values SHALL be ignored.
 func DecodeResource[T any](body io.Reader, existing any, schemas []*core.Schema) (T, error) {
 	var item T
 	document, err := readDocument(body)
