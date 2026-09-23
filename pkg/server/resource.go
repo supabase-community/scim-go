@@ -70,7 +70,8 @@ func (c *Resource[T]) resourceType(basePath string) *core.ResourceType {
 }
 
 func (c *Resource[T]) schemas(basePath string) []*core.Schema {
-	schemas := []*core.Schema{c.schema(basePath)}
+	schemas := make([]*core.Schema, 1, 1+len(c.extensions))
+	schemas[0] = c.schema(basePath)
 	for _, extension := range c.extensions {
 		schemas = append(schemas, core.NewSchema(extension.id).
 			WithLocation(basePath+"/Schemas/"+string(extension.id)).

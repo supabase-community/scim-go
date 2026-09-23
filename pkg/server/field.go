@@ -31,9 +31,10 @@ func NewElements[T, E any](attribute *core.Attribute, list func(T) []E, children
 		Attribute:        attribute,
 		elementAccessors: accessors,
 		elements: func(item T) []any {
-			var elements []any
-			for _, element := range list(item) {
-				elements = append(elements, element)
+			items := list(item)
+			elements := make([]any, len(items))
+			for i, element := range items {
+				elements[i] = element
 			}
 			return elements
 		},
