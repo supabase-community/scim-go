@@ -6,7 +6,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-type Accessor[T Entity] func(item T) any
+type Accessor[T any] func(item T) any
 
 type accessorSet[T Entity] map[*core.Attribute]Accessor[T]
 

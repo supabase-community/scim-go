@@ -34,14 +34,13 @@ func TestSend(t *testing.T) {
 		assert.Empty(t, w.Body.String())
 	})
 
-	t.Run("writes nothing at all when the value cannot be encoded", func(t *testing.T) {
+	t.Run("answers with an internal error instead of an empty 200 when the value cannot be encoded", func(t *testing.T) {
 		w := httptest.NewRecorder()
 
-		err := protocol.Send(w, http.StatusOK, func() {})
+		require.NoError(t, protocol.Send(w, http.StatusOK, func() {}))
 
-		require.Error(t, err)
-		assert.Empty(t, w.Body.String())
-		assert.Empty(t, w.Header().Get("Content-Type"))
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.NotEmpty(t, w.Body.String())
 	})
 }
 

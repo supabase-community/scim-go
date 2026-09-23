@@ -60,7 +60,7 @@ func widgetFields() server.Fields[*widget] {
 		server.NewElements(
 			core.NewAttribute("parts", core.TypeComplex).AsMultiValued(),
 			func(w *widget) []part { return w.Parts },
-			server.NewElementField(core.NewAttribute("serial", core.TypeString).AsRequired(), func(p part) any { return p.Serial }),
+			server.NewField(core.NewAttribute("serial", core.TypeString).AsRequired(), func(p part) any { return p.Serial }),
 		),
 	)
 }

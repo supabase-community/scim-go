@@ -13,11 +13,7 @@ func NewFields[T Entity](fields ...*Field[T]) Fields[T] {
 }
 
 func (fs Fields[T]) Attributes() core.Attributes {
-	attributes := make(core.Attributes, len(fs))
-	for i, field := range fs {
-		attributes[i] = field.Attribute
-	}
-	return attributes
+	return attributesOf(fs)
 }
 
 func (fs Fields[T]) accessors() accessorSet[T] {

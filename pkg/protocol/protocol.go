@@ -18,7 +18,7 @@ func Send(w http.ResponseWriter, status int, obj any) error {
 	if obj != nil {
 		var err error
 		if body, err = json.Marshal(obj); err != nil {
-			return fmt.Errorf("scim: encoding %T: %w", obj, err)
+			return SendError(w, fmt.Errorf("scim: encoding %T: %w", obj, err))
 		}
 	}
 

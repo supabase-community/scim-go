@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -49,7 +50,7 @@ func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
 	}
 	resources := make([]map[string]any, len(items))
 	for i, item := range items {
-		if resources[i], err = query.Projection().Apply(c.withLocation(item), c.schemas); err != nil {
+		if resources[i], err = query.Projection().Apply(item, c.schemas); err != nil {
 			return protocol.SendError(w, err)
 		}
 	}
@@ -65,7 +66,6 @@ func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	resource = c.withLocation(resource)
 	w.Header().Set("ETag", resource.GetMeta().Version)
 	return c.send(w, http.StatusOK, resource, projection)
 }
@@ -87,7 +87,6 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	created = c.withLocation(created)
 	w.Header().Set("Location", created.GetMeta().Location)
 	w.Header().Set("ETag", created.GetMeta().Version)
 	return c.send(w, http.StatusCreated, created, projection)
@@ -116,7 +115,6 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	replaced = c.withLocation(replaced)
 	w.Header().Set("ETag", replaced.GetMeta().Version)
 	return c.send(w, http.StatusOK, replaced, projection)
 }
@@ -126,26 +124,32 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	id := r.PathValue("id")
-	resource, err := c.service.Get(r.Context(), id)
+	existing, err := c.service.Get(r.Context(), r.PathValue("id"))
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	if match := r.Header.Get("If-Match"); match != "" && resource.GetMeta().Version != match {
+	if match := r.Header.Get("If-Match"); match != "" && existing.GetMeta().Version != match {
 		return protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
 	}
 	req, err := c.decode[protocol.PatchRequest](r.Body)
 	if err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
 	}
-	if err := req.Apply(resource, c.schemas); err != nil {
+	document, err := documentOf(existing)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	if err := req.Apply(document, c.schemas); err != nil {
+		return protocol.SendError(w, err)
+	}
+	resource, err := c.writable(document, existing)
+	if err != nil {
 		return protocol.SendError(w, err)
 	}
 	replaced, err := c.service.Replace(r.Context(), resource)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	replaced = c.withLocation(replaced)
 	w.Header().Set("ETag", replaced.GetMeta().Version)
 	return c.send(w, http.StatusOK, replaced, projection)
 }
@@ -165,11 +169,12 @@ func (c *controller[T]) send(w http.ResponseWriter, status int, resource T, proj
 	return protocol.Send(w, status, body)
 }
 
-func (c *controller[T]) withLocation(item T) T {
-	meta := item.GetMeta()
-	meta.Location = c.path + "/" + item.ResourceID()
-	item.SetMeta(meta)
-	return item
+func documentOf(resource any) (map[string]any, error) {
+	raw, err := json.Marshal(resource)
+	if err != nil {
+		return nil, scimerrors.ErrInternal("could not encode the resource")
+	}
+	return readDocument(bytes.NewReader(raw))
 }
 
 func readDocument(r io.Reader) (map[string]any, error) {
