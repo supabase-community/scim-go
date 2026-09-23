@@ -1,6 +1,8 @@
 package protocol_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +13,7 @@ import (
 )
 
 // RFC 7644 Sections 3.3 and 3.5.1: values provided for readOnly attributes SHALL be ignored.
-func TestWritable(t *testing.T) {
+func TestDecodeResource(t *testing.T) {
 	user := (&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
 		core.NewAttribute("userName", core.TypeString),
 		core.NewAttribute("groups", core.TypeComplex).AsMultiValued().AsReadOnly().With(
@@ -45,6 +47,11 @@ func TestWritable(t *testing.T) {
 			uri:        map[string]any{"department": "Tour Operations", "employeeNumber": "client"},
 		}
 	}
+	requestBody := func(document map[string]any) *bytes.Reader {
+		raw, err := json.Marshal(document)
+		require.NoError(t, err)
+		return bytes.NewReader(raw)
+	}
 	existing := map[string]any{
 		"id":       "2819c223",
 		"meta":     map[string]any{"created": "2026-07-21T19:41:41Z"},
@@ -55,7 +62,7 @@ func TestWritable(t *testing.T) {
 	}
 
 	t.Run("drops readOnly values when there is no existing resource", func(t *testing.T) {
-		out, err := protocol.Writable(body(), nil, schemas)
+		out, err := protocol.DecodeResource[map[string]any](requestBody(body()), nil, schemas)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{
 			"schemas":  []any{string(core.SchemaUser)},
@@ -68,7 +75,7 @@ func TestWritable(t *testing.T) {
 	})
 
 	t.Run("keeps the existing readOnly values", func(t *testing.T) {
-		out, err := protocol.Writable(body(), existing, schemas)
+		out, err := protocol.DecodeResource[map[string]any](requestBody(body()), existing, schemas)
 		require.NoError(t, err)
 		assert.Equal(t, "2819c223", out["id"])
 		assert.Equal(t, existing["meta"], out["meta"])
@@ -79,7 +86,7 @@ func TestWritable(t *testing.T) {
 	})
 
 	t.Run("keeps existing readOnly values the body leaves out", func(t *testing.T) {
-		out, err := protocol.Writable(map[string]any{"userName": "bjensen"}, existing, schemas)
+		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{"userName": "bjensen"}), existing, schemas)
 		require.NoError(t, err)
 		assert.Equal(t, existing["groups"], out["groups"])
 		assert.Equal(t, map[string]any{"employeeNumber": "701984"}, out[uri])
@@ -87,19 +94,24 @@ func TestWritable(t *testing.T) {
 	})
 
 	t.Run("leaves an extension that is not an object for decoding to reject", func(t *testing.T) {
-		out, err := protocol.Writable(map[string]any{uri: "oops"}, nil, schemas)
+		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{uri: "oops"}), nil, schemas)
 		require.NoError(t, err)
 		assert.Equal(t, "oops", out[uri])
 	})
 
 	t.Run("returns the body without schemas", func(t *testing.T) {
-		out, err := protocol.Writable(body(), existing, nil)
+		out, err := protocol.DecodeResource[map[string]any](requestBody(body()), existing, nil)
 		require.NoError(t, err)
 		assert.Equal(t, body(), out)
 	})
 
 	t.Run("reports an existing resource that cannot be encoded", func(t *testing.T) {
-		_, err := protocol.Writable(body(), map[string]any{"id": make(chan int)}, schemas)
+		_, err := protocol.DecodeResource[map[string]any](requestBody(body()), map[string]any{"id": make(chan int)}, schemas)
 		require.ErrorIs(t, err, scimerrors.ErrInternal(""))
+	})
+
+	t.Run("rejects a body that is not a JSON object", func(t *testing.T) {
+		_, err := protocol.DecodeResource[map[string]any](bytes.NewReader([]byte("null")), nil, schemas)
+		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
 	})
 }

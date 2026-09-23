@@ -1,8 +1,6 @@
 package protocol
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/url"
 	"slices"
 	"strings"
@@ -61,20 +59,6 @@ func (p Projection) Apply(resource any, schemas []*core.Schema) (map[string]any,
 		}
 	}
 	return out, nil
-}
-
-func toDocument(resource any) (map[string]any, error) {
-	raw, err := json.Marshal(resource)
-	if err != nil {
-		return nil, scimerrors.ErrInternal("could not encode the resource")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	document := map[string]any{}
-	if err := decoder.Decode(&document); err != nil {
-		return nil, scimerrors.ErrInternal("could not decode the resource")
-	}
-	return document, nil
 }
 
 type selector struct {

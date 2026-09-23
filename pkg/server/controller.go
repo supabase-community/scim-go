@@ -75,11 +75,7 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	document, err := readDocument(r.Body)
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
-	resource, err := c.writable(document, nil)
+	resource, err := protocol.DecodeResource[T](r.Body, nil, c.schemas)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -97,19 +93,14 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	document, err := readDocument(r.Body)
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
 	existing, err := c.service.Get(r.Context(), r.PathValue("id"))
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	resource, err := c.writable(document, existing)
+	resource, err := protocol.DecodeResource[T](r.Body, existing, c.schemas)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	resource.SetID(r.PathValue("id"))
 	resource.SetMeta(core.Meta{Version: r.Header.Get("If-Match")})
 	replaced, err := c.service.Replace(r.Context(), resource)
 	if err != nil {
@@ -189,18 +180,11 @@ func readDocument(r io.Reader) (map[string]any, error) {
 
 func (c *controller[T]) writable(document map[string]any, existing any) (T, error) {
 	var item T
-	document, err := protocol.Writable(document, existing, c.schemas)
-	if err != nil {
-		return item, err
-	}
 	raw, err := json.Marshal(document)
 	if err != nil {
 		return item, scimerrors.ErrInternal("could not encode the request body")
 	}
-	if err := json.Unmarshal(raw, &item); err != nil {
-		return item, scimerrors.ErrInvalidSyntax("request body does not match the resource")
-	}
-	return item, nil
+	return protocol.DecodeResource[T](bytes.NewReader(raw), existing, c.schemas)
 }
 
 func (c *controller[T]) decode[K any](r io.Reader) (K, error) {
