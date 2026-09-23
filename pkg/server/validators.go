@@ -31,14 +31,23 @@ func CanonicalValues[T Entity](accessors Accessors[T]) Validator[T] {
 			if len(attribute.CanonicalValues) == 0 {
 				continue
 			}
-			value, ok := accessor(candidate).(string)
-			if !ok || value == "" || containsValue(attribute.CanonicalValues, value, attribute.CaseExact) {
-				continue
+			for _, raw := range valuesOf(accessor(candidate)) {
+				value, ok := raw.(string)
+				if !ok || value == "" || containsValue(attribute.CanonicalValues, value, attribute.CaseExact) {
+					continue
+				}
+				return scimerrors.ErrInvalidValue(strconv.Quote(value) + " is not a canonical value for " + strconv.Quote(attribute.Name))
 			}
-			return scimerrors.ErrInvalidValue(strconv.Quote(value) + " is not a canonical value for " + strconv.Quote(attribute.Name))
 		}
 		return nil
 	}
+}
+
+func valuesOf(raw any) []any {
+	if list, ok := raw.([]any); ok {
+		return list
+	}
+	return []any{raw}
 }
 
 // Mutability rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7643, Section 7.
