@@ -33,15 +33,15 @@ func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {
 		return nil, err
 	}
 
-	projection, err := ParseProjection(values)
+	attributes, excluded, err := parseAttributeParams(values)
 	if err != nil {
 		return nil, err
 	}
 
 	return &SearchRequest{
 		Schemas:            []core.SchemaURI{SchemaSearchRequest},
-		Attributes:         projection.Attributes,
-		ExcludedAttributes: projection.ExcludedAttributes,
+		Attributes:         attributes,
+		ExcludedAttributes: excluded,
 		Filter:             values.Get("filter"),
 		SortBy:             values.Get("sortBy"),
 		SortOrder:          sortOrder,

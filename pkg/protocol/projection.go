@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"net/url"
 	"slices"
 	"strings"
@@ -10,60 +11,98 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Projection selects the attributes of a returned resource, per RFC 7644, Section 3.9.
+// Projection selects and renders the attributes of a resource, per RFC 7644, Section 3.9.
 type Projection struct {
-	Attributes         []string
-	ExcludedAttributes []string
+	schemas  []*core.Schema
+	included names
+	excluded names
 }
 
 // RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.
-func ParseProjection(values url.Values) (Projection, error) {
-	projection := Projection{
-		Attributes:         listParam(values, "attributes"),
-		ExcludedAttributes: listParam(values, "excludedAttributes"),
+func ParseProjection(values url.Values, schemas []*core.Schema) (Projection, error) {
+	attributes, excluded, err := parseAttributeParams(values)
+	if err != nil {
+		return Projection{}, err
 	}
-	if len(projection.Attributes) > 0 && len(projection.ExcludedAttributes) > 0 {
-		return Projection{}, scimerrors.ErrInvalidValue(`"attributes" and "excludedAttributes" are mutually exclusive`)
+	return newProjection(schemas, attributes, excluded)
+}
+
+func parseAttributeParams(values url.Values) (attributes, excluded []string, err error) {
+	attributes = listParam(values, "attributes")
+	excluded = listParam(values, "excludedAttributes")
+	if len(attributes) > 0 && len(excluded) > 0 {
+		return nil, nil, scimerrors.ErrInvalidValue(`"attributes" and "excludedAttributes" are mutually exclusive`)
 	}
-	for _, name := range slices.Concat(projection.Attributes, projection.ExcludedAttributes) {
+	for _, name := range slices.Concat(attributes, excluded) {
 		if _, err := filter.NewAttrPath(name); err != nil {
-			return Projection{}, invalidName(name)
+			return nil, nil, invalidName(name)
 		}
 	}
-	return projection, nil
+	return attributes, excluded, nil
+}
+
+func newProjection(schemas []*core.Schema, attributes, excluded []string) (Projection, error) {
+	included, err := qualify(schemas, attributes)
+	if err != nil {
+		return Projection{}, err
+	}
+	excludedNames, err := qualify(schemas, excluded)
+	if err != nil {
+		return Projection{}, err
+	}
+	return Projection{schemas: schemas, included: included, excluded: excludedNames}, nil
 }
 
 func invalidName(name string) error {
 	return scimerrors.ErrInvalidValue(`"` + name + `" is not a valid attribute name`)
 }
 
-// Apply keeps the declared attributes of resource that schemas return, where schemas[0] is the base schema.
-func (p Projection) Apply(resource any, schemas []*core.Schema) (map[string]any, error) {
-	document, err := toDocument(resource)
+func listParam(values url.Values, name string) []string {
+	var list []string
+
+	for _, value := range values[name] {
+		for item := range strings.SplitSeq(value, ",") {
+			if item = strings.TrimSpace(item); item != "" {
+				list = append(list, item)
+			}
+		}
+	}
+	return list
+}
+
+// Of renders resource through the projection when the result is marshaled to JSON.
+func (p Projection) Of(resource any) json.Marshaler {
+	return projected{projection: p, resource: resource}
+}
+
+// All renders each of resources through the projection when the result is marshaled to JSON.
+func (p Projection) All[T any](resources []T) []json.Marshaler {
+	out := make([]json.Marshaler, len(resources))
+	for i, resource := range resources {
+		out[i] = p.Of(resource)
+	}
+	return out
+}
+
+type projected struct {
+	projection Projection
+	resource   any
+}
+
+func (v projected) MarshalJSON() ([]byte, error) {
+	document, err := toDocument(v.resource)
 	if err != nil {
 		return nil, err
 	}
-	if len(schemas) == 0 {
-		return map[string]any{}, nil
-	}
-	included, err := qualify(schemas, p.Attributes)
-	if err != nil {
-		return nil, err
-	}
-	excluded, err := qualify(schemas, p.ExcludedAttributes)
-	if err != nil {
-		return nil, err
-	}
-	s := &selection{schemas: schemas, included: included, excluded: excluded}
 	out := map[string]any{}
 	for key, value := range document {
 		if key == "schemas" {
 			out[key] = value
-		} else if projected, ok := s.project(key, value); ok {
+		} else if projected, ok := v.projection.project(key, value); ok {
 			out[key] = projected
 		}
 	}
-	return out, nil
+	return json.Marshal(out)
 }
 
 // names holds fully qualified, lowercase attribute paths: "<schema uri>:<name>[.<sub-name>]",
@@ -121,23 +160,17 @@ func (n names) within(name string) bool {
 	return slices.ContainsFunc(n, func(e string) bool { return strings.HasPrefix(e, name+".") })
 }
 
-type selection struct {
-	schemas  []*core.Schema
-	included names
-	excluded names
-}
-
-func (s *selection) project(key string, value any) (any, bool) {
-	if attribute, ok := s.schemas[0].Resolve(key); ok {
-		return s.value(attribute, qualifiedKey(s.schemas[0].ID, attribute.Name), value)
+func (p Projection) project(key string, value any) (any, bool) {
+	if attribute, ok := p.schemas[0].Resolve(key); ok {
+		return p.value(attribute, qualifiedKey(p.schemas[0].ID, attribute.Name), value)
 	}
-	if extension := schemaNamed(s.schemas[1:], key); extension != nil {
-		return s.extension(extension, value)
+	if extension := schemaNamed(p.schemas[1:], key); extension != nil {
+		return p.extension(extension, value)
 	}
 	return nil, false
 }
 
-func (s *selection) extension(schema *core.Schema, value any) (any, bool) {
+func (p Projection) extension(schema *core.Schema, value any) (any, bool) {
 	object, ok := value.(map[string]any)
 	if !ok {
 		return nil, false
@@ -148,7 +181,7 @@ func (s *selection) extension(schema *core.Schema, value any) (any, bool) {
 		if attribute == nil {
 			continue
 		}
-		if projected, ok := s.value(attribute, qualifiedKey(schema.ID, attribute.Name), item); ok {
+		if projected, ok := p.value(attribute, qualifiedKey(schema.ID, attribute.Name), item); ok {
 			out[key] = projected
 		}
 	}
@@ -156,23 +189,23 @@ func (s *selection) extension(schema *core.Schema, value any) (any, bool) {
 }
 
 // RFC 7643 Section 7: "returned" decides whether an attribute can appear in a response.
-func (s *selection) returns(attribute *core.Attribute, name string) bool {
+func (p Projection) returns(attribute *core.Attribute, name string) bool {
 	switch {
 	case attribute.Returned == core.ReturnedNever:
 		return false
 	case attribute.Returned == core.ReturnedAlways:
 		return true
 	case attribute.Returned == core.ReturnedRequest:
-		return slices.Contains(s.included, name) || s.included.within(name)
-	case len(s.included) > 0:
-		return s.included.covers(name) || s.included.within(name)
+		return slices.Contains(p.included, name) || p.included.within(name)
+	case len(p.included) > 0:
+		return p.included.covers(name) || p.included.within(name)
 	default:
-		return !s.excluded.covers(name)
+		return !p.excluded.covers(name)
 	}
 }
 
-func (s *selection) value(attribute *core.Attribute, name string, value any) (any, bool) {
-	if !s.returns(attribute, name) {
+func (p Projection) value(attribute *core.Attribute, name string, value any) (any, bool) {
+	if !p.returns(attribute, name) {
 		return nil, false
 	}
 	if len(attribute.SubAttributes) == 0 {
@@ -180,13 +213,13 @@ func (s *selection) value(attribute *core.Attribute, name string, value any) (an
 	}
 	switch v := value.(type) {
 	case map[string]any:
-		object := s.object(attribute, name, v)
+		object := p.object(attribute, name, v)
 		return object, len(object) > 0
 	case []any:
 		elements := make([]any, 0, len(v))
 		for _, element := range v {
 			if object, ok := element.(map[string]any); ok {
-				element = s.object(attribute, name, object)
+				element = p.object(attribute, name, object)
 			}
 			elements = append(elements, element)
 		}
@@ -195,29 +228,16 @@ func (s *selection) value(attribute *core.Attribute, name string, value any) (an
 	return value, true
 }
 
-func (s *selection) object(attribute *core.Attribute, parentName string, object map[string]any) map[string]any {
+func (p Projection) object(attribute *core.Attribute, parentName string, object map[string]any) map[string]any {
 	out := map[string]any{}
 	for key, value := range object {
 		sub := attribute.SubAttribute(key)
 		if sub == nil {
 			continue
 		}
-		if projected, ok := s.value(sub, parentName+"."+strings.ToLower(sub.Name), value); ok {
+		if projected, ok := p.value(sub, parentName+"."+strings.ToLower(sub.Name), value); ok {
 			out[key] = projected
 		}
 	}
 	return out
-}
-
-func listParam(values url.Values, name string) []string {
-	var list []string
-
-	for _, value := range values[name] {
-		for item := range strings.SplitSeq(value, ",") {
-			if item = strings.TrimSpace(item); item != "" {
-				list = append(list, item)
-			}
-		}
-	}
-	return list
 }

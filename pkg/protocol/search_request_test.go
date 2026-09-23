@@ -145,6 +145,16 @@ func TestSearchRequest(t *testing.T) {
 		assert.False(t, (&protocol.SearchRequest{}).Descending())
 	})
 
+	t.Run("builds a projection from its own attributes and excludedAttributes", func(t *testing.T) {
+		schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString))}
+		request := &protocol.SearchRequest{Attributes: []string{"userName"}}
+
+		raw, err := json.Marshal(request.Projection(schemas).Of(map[string]any{"userName": "bjensen", "id": "1"}))
+
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"userName": "bjensen", "id": "1"}`, string(raw))
+	})
+
 	t.Run("serializes as the SearchRequest of RFC 7644, Section 3.4.3", func(t *testing.T) {
 		request := &protocol.SearchRequest{
 			Schemas:            []core.SchemaURI{protocol.SchemaSearchRequest},

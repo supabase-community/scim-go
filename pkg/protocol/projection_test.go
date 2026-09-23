@@ -1,6 +1,7 @@
 package protocol_test
 
 import (
+	"encoding/json"
 	"net/url"
 	"testing"
 
@@ -48,15 +49,21 @@ func TestProjection(t *testing.T) {
 			"department":     "Tour Operations",
 		},
 	}
+	marshal := func(t *testing.T, resource any, projection protocol.Projection) map[string]any {
+		t.Helper()
+		raw, err := json.Marshal(projection.Of(resource))
+		require.NoError(t, err)
+		var out map[string]any
+		require.NoError(t, json.Unmarshal(raw, &out))
+		return out
+	}
 	apply := func(t *testing.T, query string) map[string]any {
 		t.Helper()
 		values, err := url.ParseQuery(query)
 		require.NoError(t, err)
-		projection, err := protocol.ParseProjection(values)
+		projection, err := protocol.ParseProjection(values, schemas)
 		require.NoError(t, err)
-		out, err := projection.Apply(resource, schemas)
-		require.NoError(t, err)
-		return out
+		return marshal(t, resource, projection)
 	}
 
 	t.Run("returns the default set without parameters", func(t *testing.T) {
@@ -115,8 +122,9 @@ func TestProjection(t *testing.T) {
 	})
 
 	t.Run("projects a struct through its JSON representation", func(t *testing.T) {
-		out, err := protocol.Projection{Attributes: []string{"userName"}}.Apply(&core.User{UserName: "bjensen", Password: "secret"}, schemas)
+		projection, err := protocol.ParseProjection(url.Values{"attributes": {"userName"}}, schemas)
 		require.NoError(t, err)
+		out := marshal(t, &core.User{UserName: "bjensen", Password: "secret"}, projection)
 		assert.Equal(t, "bjensen", out["userName"])
 		assert.NotContains(t, out, "password")
 	})
@@ -128,38 +136,44 @@ func TestProjection(t *testing.T) {
 	})
 
 	t.Run("drops an extension whose value is not an object", func(t *testing.T) {
-		out, err := protocol.Projection{}.Apply(map[string]any{string(core.SchemaEnterpriseUser): "oops"}, schemas)
+		projection, err := protocol.ParseProjection(url.Values{}, schemas)
 		require.NoError(t, err)
-		assert.Empty(t, out)
-	})
-
-	t.Run("returns nothing without schemas", func(t *testing.T) {
-		out, err := protocol.Projection{}.Apply(resource, nil)
-		require.NoError(t, err)
+		out := marshal(t, map[string]any{string(core.SchemaEnterpriseUser): "oops"}, projection)
 		assert.Empty(t, out)
 	})
 
 	t.Run("reports a resource that cannot be encoded", func(t *testing.T) {
-		_, err := protocol.Projection{}.Apply(map[string]any{"id": make(chan int)}, schemas)
+		projection, err := protocol.ParseProjection(url.Values{}, schemas)
+		require.NoError(t, err)
+		_, err = json.Marshal(projection.Of(map[string]any{"id": make(chan int)}))
 		require.ErrorIs(t, err, scimerrors.ErrInternal(""))
 	})
 
 	// RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.
 	t.Run("rejects both parameters together", func(t *testing.T) {
-		_, err := protocol.ParseProjection(url.Values{"attributes": {"userName"}, "excludedAttributes": {"emails"}})
+		_, err := protocol.ParseProjection(url.Values{"attributes": {"userName"}, "excludedAttributes": {"emails"}}, schemas)
 		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 	})
 
 	t.Run("rejects an attribute name that is not valid attribute notation", func(t *testing.T) {
-		_, err := protocol.Projection{Attributes: []string{"1bad"}}.Apply(resource, schemas)
+		_, err := protocol.ParseProjection(url.Values{"attributes": {"1bad"}}, schemas)
 		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 
-		_, err = protocol.Projection{ExcludedAttributes: []string{"1bad"}}.Apply(resource, schemas)
-		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
-
-		_, err = protocol.ParseProjection(url.Values{"excludedAttributes": {"1bad"}})
+		_, err = protocol.ParseProjection(url.Values{"excludedAttributes": {"1bad"}}, schemas)
 		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 	})
+}
+
+func TestProjectionAll(t *testing.T) {
+	schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString))}
+	projection, err := protocol.ParseProjection(url.Values{"attributes": {"userName"}}, schemas)
+	require.NoError(t, err)
+
+	resources := []map[string]any{{"userName": "alice", "id": "1"}, {"userName": "bob", "id": "2"}}
+	raw, err := json.Marshal(projection.All(resources))
+
+	require.NoError(t, err)
+	assert.JSONEq(t, `[{"userName": "alice", "id": "1"}, {"userName": "bob", "id": "2"}]`, string(raw))
 }
 
 func keys(m map[string]any) []string {

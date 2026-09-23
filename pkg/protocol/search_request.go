@@ -36,6 +36,7 @@ func (s *SearchRequest) Descending() bool {
 	return s.SortOrder == SortDescending
 }
 
-func (s *SearchRequest) Projection() Projection {
-	return Projection{Attributes: s.Attributes, ExcludedAttributes: s.ExcludedAttributes}
+func (s *SearchRequest) Projection(schemas []*core.Schema) Projection {
+	projection, _ := newProjection(schemas, s.Attributes, s.ExcludedAttributes)
+	return projection
 }

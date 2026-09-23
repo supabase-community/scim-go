@@ -19,15 +19,13 @@ type Controller[T Entity] interface {
 }
 
 type controller[T Entity] struct {
-	path    string
 	schemas []*core.Schema
 	service Service[T]
 	limits  protocol.Limits
 }
 
-func NewController[T Entity](service Service[T], schemas []*core.Schema, path string, limits protocol.Limits) Controller[T] {
+func NewController[T Entity](service Service[T], schemas []*core.Schema, limits protocol.Limits) Controller[T] {
 	return &controller[T]{
-		path:    path,
 		schemas: schemas,
 		service: service,
 		limits:  limits,
@@ -43,17 +41,12 @@ func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	resources := make([]map[string]any, len(items))
-	for i, item := range items {
-		if resources[i], err = query.Projection().Apply(item, c.schemas); err != nil {
-			return protocol.SendError(w, err)
-		}
-	}
+	resources := query.Projection(c.schemas).All(items)
 	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(query.StartIndex, total, resources))
 }
 
 func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
-	projection, err := protocol.ParseProjection(r.URL.Query())
+	projection, err := protocol.ParseProjection(r.URL.Query(), c.schemas)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -66,7 +59,7 @@ func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
-	projection, err := protocol.ParseProjection(r.URL.Query())
+	projection, err := protocol.ParseProjection(r.URL.Query(), c.schemas)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -84,7 +77,7 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
-	projection, err := protocol.ParseProjection(r.URL.Query())
+	projection, err := protocol.ParseProjection(r.URL.Query(), c.schemas)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -106,7 +99,7 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
-	projection, err := protocol.ParseProjection(r.URL.Query())
+	projection, err := protocol.ParseProjection(r.URL.Query(), c.schemas)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -141,9 +134,5 @@ func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *controller[T]) send(w http.ResponseWriter, status int, resource T, projection protocol.Projection) error {
-	body, err := projection.Apply(resource, c.schemas)
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
-	return protocol.Send(w, status, body)
+	return protocol.Send(w, status, projection.Of(resource))
 }
