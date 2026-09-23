@@ -15,18 +15,35 @@ type Server struct {
 	resourceTypes []*core.ResourceType
 	schemas       []*core.Schema
 	config        *core.ServiceProviderConfig
+	limits        protocol.Limits
 	errorHandler  func(error)
 }
 
-func New(basePath string) *Server {
+type Option func(*Server)
+
+// Limits sets the pagination bounds of every resource type, per RFC 7644, Section 3.4.2.4.
+func Limits(limits protocol.Limits) Option {
+	return func(s *Server) { s.limits = limits }
+}
+
+// ErrorHandler receives the errors the server could not send to a client.
+func ErrorHandler(fn func(error)) Option {
+	return func(s *Server) { s.errorHandler = fn }
+}
+
+func New(basePath string, options ...Option) *Server {
 	mux := http.NewServeMux()
 	s := &Server{
 		mux:          mux,
 		handler:      mux,
 		basePath:     basePath,
-		config:       core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning(),
+		limits:       protocol.DefaultLimits,
 		errorHandler: func(error) {},
 	}
+	for _, option := range options {
+		option(s)
+	}
+	s.config = core.NewServiceProviderConfig().Sorting().Filtering(s.limits.MaxCount).Patching().Versioning()
 
 	mux.HandleFunc("GET "+basePath+"/ServiceProviderConfig", s.handle(s.serviceProviderConfig))
 	mux.HandleFunc("GET "+basePath+"/ResourceTypes", s.handle(s.listResourceTypes))
@@ -40,12 +57,7 @@ func New(basePath string) *Server {
 func (s *Server) WithResource(resource Registration) *Server {
 	s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
 	s.schemas = append(s.schemas, resource.schemas(s.basePath)...)
-	resource.mount(s.mux, s.basePath)
-	return s
-}
-
-func (s *Server) WithErrorHandler(fn func(error)) *Server {
-	s.errorHandler = fn
+	resource.mount(s)
 	return s
 }
 

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
@@ -24,16 +25,13 @@ func main() {
 	}
 
 	users := server.NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields()).
-		WithDescription("User Account").
-		WithErrorHandler(errorHandler)
+		WithDescription("User Account")
 	groups := server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields()).
-		WithDescription("Group").
-		WithErrorHandler(errorHandler)
+		WithDescription("Group")
 
-	srv := server.New(basePath).
+	srv := server.New(basePath, server.Limits(protocol.DefaultLimits), server.ErrorHandler(errorHandler)).
 		WithResource(users.WithRepository(server.NewMemoryRepository(users))).
 		WithResource(groups.WithRepository(server.NewMemoryRepository(groups))).
-		WithErrorHandler(errorHandler).
 		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {

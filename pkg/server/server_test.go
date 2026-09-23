@@ -3,8 +3,10 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strconv"
@@ -2005,3 +2007,40 @@ func TestResourceWithoutRepository(t *testing.T) {
 		server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields()))
 	})
 }
+
+func TestServerOptions(t *testing.T) {
+	users := server.NewResource("User", "/Users", core.SchemaUser, userFields())
+	var reported []error
+	srv := server.New(basePath,
+		server.Limits(protocol.Limits{DefaultCount: 1, MaxCount: 2}),
+		server.ErrorHandler(func(err error) { reported = append(reported, err) }),
+	).WithResource(users.WithRepository(server.NewMemoryRepository(users)))
+	ts := Server(t, srv)
+	create(t, ts, &core.User{UserName: "alice"})
+	create(t, ts, &core.User{UserName: "bob"})
+	create(t, ts, &core.User{UserName: "carol"})
+
+	t.Run("pages with the default count", func(t *testing.T) {
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, ts, Request(t, ts, http.MethodGet, basePath+"/Users")))
+		assert.Equal(t, 1, list.ItemsPerPage)
+	})
+
+	t.Run("caps the count at the maximum", func(t *testing.T) {
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, ts, Request(t, ts, http.MethodGet, basePath+"/Users?count=50")))
+		assert.Equal(t, 2, list.ItemsPerPage)
+	})
+
+	t.Run("advertises the maximum", func(t *testing.T) {
+		config := ReadBodyAs[core.ServiceProviderConfig](t, Response(t, ts, Request(t, ts, http.MethodGet, basePath+"/ServiceProviderConfig")))
+		assert.Equal(t, 2, config.Filter.MaxResults)
+	})
+
+	t.Run("reports resource errors to the server error handler", func(t *testing.T) {
+		srv.ServeHTTP(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, basePath+"/Users/unknown", nil))
+		assert.Len(t, reported, 1)
+	})
+}
+
+type failingWriter struct{ *httptest.ResponseRecorder }
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }

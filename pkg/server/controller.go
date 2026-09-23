@@ -29,12 +29,12 @@ type controller[T Entity] struct {
 	limits  protocol.Limits
 }
 
-func NewController[T Entity](service Service[T], schemas []*core.Schema, path string) Controller[T] {
+func NewController[T Entity](service Service[T], schemas []*core.Schema, path string, limits protocol.Limits) Controller[T] {
 	return &controller[T]{
 		path:    path,
 		schemas: schemas,
 		service: service,
-		limits:  protocol.DefaultLimits,
+		limits:  limits,
 	}
 }
 
