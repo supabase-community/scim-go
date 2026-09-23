@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 )
@@ -70,5 +71,19 @@ func TestUser(t *testing.T) {
 		require.NoError(t, err)
 		require.NotContains(t, string(body), "password")
 		require.NotContains(t, string(body), "t1meMa$heen")
+	})
+}
+
+func TestElement(t *testing.T) {
+	t.Run("is the element type of every standard multi-valued attribute", func(t *testing.T) {
+		element := core.Element{Value: "x", Primary: new(true)}
+		assert.Equal(t, element, core.Email(element))
+		assert.Equal(t, element, core.PhoneNumber(element))
+		assert.Equal(t, element, core.Role(element))
+	})
+
+	t.Run("an address marks primary the same way as an element", func(t *testing.T) {
+		address := core.Address{Primary: new(true)}
+		assert.True(t, *address.Primary)
 	})
 }

@@ -26,6 +26,17 @@ func NewAttribute(name string, attributeType AttributeType) *Attribute {
 	}
 }
 
+// NewMultiValuedAttribute describes a multi-valued attribute of Element, per RFC 7643, Section 2.4.
+func NewMultiValuedAttribute(name string, types ...string) *Attribute {
+	return NewAttribute(name, TypeComplex).AsMultiValued().With(
+		NewAttribute("value", TypeString),
+		NewAttribute("display", TypeString),
+		NewAttribute("type", TypeString).Suggesting(types...),
+		NewAttribute("primary", TypeBoolean),
+		NewAttribute("$ref", TypeReference),
+	)
+}
+
 func (a *Attribute) AsRequired() *Attribute {
 	a.Required = true
 	return a

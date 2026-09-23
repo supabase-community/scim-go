@@ -2,8 +2,8 @@ package core
 
 import "encoding/json"
 
-// A multi-valued attribute with the default sub-attributes of RFC 7643, Section 2.4.
-type MultiValuedAttribute struct {
+// Element is one element of a multi-valued attribute, per RFC 7643, Section 2.4.
+type Element struct {
 	Value   string `json:"value,omitempty"`
 	Display string `json:"display,omitempty"`
 	Type    string `json:"type,omitempty"`
@@ -12,13 +12,13 @@ type MultiValuedAttribute struct {
 }
 
 type (
-	Email           = MultiValuedAttribute
-	PhoneNumber     = MultiValuedAttribute
-	IM              = MultiValuedAttribute
-	Photo           = MultiValuedAttribute
-	Entitlement     = MultiValuedAttribute
-	Role            = MultiValuedAttribute
-	X509Certificate = MultiValuedAttribute
+	Email           = Element
+	PhoneNumber     = Element
+	IM              = Element
+	Photo           = Element
+	Entitlement     = Element
+	Role            = Element
+	X509Certificate = Element
 )
 
 // GroupMembership is a group the user belongs to, per RFC 7643, Section 4.1.2. It is readOnly.
@@ -38,7 +38,7 @@ type Address struct {
 	PostalCode    string `json:"postalCode,omitempty"`
 	Country       string `json:"country,omitempty"`
 	Type          string `json:"type,omitempty"`
-	Primary       bool   `json:"primary,omitempty"`
+	Primary       *bool  `json:"primary,omitempty"`
 }
 
 // Name holds the components of the user's name, per RFC 7643, Section 4.1.1.

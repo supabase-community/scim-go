@@ -28,16 +28,15 @@ type repository[T Entity] struct {
 	schema    *core.Schema
 	items     []T
 	accessors Accessors[T]
-	evaluator protocol.Evaluator[specification[T]]
+	evaluator protocol.Evaluator[predicate]
 }
 
-func NewRepository[T Entity](schema *core.Schema, accessors Accessors[T]) Repository[T] {
-	merged := withCommonAccessors(accessors)
+func NewRepository[T Entity](schema *core.Schema, fields Fields[T]) Repository[T] {
 	return &repository[T]{
 		schema:    schema,
 		items:     []T{},
-		accessors: merged,
-		evaluator: NewVisitor[T](merged),
+		accessors: withCommonAccessors(fields.Accessors()),
+		evaluator: NewVisitor(fields),
 	}
 }
 

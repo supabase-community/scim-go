@@ -11,13 +11,14 @@ import (
 )
 
 func TestAttribute(t *testing.T) {
-	schemaAttribute := core.NewAttribute("userName", core.TypeString).AsCaseExact()
-	attrPath, err := filter.NewAttrPath("userName")
-
+	emails := core.NewMultiValuedAttribute("emails")
+	definition := emails.SubAttribute("type")
+	path, err := filter.NewAttrPath("type")
 	require.NoError(t, err)
-	attribute := protocol.NewAttribute(schemaAttribute, attrPath)
 
-	assert.Equal(t, "username", attribute.Key())
-	assert.Equal(t, core.TypeString, attribute.Type)
-	assert.True(t, attribute.CaseExact)
+	attribute := protocol.NewAttribute(definition, path, emails)
+
+	assert.Same(t, definition, attribute.Definition)
+	assert.Equal(t, "type", attribute.Path.Key())
+	assert.Same(t, emails, attribute.Parent)
 }

@@ -6,13 +6,15 @@ import (
 )
 
 type Attribute struct {
-	*core.Attribute
-	filter.AttrPath
+	Definition *core.Attribute
+	Path       filter.AttrPath
+	Parent     *core.Attribute
 }
 
-func NewAttribute(attr *core.Attribute, path filter.AttrPath) *Attribute {
+func NewAttribute(definition *core.Attribute, path filter.AttrPath, parent *core.Attribute) *Attribute {
 	return &Attribute{
-		Attribute: attr,
-		AttrPath:  path,
+		Definition: definition,
+		Path:       path,
+		Parent:     parent,
 	}
 }

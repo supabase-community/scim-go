@@ -203,7 +203,7 @@ func fullUser() *core.User {
 				PostalCode:    "91608",
 				Country:       "USA",
 				Formatted:     "100 Universal City Plaza\nHollywood, CA 91608 USA",
-				Primary:       true,
+				Primary:       new(true),
 			},
 			{
 				Type:          "home",

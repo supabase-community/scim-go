@@ -66,6 +66,22 @@ func TestFilter(t *testing.T) {
 		assert.Equal(t, []any{"work", "bob"}, out.args)
 	})
 
+	t.Run("sets Parent on attributes inside a value path", func(t *testing.T) {
+		for _, text := range []string{`emails[type eq "work"]`, `emails[type pr]`} {
+			recorder := &parentRecorder{}
+			_, err := protocol.Filter[clause](schemas, text, recorder)
+			require.NoError(t, err, text)
+			assert.Equal(t, []*core.Attribute{schema.Attributes.Lookup("emails")}, recorder.parents, text)
+		}
+	})
+
+	t.Run("leaves Parent nil for dot notation", func(t *testing.T) {
+		recorder := &parentRecorder{}
+		_, err := protocol.Filter[clause](schemas, `emails.type eq "work" and userName pr`, recorder)
+		require.NoError(t, err)
+		assert.Equal(t, []*core.Attribute{nil, nil}, recorder.parents)
+	})
+
 	t.Run("resolves an extension attribute by schema URI", func(t *testing.T) {
 		enterprise := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
 			core.NewAttribute("department", core.TypeString),
@@ -222,7 +238,7 @@ type clause struct {
 type sqlEvaluator struct{}
 
 func (sqlEvaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (clause, error) {
-	key := attribute.Key()
+	key := attribute.Path.Key()
 	switch op {
 	case filter.OpContains:
 		return clause{sql: key + " LIKE ?", args: []any{"%" + value.(string) + "%"}}, nil
@@ -239,7 +255,7 @@ func (sqlEvaluator) Compare(attribute *protocol.Attribute, op filter.Operator, v
 }
 
 func (sqlEvaluator) Present(attribute *protocol.Attribute) (clause, error) {
-	return clause{sql: attribute.Key() + " IS NOT NULL"}, nil
+	return clause{sql: attribute.Path.Key() + " IS NOT NULL"}, nil
 }
 
 func (sqlEvaluator) And(left, right clause) (clause, error) {
@@ -259,9 +275,24 @@ func (sqlEvaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() 
 	if err != nil {
 		return clause{}, err
 	}
-	return clause{sql: "EXISTS(" + attribute.Key() + ": " + inner.sql + ")", args: inner.args}, nil
+	return clause{sql: "EXISTS(" + attribute.Path.Key() + ": " + inner.sql + ")", args: inner.args}, nil
 }
 
 func concat(a, b []any) []any {
 	return append(append([]any{}, a...), b...)
+}
+
+type parentRecorder struct {
+	sqlEvaluator
+	parents []*core.Attribute
+}
+
+func (r *parentRecorder) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (clause, error) {
+	r.parents = append(r.parents, attribute.Parent)
+	return r.sqlEvaluator.Compare(attribute, op, value)
+}
+
+func (r *parentRecorder) Present(attribute *protocol.Attribute) (clause, error) {
+	r.parents = append(r.parents, attribute.Parent)
+	return r.sqlEvaluator.Present(attribute)
 }

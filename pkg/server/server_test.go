@@ -655,6 +655,29 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "bob", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 3.4.2.2 - dot notation matches any element; brackets match the same element.
+	t.Run("dot notation matches conditions on different elements but a value path does not", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{
+			{Value: "a@work.com", Type: "work", Primary: new(false)},
+			{Value: "a@home.com", Type: "home", Primary: new(true)},
+		}})
+
+		cases := map[string]int{
+			`emails.type eq "work" and emails.primary eq true`: 1,
+			`emails[type eq "work" and primary eq true]`:       0,
+		}
+		for filter, want := range cases {
+			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode, "filter: %s", filter)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			assert.Equal(t, want, list.TotalResults, "filter: %s", filter)
+		}
+	})
+
 	t.Run("filters an integer attribute with the ordering operators", func(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "low", Score: 5})
@@ -938,7 +961,7 @@ func TestRFC7644Sorting(t *testing.T) {
 	})
 
 	t.Run("sorts by the primary value of a multi-valued attribute", func(t *testing.T) {
-		t.Skip("sortBy on a multi-valued attribute (e.g. emails.value) is rejected as unsupported; primary-or-first selection needs a per-element accessor redesign in pkg/server (see the ValuePath stub in visitor.go)")
+		t.Skip("sortBy on a multi-valued attribute (e.g. emails.value) is rejected as unsupported; primary-or-first selection is not implemented yet; Fields.Elements() provides the per-element access it needs")
 	})
 }
 

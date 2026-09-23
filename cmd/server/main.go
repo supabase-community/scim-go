@@ -90,29 +90,7 @@ func newUserFields() server.Fields[*core.User] {
 				return *u.Active
 			},
 		),
-		server.NewField[*core.User](core.NewAttribute("emails", core.TypeComplex).AsMultiValued(), nil).With(
-			server.NewField(core.NewAttribute("value", core.TypeString), func(u *core.User) any {
-				values := make([]any, len(u.Emails))
-				for i, e := range u.Emails {
-					values[i] = e.Value
-				}
-				return values
-			}),
-			server.NewField(core.NewAttribute("type", core.TypeString).Suggesting("work", "home", "other"), func(u *core.User) any {
-				values := make([]any, len(u.Emails))
-				for i, e := range u.Emails {
-					values[i] = e.Type
-				}
-				return values
-			}),
-			server.NewField(core.NewAttribute("primary", core.TypeBoolean), func(u *core.User) any {
-				values := make([]any, len(u.Emails))
-				for i, e := range u.Emails {
-					values[i] = e.Primary != nil && *e.Primary
-				}
-				return values
-			}),
-		),
+		server.NewMultiValued("emails", func(u *core.User) []core.Email { return u.Emails }, "work", "home", "other"),
 	)
 }
 

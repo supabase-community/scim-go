@@ -8,5 +8,6 @@ type Evaluator[Output any] interface {
 	And(left, right Output) (Output, error)
 	Or(left, right Output) (Output, error)
 	Not(operand Output) (Output, error)
+	// RFC 7644 3.4.2.2 - valueFilter matches one element; attributes inside it carry Parent.
 	ValuePath(attribute *Attribute, valueFilter func() (Output, error)) (Output, error)
 }

@@ -6,59 +6,85 @@ import (
 	"strings"
 	"time"
 
+	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-type specification[T Entity] func(T) bool
+type predicate func(row any) bool
 
 type evaluator[T Entity] struct {
-	accessors Accessors[T]
+	accessors        Accessors[T]
+	elementAccessors map[*core.Attribute]func(any) any
+	elements         map[*core.Attribute]func(T) []any
 }
 
-func NewVisitor[T Entity](accessors Accessors[T]) protocol.Evaluator[specification[T]] {
+func NewVisitor[T Entity](fields Fields[T]) protocol.Evaluator[predicate] {
 	return &evaluator[T]{
-		accessors: accessors,
+		accessors:        withCommonAccessors(fields.Accessors()),
+		elementAccessors: fields.ElementAccessors(),
+		elements:         fields.Elements(),
 	}
 }
 
-func (e *evaluator[T]) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (specification[T], error) {
-	accessor, ok := e.accessors[attribute.Attribute]
-	if !ok {
-		return nil, scimerrors.ErrInvalidFilter(attribute.Key() + " is not filterable")
+func (e *evaluator[T]) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (predicate, error) {
+	read, err := e.reader(attribute)
+	if err != nil {
+		return nil, err
 	}
-	return func(item T) bool {
-		return anyMatch(accessor(item), func(raw any) bool {
-			return compareValue(op, raw, value, attribute.CaseExact)
+	return func(row any) bool {
+		return anyMatch(read(row), func(raw any) bool {
+			return compareValue(op, raw, value, attribute.Definition.CaseExact)
 		})
 	}, nil
 }
 
-func (e *evaluator[T]) Present(attribute *protocol.Attribute) (specification[T], error) {
-	accessor, ok := e.accessors[attribute.Attribute]
-	if !ok {
-		return nil, scimerrors.ErrInvalidFilter(attribute.Key() + " is not filterable")
+func (e *evaluator[T]) Present(attribute *protocol.Attribute) (predicate, error) {
+	read, err := e.reader(attribute)
+	if err != nil {
+		return nil, err
 	}
-	return func(item T) bool {
-		return anyMatch(accessor(item), hasValue)
+	return func(row any) bool {
+		return anyMatch(read(row), hasValue)
 	}, nil
 }
 
-func (e *evaluator[T]) And(left, right specification[T]) (specification[T], error) {
-	return func(item T) bool { return left(item) && right(item) }, nil
+func (e *evaluator[T]) And(left, right predicate) (predicate, error) {
+	return func(row any) bool { return left(row) && right(row) }, nil
 }
 
-func (e *evaluator[T]) Or(left, right specification[T]) (specification[T], error) {
-	return func(item T) bool { return left(item) || right(item) }, nil
+func (e *evaluator[T]) Or(left, right predicate) (predicate, error) {
+	return func(row any) bool { return left(row) || right(row) }, nil
 }
 
-func (e *evaluator[T]) Not(operand specification[T]) (specification[T], error) {
-	return func(item T) bool { return !operand(item) }, nil
+func (e *evaluator[T]) Not(operand predicate) (predicate, error) {
+	return func(row any) bool { return !operand(row) }, nil
 }
 
-func (e *evaluator[T]) ValuePath(attribute *protocol.Attribute, valueFilter func() (specification[T], error)) (specification[T], error) {
-	return nil, scimerrors.ErrInvalidFilter(attribute.Key() + " does not support value filters yet")
+func (e *evaluator[T]) ValuePath(attribute *protocol.Attribute, valueFilter func() (predicate, error)) (predicate, error) {
+	elements, ok := e.elements[attribute.Definition]
+	if !ok {
+		return nil, scimerrors.ErrInvalidFilter(attribute.Path.Key() + " is not filterable")
+	}
+	inner, err := valueFilter()
+	if err != nil {
+		return nil, err
+	}
+	return func(row any) bool {
+		return slices.ContainsFunc(elements(row.(T)), inner)
+	}, nil
+}
+
+func (e *evaluator[T]) reader(attribute *protocol.Attribute) (func(row any) any, error) {
+	if attribute.Parent != nil {
+		if read, ok := e.elementAccessors[attribute.Definition]; ok {
+			return read, nil
+		}
+	} else if accessor, ok := e.accessors[attribute.Definition]; ok {
+		return func(row any) any { return accessor(row.(T)) }, nil
+	}
+	return nil, scimerrors.ErrInvalidFilter(attribute.Path.Key() + " is not filterable")
 }
 
 // RFC 7644 3.4.2.2 - a multi-valued attribute matches if any value does, for every operator including ne.

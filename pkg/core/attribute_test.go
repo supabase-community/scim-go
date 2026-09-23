@@ -307,3 +307,37 @@ func TestAttributeCoerce(t *testing.T) {
 		require.False(t, ok)
 	})
 }
+
+func TestNewMultiValuedAttribute(t *testing.T) {
+	attribute := core.NewMultiValuedAttribute("emails", "work", "home")
+
+	t.Run("is a multi-valued complex attribute", func(t *testing.T) {
+		assert.Equal(t, "emails", attribute.Name)
+		assert.Equal(t, core.TypeComplex, attribute.Type)
+		assert.True(t, attribute.MultiValued)
+	})
+
+	t.Run("has the RFC 7643 2.4 sub-attributes", func(t *testing.T) {
+		expected := map[string]core.AttributeType{
+			"value":   core.TypeString,
+			"display": core.TypeString,
+			"type":    core.TypeString,
+			"primary": core.TypeBoolean,
+			"$ref":    core.TypeReference,
+		}
+		require.Len(t, attribute.SubAttributes, len(expected))
+		for name, kind := range expected {
+			sub := attribute.SubAttribute(name)
+			require.NotNil(t, sub, name)
+			assert.Equal(t, kind, sub.Type, name)
+		}
+	})
+
+	t.Run("suggests the given types", func(t *testing.T) {
+		assert.Equal(t, []string{"work", "home"}, attribute.SubAttribute("type").CanonicalValues)
+	})
+
+	t.Run("suggests no types by default", func(t *testing.T) {
+		assert.Empty(t, core.NewMultiValuedAttribute("roles").SubAttribute("type").CanonicalValues)
+	})
+}
