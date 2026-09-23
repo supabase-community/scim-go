@@ -134,6 +134,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	patched.SetMeta(core.Meta{Version: c.ifMatch(r)})
 	replaced, err := c.service.Replace(r.Context(), patched)
 	if err != nil {
 		return protocol.SendError(w, err)

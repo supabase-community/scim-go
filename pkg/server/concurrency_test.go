@@ -47,7 +47,7 @@ func TestConcurrentRequests(t *testing.T) {
 					Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
 				}),
 			)
-			assert.Contains(t, []int{http.StatusOK, http.StatusPreconditionFailed}, Response(t, srv, request).StatusCode)
+			assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
 		})
 	}
 	wg.Wait()
