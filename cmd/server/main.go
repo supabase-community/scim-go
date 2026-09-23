@@ -23,21 +23,19 @@ func main() {
 		log.Fatal("SCIM_BEARER_TOKEN must be set")
 	}
 
-	srv := server.New(basePath, server.ErrorHandler(errorHandler)).
-		WithResource(server.
-			NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields()).
-			WithDescription("User Account")).
-		WithResource(server.
-			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields()).
-			WithDescription("Group")).
-		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+	srv := server.New(basePath,
+		server.ErrorHandler(errorHandler),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields())),
+		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields())),
+		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {
 					return ctx, fmt.Errorf("invalid token")
 				}
 				return ctx, nil
 			},
-		))
+		)),
+	)
 
 	addr := ":8080"
 	if port := os.Getenv("PORT"); port != "" {

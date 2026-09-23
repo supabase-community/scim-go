@@ -41,7 +41,18 @@ func ServiceProviderConfig(fn func(*core.ServiceProviderConfig)) Option[*Server]
 
 func WithResource(resource Registration) Option[*Server] {
 	return func(s *Server) {
-		s.WithResource(resource)
+		schemas := resource.schemas(s.basePath)
+		s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
+		s.schemas = append(s.schemas, schemas...)
+		resource.mount(s, schemas)
+	}
+}
+
+// WithAuthentication advertises and enforces scheme, per RFC 7643, Section 5.
+func WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.Handler) http.Handler) Option[*Server] {
+	return func(s *Server) {
+		s.config.Authentication(scheme)
+		s.handler = middleware(s.handler)
 	}
 }
 
@@ -65,21 +76,6 @@ func New(basePath string, options ...Option[*Server]) *Server {
 	mux.HandleFunc("GET "+basePath+"/Schemas", s.handle(s.listSchemas))
 	mux.HandleFunc("GET "+basePath+"/Schemas/{id}", s.handle(s.schemaByID))
 
-	return s
-}
-
-func (s *Server) WithResource(resource Registration) *Server {
-	schemas := resource.schemas(s.basePath)
-	s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
-	s.schemas = append(s.schemas, schemas...)
-	resource.mount(s, schemas)
-	return s
-}
-
-// WithAuthentication advertises and enforces scheme, per RFC 7643, Section 5.
-func (s *Server) WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.Handler) http.Handler) *Server {
-	s.config.Authentication(scheme)
-	s.handler = middleware(s.handler)
 	return s
 }
 

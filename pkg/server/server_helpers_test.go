@@ -136,18 +136,20 @@ func newTestServer(t *testing.T, options ...server.Option[*server.Server]) *http
 	t.Helper()
 
 	options = append([]server.Option[*server.Server]{server.ErrorHandler(func(err error) { t.Errorf("%v\n", err) })}, options...)
-	srv := server.New(basePath, options...).
-		WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account").WithExtension(core.SchemaEnterpriseUser, enterpriseFields())).
-		WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())).
-		WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields())).
-		WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+	options = append(options,
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithExtension(core.SchemaEnterpriseUser, enterpriseFields())),
+		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())),
+		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields())),
+		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if candidate != validToken {
 					return ctx, errors.New("invalid token")
 				}
 				return ctx, nil
 			},
-		))
+		)),
+	)
+	srv := server.New(basePath, options...)
 
 	return Server(t, srv)
 }

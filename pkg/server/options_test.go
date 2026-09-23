@@ -18,8 +18,10 @@ func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("broken p
 
 func TestErrorHandlerOption(t *testing.T) {
 	var reported []error
-	srv := server.New(basePath, server.ErrorHandler(func(err error) { reported = append(reported, err) })).
-		WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields()))
+	srv := server.New(basePath,
+		server.ErrorHandler(func(err error) { reported = append(reported, err) }),
+		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields())),
+	)
 
 	srv.ServeHTTP(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, basePath+"/Users/unknown", nil))
 
@@ -32,9 +34,9 @@ func TestWithRepository(t *testing.T) {
 	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
 	require.NoError(t, err)
 
-	srv := Server(t, server.New(basePath).WithResource(
+	srv := Server(t, server.New(basePath, server.WithResource(
 		server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository),
-	))
+	)))
 
 	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+existing.ID))
 
