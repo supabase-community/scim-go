@@ -1,7 +1,6 @@
 package server_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -172,6 +171,20 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "a"})
 		createWidget(t, srv, &widget{Name: "b"})
+	})
+
+	t.Run("rejects a JSON null body instead of panicking", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`null`)),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
 	t.Run("a case-exact unique attribute treats different casing as distinct", func(t *testing.T) {

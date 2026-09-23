@@ -2,7 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
+	"reflect"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -59,8 +62,8 @@ func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
-	var resource T
-	if err := json.NewDecoder(r.Body).Decode(&resource); err != nil {
+	resource, err := c.decode[T](r.Body)
+	if err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
 	}
 	created, err := c.service.Create(r.Context(), resource)
@@ -74,8 +77,8 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
-	var resource T
-	if err := json.NewDecoder(r.Body).Decode(&resource); err != nil {
+	resource, err := c.decode[T](r.Body)
+	if err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
 	}
 	resource.SetID(r.PathValue("id"))
@@ -98,8 +101,8 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if match := r.Header.Get("If-Match"); match != "" && resource.GetMeta().Version != match {
 		return protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
 	}
-	var req protocol.PatchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	req, err := c.decode[protocol.PatchRequest](r.Body)
+	if err != nil {
 		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
 	}
 	if err := req.Apply(resource, []*core.Schema{c.schema}); err != nil {
@@ -126,4 +129,15 @@ func (c *controller[T]) withLocation(item T) T {
 	meta.Location = c.path + "/" + item.ResourceID()
 	item.SetMeta(meta)
 	return item
+}
+
+func (c *controller[T]) decode[K any](r io.Reader) (K, error) {
+	var item K
+	if err := json.NewDecoder(r).Decode(&item); err != nil {
+		return item, err
+	}
+	if v := reflect.ValueOf(item); v.Kind() == reflect.Pointer && v.IsNil() {
+		return item, errors.New("body is null")
+	}
+	return item, nil
 }
