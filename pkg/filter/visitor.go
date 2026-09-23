@@ -5,25 +5,25 @@ import (
 	"strings"
 )
 
-type Visitor[T any] interface {
-	VisitAnd(left, right T) (T, error)
-	VisitOr(left, right T) (T, error)
-	VisitNot(operand T) (T, error)
-	VisitEquals(attribute AttrPath, value any) (T, error)
-	VisitNotEquals(attribute AttrPath, value any) (T, error)
-	VisitContains(attribute AttrPath, value any) (T, error)
-	VisitStartsWith(attribute AttrPath, value any) (T, error)
-	VisitEndsWith(attribute AttrPath, value any) (T, error)
-	VisitGreaterThan(attribute AttrPath, value any) (T, error)
-	VisitGreaterThanEquals(attribute AttrPath, value any) (T, error)
-	VisitLessThan(attribute AttrPath, value any) (T, error)
-	VisitLessThanEquals(attribute AttrPath, value any) (T, error)
-	VisitPresence(attribute AttrPath) (T, error)
-	VisitValuePath(path AttrPath, subAttribute string, valueFilter func() (T, error)) (T, error)
+type Visitor[Output any] interface {
+	VisitAnd(left, right Output) (Output, error)
+	VisitOr(left, right Output) (Output, error)
+	VisitNot(operand Output) (Output, error)
+	VisitEquals(attribute AttrPath, value any) (Output, error)
+	VisitNotEquals(attribute AttrPath, value any) (Output, error)
+	VisitContains(attribute AttrPath, value any) (Output, error)
+	VisitStartsWith(attribute AttrPath, value any) (Output, error)
+	VisitEndsWith(attribute AttrPath, value any) (Output, error)
+	VisitGreaterThan(attribute AttrPath, value any) (Output, error)
+	VisitGreaterThanEquals(attribute AttrPath, value any) (Output, error)
+	VisitLessThan(attribute AttrPath, value any) (Output, error)
+	VisitLessThanEquals(attribute AttrPath, value any) (Output, error)
+	VisitPresence(attribute AttrPath) (Output, error)
+	VisitValuePath(path AttrPath, subAttribute string, valueFilter func() (Output, error)) (Output, error)
 }
 
-func Visit[T any](v Visitor[T], n *Node) (T, error) {
-	var zero T
+func Visit[Output any](v Visitor[Output], n *Node) (Output, error) {
+	var zero Output
 	if n == nil {
 		return zero, fmt.Errorf("scim: cannot visit a nil node")
 	}
@@ -37,11 +37,11 @@ func Visit[T any](v Visitor[T], n *Node) (T, error) {
 	return dispatch(v, n)
 }
 
-func dispatch[T any](v Visitor[T], n *Node) (T, error) {
-	var zero T
+func dispatch[Output any](v Visitor[Output], n *Node) (Output, error) {
+	var zero Output
 
 	if n.HasPath() {
-		return v.VisitValuePath(n.AttrPath(), n.SubAttribute(), func() (T, error) {
+		return v.VisitValuePath(n.AttrPath(), n.SubAttribute(), func() (Output, error) {
 			return Visit(v, n.ValueFilter())
 		})
 	}
@@ -77,8 +77,8 @@ func dispatch[T any](v Visitor[T], n *Node) (T, error) {
 	}
 }
 
-func visitBinary[T any](v Visitor[T], n *Node, combine func(left, right T) (T, error)) (T, error) {
-	var zero T
+func visitBinary[Output any](v Visitor[Output], n *Node, combine func(left, right Output) (Output, error)) (Output, error) {
+	var zero Output
 	left, err := Visit(v, n.Left())
 	if err != nil {
 		return zero, err

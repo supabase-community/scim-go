@@ -6,11 +6,11 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-func Filter[T any](schemas []*core.Schema, text string, v Evaluator[T]) (T, error) {
-	var zero T
+func Filter[Output any](schemas []*core.Schema, text string, v Evaluator[Output]) (Output, error) {
+	var zero Output
 	node, err := filter.Parse(text)
 	if err != nil {
 		return zero, scimerrors.ErrInvalidFilter(err.Error())
 	}
-	return filter.Visit[T](&visitor[T]{schemas: schemas, inner: v}, node)
+	return filter.Visit[Output](&visitor[Output]{schemas: schemas, inner: v}, node)
 }

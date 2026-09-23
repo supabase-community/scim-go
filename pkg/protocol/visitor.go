@@ -8,50 +8,50 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-type visitor[T any] struct {
+type visitor[Output any] struct {
 	schemas []*core.Schema
-	inner   Evaluator[T]
+	inner   Evaluator[Output]
 	scope   *core.Attribute
 }
 
-func (r *visitor[T]) VisitEquals(path filter.AttrPath, value any) (T, error) {
+func (r *visitor[Output]) VisitEquals(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpEquals, value)
 }
 
-func (r *visitor[T]) VisitNotEquals(path filter.AttrPath, value any) (T, error) {
+func (r *visitor[Output]) VisitNotEquals(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpNotEquals, value)
 }
 
-func (r *visitor[T]) VisitContains(path filter.AttrPath, value any) (T, error) {
+func (r *visitor[Output]) VisitContains(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpContains, value)
 }
 
-func (r *visitor[T]) VisitStartsWith(path filter.AttrPath, value any) (T, error) {
+func (r *visitor[Output]) VisitStartsWith(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpStartsWith, value)
 }
 
-func (r *visitor[T]) VisitEndsWith(path filter.AttrPath, value any) (T, error) {
+func (r *visitor[Output]) VisitEndsWith(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpEndsWith, value)
 }
 
-func (r *visitor[T]) VisitGreaterThan(path filter.AttrPath, value any) (T, error) {
+func (r *visitor[Output]) VisitGreaterThan(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpGreaterThan, value)
 }
 
-func (r *visitor[T]) VisitGreaterThanEquals(path filter.AttrPath, value any) (T, error) {
+func (r *visitor[Output]) VisitGreaterThanEquals(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpGreaterThanEquals, value)
 }
 
-func (r *visitor[T]) VisitLessThan(path filter.AttrPath, value any) (T, error) {
+func (r *visitor[Output]) VisitLessThan(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpLessThan, value)
 }
 
-func (r *visitor[T]) VisitLessThanEquals(path filter.AttrPath, value any) (T, error) {
+func (r *visitor[Output]) VisitLessThanEquals(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpLessThanEquals, value)
 }
 
-func (r *visitor[T]) VisitPresence(path filter.AttrPath) (T, error) {
-	var zero T
+func (r *visitor[Output]) VisitPresence(path filter.AttrPath) (Output, error) {
+	var zero Output
 	attribute, err := r.resolve(path)
 	if err != nil {
 		return zero, err
@@ -59,20 +59,20 @@ func (r *visitor[T]) VisitPresence(path filter.AttrPath) (T, error) {
 	return r.inner.Present(NewAttribute(attribute, path, r.scope))
 }
 
-func (r *visitor[T]) VisitAnd(left, right T) (T, error) {
+func (r *visitor[Output]) VisitAnd(left, right Output) (Output, error) {
 	return r.inner.And(left, right)
 }
 
-func (r *visitor[T]) VisitOr(left, right T) (T, error) {
+func (r *visitor[Output]) VisitOr(left, right Output) (Output, error) {
 	return r.inner.Or(left, right)
 }
 
-func (r *visitor[T]) VisitNot(operand T) (T, error) {
+func (r *visitor[Output]) VisitNot(operand Output) (Output, error) {
 	return r.inner.Not(operand)
 }
 
-func (r *visitor[T]) VisitValuePath(path filter.AttrPath, subAttribute string, valueFilter func() (T, error)) (T, error) {
-	var zero T
+func (r *visitor[Output]) VisitValuePath(path filter.AttrPath, subAttribute string, valueFilter func() (Output, error)) (Output, error) {
+	var zero Output
 	attribute, err := r.resolve(path)
 	if err != nil {
 		return zero, err
@@ -83,8 +83,8 @@ func (r *visitor[T]) VisitValuePath(path filter.AttrPath, subAttribute string, v
 	return r.inner.ValuePath(NewAttribute(attribute, path, nil), r.scoped(attribute, valueFilter))
 }
 
-func (r *visitor[T]) scoped(attribute *core.Attribute, valueFilter func() (T, error)) func() (T, error) {
-	return func() (T, error) {
+func (r *visitor[Output]) scoped(attribute *core.Attribute, valueFilter func() (Output, error)) func() (Output, error) {
+	return func() (Output, error) {
 		previous := r.scope
 		r.scope = attribute
 		out, err := valueFilter()
@@ -93,7 +93,7 @@ func (r *visitor[T]) scoped(attribute *core.Attribute, valueFilter func() (T, er
 	}
 }
 
-func (r *visitor[T]) resolve(path filter.AttrPath) (*core.Attribute, error) {
+func (r *visitor[Output]) resolve(path filter.AttrPath) (*core.Attribute, error) {
 	if r.scope != nil {
 		return r.resolveWithin(path)
 	}
@@ -114,7 +114,7 @@ func (r *visitor[T]) resolve(path filter.AttrPath) (*core.Attribute, error) {
 	return attribute, nil
 }
 
-func (r *visitor[T]) resolveWithin(path filter.AttrPath) (*core.Attribute, error) {
+func (r *visitor[Output]) resolveWithin(path filter.AttrPath) (*core.Attribute, error) {
 	attribute := r.scope.SubAttribute(path.Name)
 	if attribute == nil || path.SubAttribute != "" {
 		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
@@ -122,7 +122,7 @@ func (r *visitor[T]) resolveWithin(path filter.AttrPath) (*core.Attribute, error
 	return attribute, nil
 }
 
-func (r *visitor[T]) selectSchema(uri string) (*core.Schema, bool) {
+func (r *visitor[Output]) selectSchema(uri string) (*core.Schema, bool) {
 	if uri == "" {
 		if len(r.schemas) == 0 {
 			return nil, false
@@ -137,8 +137,8 @@ func (r *visitor[T]) selectSchema(uri string) (*core.Schema, bool) {
 	return nil, false
 }
 
-func (r *visitor[T]) compare(path filter.AttrPath, op filter.Operator, value any) (T, error) {
-	var zero T
+func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, value any) (Output, error) {
+	var zero Output
 	attribute, err := r.resolve(path)
 	if err != nil {
 		return zero, err
