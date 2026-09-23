@@ -3,9 +3,11 @@ package server
 import (
 	"cmp"
 	"context"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"uuid"
 
@@ -25,6 +27,8 @@ type Repository[T Entity] interface {
 }
 
 type repository[T Entity] struct {
+	mu               sync.RWMutex
+	endpoint         string
 	schema           *core.Schema
 	items            []T
 	accessors        Accessors[T]
@@ -33,8 +37,9 @@ type repository[T Entity] struct {
 	evaluator        protocol.Evaluator[predicate]
 }
 
-func NewRepository[T Entity](schema *core.Schema, fields Fields[T]) Repository[T] {
+func NewRepository[T Entity](endpoint string, schema *core.Schema, fields Fields[T]) Repository[T] {
 	return &repository[T]{
+		endpoint:         endpoint,
 		schema:           schema,
 		items:            []T{},
 		accessors:        withCommonAccessors(fields.Accessors()),
@@ -45,9 +50,11 @@ func NewRepository[T Entity](schema *core.Schema, fields Fields[T]) Repository[T
 }
 
 func (r *repository[T]) Get(_ context.Context, id string) (T, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for _, item := range r.items {
 		if item.ResourceID() == id {
-			return item, nil
+			return copyOf(item), nil
 		}
 	}
 	var zero T
@@ -55,6 +62,8 @@ func (r *repository[T]) Get(_ context.Context, id string) (T, error) {
 }
 
 func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	matching, err := r.sortBy(query)
 	if err != nil {
 		return []T{}, 0, err
@@ -63,26 +72,37 @@ func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) (
 	total := len(matching)
 	start := min(query.Offset(), total)
 	end := min(start+query.Count, total)
-	page := matching[start:end]
+	page := make([]T, 0, end-start)
+	for _, item := range matching[start:end] {
+		page = append(page, copyOf(item))
+	}
 	return page, total, nil
 }
 
 func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	item = copyOf(item)
 	now := time.Now().UTC()
-	item.SetID(uuid.NewV7().String())
+	id := uuid.NewV7().String()
+	item.SetID(id)
 	item.SetSchemas([]core.SchemaURI{r.schema.ID})
 	item.SetMeta(core.Meta{
 		ResourceType: r.schema.Name,
 		Created:      now,
 		LastModified: now,
+		Location:     r.endpoint + "/" + id,
 		Version:      weakETag(now),
 	})
 
 	r.items = append(r.items, item)
-	return item, nil
+	return copyOf(item), nil
 }
 
-func (r *repository[T]) Replace(ctx context.Context, item T) (T, error) {
+func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	item = copyOf(item)
 	id := item.ResourceID()
 	version := item.GetMeta().Version
 	for i, existing := range r.items {
@@ -99,7 +119,7 @@ func (r *repository[T]) Replace(ctx context.Context, item T) (T, error) {
 			item.SetSchemas([]core.SchemaURI{r.schema.ID})
 
 			r.items[i] = item
-			return item, nil
+			return copyOf(item), nil
 		}
 	}
 	var zero T
@@ -107,6 +127,8 @@ func (r *repository[T]) Replace(ctx context.Context, item T) (T, error) {
 }
 
 func (r *repository[T]) Delete(_ context.Context, id string, version string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	for i, existing := range r.items {
 		if existing.ResourceID() == id {
 			if version != "" && existing.GetMeta().Version != version {
@@ -121,7 +143,7 @@ func (r *repository[T]) Delete(_ context.Context, id string, version string) err
 
 func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]T, error) {
 	if query.Filter == "" {
-		return r.items, nil
+		return slices.Clone(r.items), nil
 	}
 
 	predicate, err := protocol.Filter([]*core.Schema{r.schema}, query.Filter, r.evaluator)
@@ -282,6 +304,16 @@ func boolSortRank(v bool) int {
 		return 1
 	}
 	return 0
+}
+
+func copyOf[T any](item T) T {
+	value := reflect.ValueOf(item)
+	if value.Kind() != reflect.Pointer || value.IsNil() {
+		return item
+	}
+	clone := reflect.New(value.Elem().Type())
+	clone.Elem().Set(value.Elem())
+	return clone.Interface().(T)
 }
 
 func weakETag(t time.Time) string {

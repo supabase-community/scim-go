@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1289,6 +1291,12 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 
 		require.Equal(t, http.StatusConflict, response.StatusCode)
 		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+
+		// RFC 7644 Section 3.5.2: on error, the original SCIM resource MUST be restored.
+		request = Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))
+		response = Response(t, srv, request)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
 	})
 
 	t.Run("patching an unknown id returns 404", func(t *testing.T) {
@@ -1727,4 +1735,29 @@ func TestRFC7643WriteOnlyAttributes(t *testing.T) {
 	body, err := io.ReadAll(response.Body)
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "password")
+}
+
+func TestConcurrentRequests(t *testing.T) {
+	srv := newTestServer(t)
+	id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Go(func() {
+			create(t, srv, &core.User{UserName: "user" + strconv.Itoa(i)})
+		})
+		wg.Go(func() {
+			request := Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))
+			assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
+		})
+		wg.Go(func() {
+			request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
+			assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
+		})
+	}
+	wg.Wait()
+
+	request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
+	list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, srv, request))
+	assert.Equal(t, 9, list.TotalResults)
 }
