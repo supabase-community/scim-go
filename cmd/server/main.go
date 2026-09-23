@@ -65,7 +65,9 @@ func main() {
 	<-ctx.Done()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = httpServer.Shutdown(shutdownCtx)
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		errorHandler(err)
+	}
 }
 
 func newUserFields() server.Fields[*core.User] {
@@ -96,6 +98,14 @@ func newGroupFields() server.Fields[*core.Group] {
 		server.NewField(
 			core.NewAttribute("displayName", core.TypeString).AsRequired(),
 			func(g *core.Group) any { return g.DisplayName },
+		),
+		server.NewElements(
+			core.NewMultiValuedAttribute("members", "User", "Group"),
+			func(g *core.Group) []core.Member { return g.Members },
+			server.NewField(core.NewAttribute("value", core.TypeString), func(m core.Member) any { return m.Value }),
+			server.NewField(core.NewAttribute("$ref", core.TypeReference), func(m core.Member) any { return m.Ref }),
+			server.NewField(core.NewAttribute("type", core.TypeString).Suggesting("User", "Group"), func(m core.Member) any { return m.Type }),
+			server.NewField(core.NewAttribute("display", core.TypeString), func(m core.Member) any { return m.Display }),
 		),
 	)
 }

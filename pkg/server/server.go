@@ -19,10 +19,10 @@ type Server struct {
 	errorHandler  func(error)
 }
 
-type Option func(*Server)
+type Option[T any] func(T)
 
 // Limits sets the pagination bounds of every resource type, per RFC 7644, Section 3.4.2.4.
-func Limits(limits protocol.Limits) Option {
+func Limits(limits protocol.Limits) Option[*Server] {
 	return func(s *Server) {
 		s.limits = limits
 		s.config.Filtering(limits.MaxCount)
@@ -30,16 +30,22 @@ func Limits(limits protocol.Limits) Option {
 }
 
 // ErrorHandler receives the errors the server could not send to a client.
-func ErrorHandler(fn func(error)) Option {
+func ErrorHandler(fn func(error)) Option[*Server] {
 	return func(s *Server) { s.errorHandler = fn }
 }
 
 // ServiceProviderConfig changes the capabilities the server advertises, per RFC 7643, Section 5.
-func ServiceProviderConfig(fn func(*core.ServiceProviderConfig)) Option {
+func ServiceProviderConfig(fn func(*core.ServiceProviderConfig)) Option[*Server] {
 	return func(s *Server) { fn(s.config) }
 }
 
-func New(basePath string, options ...Option) *Server {
+func WithResource(resource Registration) Option[*Server] {
+	return func(s *Server) {
+		s.WithResource(resource)
+	}
+}
+
+func New(basePath string, options ...Option[*Server]) *Server {
 	mux := http.NewServeMux()
 	s := &Server{
 		mux:          mux,
