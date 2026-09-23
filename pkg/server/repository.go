@@ -25,22 +25,30 @@ type Repository[T Entity] interface {
 type repository[T Entity] struct {
 	mu       sync.Mutex
 	endpoint string
-	schema   *core.Schema
+	schemas  []*core.Schema
 	items    []T
 	readers[T]
 	evaluator protocol.Evaluator[predicate]
 }
 
 // NewRepository stores resources in memory, for tests and reference servers.
-func NewRepository[T Entity](endpoint string, schema *core.Schema, fields Fields[T]) Repository[T] {
+func NewRepository[T Entity](endpoint string, schemas []*core.Schema, fields Fields[T]) Repository[T] {
 	readers := fields.readers()
 	return &repository[T]{
 		endpoint:  endpoint,
-		schema:    schema,
+		schemas:   schemas,
 		items:     []T{},
 		readers:   readers,
 		evaluator: newVisitor[T](readers),
 	}
+}
+
+func schemaURIs(schemas []*core.Schema) []core.SchemaURI {
+	ids := make([]core.SchemaURI, len(schemas))
+	for i, schema := range schemas {
+		ids[i] = schema.ID
+	}
+	return ids
 }
 
 func (r *repository[T]) Get(_ context.Context, id string) (item T, err error) {
@@ -71,9 +79,9 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 	now := time.Now().UTC()
 	id := uuid.NewV7().String()
 	item.SetID(id)
-	item.SetSchemas([]core.SchemaURI{r.schema.ID})
+	item.SetSchemas(schemaURIs(r.schemas))
 	item.SetMeta(core.Meta{
-		ResourceType: r.schema.Name,
+		ResourceType: r.schemas[0].Name,
 		Created:      now,
 		LastModified: now,
 		Location:     r.endpoint + "/" + id,
@@ -96,7 +104,7 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 		meta.LastModified = now
 		meta.Version = weakETag(now)
 		item.SetMeta(meta)
-		item.SetSchemas([]core.SchemaURI{r.schema.ID})
+		item.SetSchemas(schemaURIs(r.schemas))
 		r.items[i] = item
 	})
 	if err != nil {
@@ -139,7 +147,7 @@ func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]T, error) {
 		return slices.Clone(r.items), nil
 	}
 
-	predicate, err := protocol.Filter([]*core.Schema{r.schema}, query.Filter, r.evaluator)
+	predicate, err := protocol.Filter(r.schemas, query.Filter, r.evaluator)
 	if err != nil {
 		return []T{}, err
 	}

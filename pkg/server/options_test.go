@@ -30,7 +30,7 @@ func TestErrorHandlerOption(t *testing.T) {
 
 func TestWithRepository(t *testing.T) {
 	fields := userFields()
-	repository := server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)
+	repository := server.NewRepository(basePath+"/Users", []*core.Schema{core.NewSchema(core.SchemaUser).With(fields.Attributes()...)}, fields)
 	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
 	require.NoError(t, err)
 

@@ -106,7 +106,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		user := ReadBodyAs[*core.User](t, response)
 		assert.Equal(t, basePath+"/Users/"+user.ID, response.Header.Get("Location"))
 		assert.NotEmpty(t, response.Header.Get("ETag"))
-		assert.Equal(t, []core.SchemaURI{core.SchemaUser}, user.Schemas)
+		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, user.Schemas)
 		assert.NotEmpty(t, user.ID)
 		assert.Equal(t, "bjensen", user.UserName)
 		assert.Equal(t, core.ResourceTypeName("User"), user.Meta.ResourceType)
@@ -351,7 +351,7 @@ func TestRFC7644QueryResources(t *testing.T) {
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		assert.Equal(t, 3, list.TotalResults)
 		assert.Equal(t, "alice", list.Resources[0].UserName)
-		assert.Equal(t, []core.SchemaURI{core.SchemaUser}, list.Resources[0].Schemas)
+		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, list.Resources[0].Schemas)
 		assert.NotEmpty(t, list.Resources[0].Meta.Location)
 		assert.Equal(t, "bob", list.Resources[1].UserName)
 		assert.Equal(t, "carol", list.Resources[2].UserName)
@@ -2067,6 +2067,39 @@ func TestRFC7643EnterpriseUserExtension(t *testing.T) {
 	require.NotNil(t, user.EnterpriseUser)
 	assert.Equal(t, "1234", user.EnterpriseUser.EmployeeNumber)
 	assert.Equal(t, "Tour Operations", user.EnterpriseUser.Department)
+
+	// RFC 7643 Section 6: "schemas" lists every schema, including extensions, used by the resource.
+	t.Run("lists the extension in the resource's own schemas array", func(t *testing.T) {
+		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, user.Schemas)
+	})
+
+	// RFC 7644 Section 3.4.2.2: a URI-qualified attribute name reaches into a schema extension.
+	t.Run("filters by a URI-qualified extension attribute", func(t *testing.T) {
+		filterQuery := string(core.SchemaEnterpriseUser) + `:employeeNumber eq "1234"`
+		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, id, list.Resources[0].ID)
+	})
+
+	// RFC 7644 Section 3.4.2.3: sortBy also reaches into a schema extension.
+	t.Run("sorts by a URI-qualified extension attribute", func(t *testing.T) {
+		create(t, srv, &core.User{UserName: "amorris", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "0001"}})
+
+		sortBy := string(core.SchemaEnterpriseUser) + ":employeeNumber"
+		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.GreaterOrEqual(t, len(list.Resources), 2)
+		assert.Equal(t, "amorris", list.Resources[0].UserName)
+	})
 
 	// RFC 7643 Section 6: a resource type lists the schema extensions it accepts.
 	t.Run("advertises the extension on the resource type", func(t *testing.T) {

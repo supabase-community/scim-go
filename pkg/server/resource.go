@@ -93,7 +93,7 @@ func (c *Resource[T]) mount(s *Server, schemas []*core.Schema) {
 	path := s.basePath + c.endpoint
 	repository := c.repository
 	if repository == nil {
-		repository = NewRepository(path, schemas[0], fields)
+		repository = NewRepository(path, schemas, fields)
 	}
 	service := NewService(repository, Validators(fields, repository)...)
 	controller := NewController(service, schemas, s.limits, s.config)
