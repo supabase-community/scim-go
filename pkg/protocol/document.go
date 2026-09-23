@@ -13,10 +13,8 @@ func toDocument(resource any) (map[string]any, error) {
 	if err != nil {
 		return nil, scimerrors.ErrInternal("could not encode the resource")
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	document := map[string]any{}
-	if err := decoder.Decode(&document); err != nil {
+	document, err := Decode[map[string]any](bytes.NewReader(raw))
+	if err != nil {
 		return nil, scimerrors.ErrInternal("could not decode the resource")
 	}
 	return document, nil
@@ -24,10 +22,8 @@ func toDocument(resource any) (map[string]any, error) {
 
 // RFC 7644 Section 3.3: the request body MUST be a JSON object.
 func readDocument(r io.Reader) (map[string]any, error) {
-	var document map[string]any
-	decoder := json.NewDecoder(r)
-	decoder.UseNumber()
-	if err := decoder.Decode(&document); err != nil || document == nil {
+	document, err := Decode[map[string]any](r)
+	if err != nil || document == nil {
 		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
 	}
 	return document, nil

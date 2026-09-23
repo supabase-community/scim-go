@@ -51,7 +51,9 @@ func (r *PatchRequest) Patch[T any](resource T, schemas []*core.Schema) (T, erro
 
 func Decode[T any](body io.Reader) (T, error) {
 	var req T
-	if err := json.NewDecoder(body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(body)
+	decoder.UseNumber()
+	if err := decoder.Decode(&req); err != nil {
 		return req, scimerrors.ErrInvalidSyntax("request body is not valid JSON")
 	}
 	return req, nil
