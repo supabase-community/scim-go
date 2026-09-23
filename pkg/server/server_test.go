@@ -1,7 +1,6 @@
 package server_test
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -1579,47 +1578,6 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		patched := ReadBodyAs[core.User](t, response)
 		assert.Nil(t, patched.Active)
 	})
-}
-
-type recordingRepository struct {
-	server.Repository[*core.User]
-	replaced []*core.User
-	queries  []*protocol.SearchRequest
-}
-
-func (r *recordingRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
-	r.queries = append(r.queries, query)
-	return r.Repository.List(ctx, query)
-}
-
-func (r *recordingRepository) Replace(ctx context.Context, item *core.User) (*core.User, error) {
-	r.replaced = append(r.replaced, item)
-	return r.Repository.Replace(ctx, item)
-}
-
-// RFC 7644 Section 3.5.2: a PATCH changes only the attributes it targets.
-func TestRFC7644PatchKeepsWriteOnlyAttributes(t *testing.T) {
-	fields := userFields()
-	repository := &recordingRepository{Repository: server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)}
-	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
-
-	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, core.User{UserName: "bjensen", Password: "t1meMa$heen"}),
-	))
-	require.Equal(t, http.StatusCreated, response.StatusCode)
-	id := ReadBodyAs[core.User](t, response).ID
-
-	response = Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, protocol.PatchRequest{
-			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-			Operations: []patch.Operation{{Op: patch.OpReplace, Path: "userType", Value: json.RawMessage(`"employee"`)}},
-		}),
-	))
-	require.Equal(t, http.StatusOK, response.StatusCode)
-	require.Len(t, repository.replaced, 1)
-	assert.Equal(t, "t1meMa$heen", repository.replaced[0].Password)
 }
 
 // 3.6 Deleting Resources

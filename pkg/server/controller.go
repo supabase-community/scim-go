@@ -1,12 +1,7 @@
 package server
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
-	"reflect"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -122,22 +117,15 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if match := r.Header.Get("If-Match"); match != "" && existing.GetMeta().Version != match {
 		return protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
 	}
-	req, err := c.decode[protocol.PatchRequest](r.Body)
-	if err != nil {
-		return protocol.SendError(w, scimerrors.ErrInvalidSyntax("request body is not valid JSON"))
-	}
-	document, err := documentOf(existing)
+	req, err := protocol.DecodePatchRequest(r.Body)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	if err := req.Apply(document, c.schemas); err != nil {
-		return protocol.SendError(w, err)
-	}
-	resource, err := c.writable(document, existing)
+	patched, err := req.Patch(existing, c.schemas)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	replaced, err := c.service.Replace(r.Context(), resource)
+	replaced, err := c.service.Replace(r.Context(), patched)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -158,42 +146,4 @@ func (c *controller[T]) send(w http.ResponseWriter, status int, resource T, proj
 		return protocol.SendError(w, err)
 	}
 	return protocol.Send(w, status, body)
-}
-
-func documentOf(resource any) (map[string]any, error) {
-	raw, err := json.Marshal(resource)
-	if err != nil {
-		return nil, scimerrors.ErrInternal("could not encode the resource")
-	}
-	return readDocument(bytes.NewReader(raw))
-}
-
-func readDocument(r io.Reader) (map[string]any, error) {
-	var document map[string]any
-	decoder := json.NewDecoder(r)
-	decoder.UseNumber()
-	if err := decoder.Decode(&document); err != nil || document == nil {
-		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
-	}
-	return document, nil
-}
-
-func (c *controller[T]) writable(document map[string]any, existing any) (T, error) {
-	var item T
-	raw, err := json.Marshal(document)
-	if err != nil {
-		return item, scimerrors.ErrInternal("could not encode the request body")
-	}
-	return protocol.DecodeResource[T](bytes.NewReader(raw), existing, c.schemas)
-}
-
-func (c *controller[T]) decode[K any](r io.Reader) (K, error) {
-	var item K
-	if err := json.NewDecoder(r).Decode(&item); err != nil {
-		return item, err
-	}
-	if v := reflect.ValueOf(item); v.Kind() == reflect.Pointer && v.IsNil() {
-		return item, errors.New("body is null")
-	}
-	return item, nil
 }
