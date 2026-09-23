@@ -49,28 +49,28 @@ func TestNewAttribute(t *testing.T) {
 	})
 
 	t.Run("marks the attribute the client must send", func(t *testing.T) {
-		attribute := core.NewAttribute("userName", core.TypeString).DescribedAs("A unique identifier for the user.")
+		attribute := core.NewAttribute("userName", core.TypeString)
 
 		require.Same(t, attribute, attribute.AsRequired())
 		assert.True(t, attribute.Required)
 	})
 
 	t.Run("marks the attribute that holds more than one value", func(t *testing.T) {
-		attribute := core.NewAttribute("emails", core.TypeComplex).DescribedAs("The email addresses for the user.")
+		attribute := core.NewAttribute("emails", core.TypeComplex)
 
 		require.Same(t, attribute, attribute.AsMultiValued())
 		assert.True(t, attribute.MultiValued)
 	})
 
 	t.Run("marks the attribute whose value is compared case sensitively", func(t *testing.T) {
-		attribute := core.NewAttribute("id", core.TypeString).DescribedAs("A unique identifier for the resource.")
+		attribute := core.NewAttribute("id", core.TypeString)
 
 		require.Same(t, attribute, attribute.AsCaseExact())
 		assert.True(t, attribute.CaseExact)
 	})
 
 	t.Run("states the scope the service provider enforces uniqueness over", func(t *testing.T) {
-		attribute := core.NewAttribute("userName", core.TypeString).DescribedAs("A unique identifier for the user.")
+		attribute := core.NewAttribute("userName", core.TypeString)
 
 		require.Same(t, attribute, attribute.UniqueOn(core.UniquenessServer))
 
@@ -81,9 +81,7 @@ func TestNewAttribute(t *testing.T) {
 	})
 
 	t.Run("suggests the canonical values a client may send", func(t *testing.T) {
-		attribute := core.NewAttribute("type", core.TypeString).
-			DescribedAs("A label indicating the attribute's function.").
-			Suggesting("work", "home", "other")
+		attribute := core.NewAttribute("type", core.TypeString).Suggesting("work", "home", "other")
 
 		body, err := json.Marshal(attribute)
 
@@ -92,7 +90,7 @@ func TestNewAttribute(t *testing.T) {
 	})
 
 	t.Run("names the resource types a reference may point at", func(t *testing.T) {
-		attribute := core.NewAttribute("$ref", core.TypeReference).DescribedAs("The URI of the corresponding resource.")
+		attribute := core.NewAttribute("$ref", core.TypeReference)
 
 		require.Same(t, attribute, attribute.Referencing(core.ReferenceType("User"), core.ReferenceExternal, core.ReferenceURI))
 
@@ -138,13 +136,12 @@ func TestNewAttribute(t *testing.T) {
 
 	t.Run("composes every refinement in a chain", func(t *testing.T) {
 		attribute := core.NewAttribute("emails", core.TypeComplex).
-			DescribedAs("The email addresses for the user.").
 			AsRequired().
 			AsMultiValued().
 			AsCaseExact().
 			UniqueOn(core.UniquenessGlobal).
 			Suggesting("work", "home").
-			With(core.NewAttribute("value", core.TypeString).DescribedAs("The email address."))
+			With(core.NewAttribute("value", core.TypeString))
 
 		assert.True(t, attribute.Required)
 		assert.True(t, attribute.MultiValued)
@@ -160,7 +157,7 @@ func TestNewAttribute(t *testing.T) {
 	})
 
 	t.Run("serializes an attribute the client can neither write nor read back", func(t *testing.T) {
-		attribute := core.NewAttribute("password", core.TypeString).DescribedAs("The user's cleartext password.")
+		attribute := core.NewAttribute("password", core.TypeString)
 		attribute.Mutability = core.MutabilityWriteOnly
 		attribute.Returned = core.ReturnedNever
 
