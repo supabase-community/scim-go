@@ -23,26 +23,23 @@ type Repository[T Entity] interface {
 }
 
 type repository[T Entity] struct {
-	mu               sync.Mutex
-	endpoint         string
-	schema           *core.Schema
-	items            []T
-	accessors        accessorSet[T]
-	elementAccessors map[*core.Attribute]func(any) any
-	elements         map[*core.Attribute]func(T) []any
-	evaluator        protocol.Evaluator[predicate]
+	mu       sync.Mutex
+	endpoint string
+	schema   *core.Schema
+	items    []T
+	readers[T]
+	evaluator protocol.Evaluator[predicate]
 }
 
 // NewRepository stores resources in memory, for tests and reference servers.
 func NewRepository[T Entity](endpoint string, schema *core.Schema, fields Fields[T]) Repository[T] {
+	readers := fields.readers()
 	return &repository[T]{
-		endpoint:         endpoint,
-		schema:           schema,
-		items:            []T{},
-		accessors:        withCommonAccessors(fields.accessors()),
-		elementAccessors: fields.elementAccessors(),
-		elements:         fields.elements(),
-		evaluator:        newVisitor(fields),
+		endpoint:  endpoint,
+		schema:    schema,
+		items:     []T{},
+		readers:   readers,
+		evaluator: newVisitor[T](readers),
 	}
 }
 

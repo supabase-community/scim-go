@@ -47,6 +47,21 @@ func (fs Fields[T]) elements() map[*core.Attribute]func(T) []any {
 	return elements
 }
 
+// readers holds the accessors the repository and the filter/sort evaluator both need.
+type readers[T Entity] struct {
+	accessors        accessorSet[T]
+	elementAccessors map[*core.Attribute]func(any) any
+	elements         map[*core.Attribute]func(T) []any
+}
+
+func (fs Fields[T]) readers() readers[T] {
+	return readers[T]{
+		accessors:        withCommonAccessors(fs.accessors()),
+		elementAccessors: fs.elementAccessors(),
+		elements:         fs.elements(),
+	}
+}
+
 // RFC 7644 Section 3.10: the attribute notation of every attribute that has an accessor.
 func (fs Fields[T]) paths() map[*core.Attribute]string {
 	paths := map[*core.Attribute]string{}

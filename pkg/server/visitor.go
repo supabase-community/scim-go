@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -15,17 +14,11 @@ import (
 type predicate func(row any) bool
 
 type evaluator[T Entity] struct {
-	accessors        accessorSet[T]
-	elementAccessors map[*core.Attribute]func(any) any
-	elements         map[*core.Attribute]func(T) []any
+	readers[T]
 }
 
-func newVisitor[T Entity](fields Fields[T]) protocol.Evaluator[predicate] {
-	return &evaluator[T]{
-		accessors:        withCommonAccessors(fields.accessors()),
-		elementAccessors: fields.elementAccessors(),
-		elements:         fields.elements(),
-	}
+func newVisitor[T Entity](readers readers[T]) protocol.Evaluator[predicate] {
+	return &evaluator[T]{readers: readers}
 }
 
 func (e *evaluator[T]) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (predicate, error) {
