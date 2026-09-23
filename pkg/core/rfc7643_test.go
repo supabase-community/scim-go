@@ -15,13 +15,12 @@ func TestRFC7643(t *testing.T) {
 		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643MinimalUser, &core.User{}))
 	})
 
-	// password is writeOnly per RFC 7643, Section 7, so it is accepted on input but never returned.
-	t.Run("carries the full User of Section 8.2 whole except writeOnly password", func(t *testing.T) {
-		assert.Equal(t, []string{"password"}, scimtest.RoundTripDiff(t, scimtest.RFC7643FullUser, &core.User{}))
+	t.Run("carries the full User of Section 8.2 whole", func(t *testing.T) {
+		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643FullUser, &core.User{}))
 	})
 
-	t.Run("carries the enterprise extension of Section 8.3 whole except writeOnly password", func(t *testing.T) {
-		assert.Equal(t, []string{"password"}, scimtest.RoundTripDiff(t, scimtest.RFC7643EnterpriseUser, &core.User{}))
+	t.Run("carries the enterprise extension of Section 8.3 whole", func(t *testing.T) {
+		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643EnterpriseUser, &core.User{}))
 	})
 
 	t.Run("carries the Group of Section 8.4 whole", func(t *testing.T) {

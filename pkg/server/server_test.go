@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase-community/scim-go/pkg/server"
 )
 
 const basePath = "/scim/v2"
@@ -1869,4 +1871,39 @@ func TestConcurrentRequests(t *testing.T) {
 	request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
 	list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, srv, request))
 	assert.Equal(t, 9, list.TotalResults)
+}
+
+type recordingRepository struct {
+	server.Repository[*core.User]
+	replaced []*core.User
+}
+
+func (r *recordingRepository) Replace(ctx context.Context, item *core.User) (*core.User, error) {
+	r.replaced = append(r.replaced, item)
+	return r.Repository.Replace(ctx, item)
+}
+
+// RFC 7644 Section 3.5.2: a PATCH changes only the attributes it targets.
+func TestRFC7644PatchKeepsWriteOnlyAttributes(t *testing.T) {
+	fields := userFields()
+	repository := &recordingRepository{Repository: server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)}
+	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
+
+	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, core.User{UserName: "bjensen", Password: "t1meMa$heen"}),
+	))
+	require.Equal(t, http.StatusCreated, response.StatusCode)
+	id := ReadBodyAs[core.User](t, response).ID
+
+	response = Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpReplace, Path: "userType", Value: json.RawMessage(`"employee"`)}},
+		}),
+	))
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Len(t, repository.replaced, 1)
+	assert.Equal(t, "t1meMa$heen", repository.replaced[0].Password)
 }

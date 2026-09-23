@@ -61,7 +61,7 @@ func TestUser(t *testing.T) {
 		require.Contains(t, string(body), `"active":false`)
 	})
 
-	t.Run("accepts password on input but never serializes it", func(t *testing.T) {
+	t.Run("carries password through a JSON round trip", func(t *testing.T) {
 		var decoded core.User
 		require.NoError(t, json.Unmarshal([]byte(`{"userName":"bjensen","password":"t1meMa$heen"}`), &decoded))
 		require.Equal(t, "t1meMa$heen", decoded.Password)
@@ -69,8 +69,7 @@ func TestUser(t *testing.T) {
 		body, err := json.Marshal(&decoded)
 
 		require.NoError(t, err)
-		require.NotContains(t, string(body), "password")
-		require.NotContains(t, string(body), "t1meMa$heen")
+		require.Contains(t, string(body), `"password":"t1meMa$heen"`)
 	})
 }
 

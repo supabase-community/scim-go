@@ -1,7 +1,5 @@
 package core
 
-import "encoding/json"
-
 // Element is one element of a multi-valued attribute, per RFC 7643, Section 2.4.
 type Element struct {
 	Value   string `json:"value,omitempty"`
@@ -93,12 +91,4 @@ type User struct {
 	Roles             []Role            `json:"roles,omitempty"`
 	X509Certificates  []X509Certificate `json:"x509Certificates,omitempty"`
 	EnterpriseUser    *EnterpriseUser   `json:"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User,omitempty"`
-}
-
-// MarshalJSON omits password, which is writeOnly per RFC 7643, Section 7.
-func (u User) MarshalJSON() ([]byte, error) {
-	type alias User
-	clone := alias(u)
-	clone.Password = ""
-	return json.Marshal(clone)
 }
