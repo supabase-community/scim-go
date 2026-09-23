@@ -204,7 +204,16 @@ func primaryOrFirst(elements []any, isPrimary func(any) any) (any, bool) {
 	return elements[0], true
 }
 
+// RFC 7644 Section 3.4.2.3: resources without a value are ordered last if ascending and first if descending.
 func compareSortKeys(a, b any, caseExact, descending bool) int {
+	result := compareAscending(a, b, caseExact)
+	if descending {
+		return -result
+	}
+	return result
+}
+
+func compareAscending(a, b any, caseExact bool) int {
 	aMissing, bMissing := isMissingSortValue(a), isMissingSortValue(b)
 	switch {
 	case aMissing && bMissing:
@@ -214,12 +223,7 @@ func compareSortKeys(a, b any, caseExact, descending bool) int {
 	case bMissing:
 		return -1
 	}
-
-	result := compareSortValue(a, b, caseExact)
-	if descending {
-		result = -result
-	}
-	return result
+	return compareSortValue(a, b, caseExact)
 }
 
 func isMissingSortValue(value any) bool {

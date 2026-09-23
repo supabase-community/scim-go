@@ -874,7 +874,8 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "second", list.Resources[1].UserName)
 	})
 
-	t.Run("resources missing the sort attribute sort last regardless of order", func(t *testing.T) {
+	// RFC 7644 Section 3.4.2.3: resources without a value are ordered last if ascending and first if descending.
+	t.Run("resources missing the sort attribute sort first when descending", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "no-name"})
 		create(t, srv, &core.User{UserName: "has-name", Name: core.Name{GivenName: "Amy"}})
@@ -886,8 +887,8 @@ func TestRFC7644Sorting(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Len(t, list.Resources, 2)
-		assert.Equal(t, "has-name", list.Resources[0].UserName)
-		assert.Equal(t, "no-name", list.Resources[1].UserName)
+		assert.Equal(t, "no-name", list.Resources[0].UserName)
+		assert.Equal(t, "has-name", list.Resources[1].UserName)
 	})
 
 	t.Run("rejects sortBy on an attribute that is not known", func(t *testing.T) {
@@ -912,7 +913,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
-	t.Run("sorts by a boolean attribute, with false ranking before true and missing values last", func(t *testing.T) {
+	t.Run("sorts by a boolean attribute, with false ranking before true", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
 		inactive := false
@@ -938,9 +939,9 @@ func TestRFC7644Sorting(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list = ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Len(t, list.Resources, 3)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
-		assert.Equal(t, "bob", list.Resources[1].UserName)
-		assert.Equal(t, "carol", list.Resources[2].UserName)
+		assert.Equal(t, "carol", list.Resources[0].UserName)
+		assert.Equal(t, "alice", list.Resources[1].UserName)
+		assert.Equal(t, "bob", list.Resources[2].UserName)
 	})
 
 	t.Run("sorts by an integer attribute", func(t *testing.T) {
