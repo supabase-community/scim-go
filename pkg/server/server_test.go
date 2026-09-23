@@ -960,8 +960,29 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "early", list.Resources[1]["Name"])
 	})
 
+	// RFC 7644 Section 3.4.2.3: a multi-valued attribute sorts by its primary value, or else its first value.
 	t.Run("sorts by the primary value of a multi-valued attribute", func(t *testing.T) {
-		t.Skip("sortBy on a multi-valued attribute (e.g. emails.value) is rejected as unsupported; primary-or-first selection is not implemented yet; Fields.Elements() provides the per-element access it needs")
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "zed", Emails: []core.Email{
+			{Value: "a@example.com", Primary: new(false)},
+			{Value: "z@example.com", Primary: new(true)},
+		}})
+		create(t, srv, &core.User{UserName: "mia", Emails: []core.Email{
+			{Value: "m@example.com"},
+			{Value: "b@example.com"},
+		}})
+		create(t, srv, &core.User{UserName: "nobody"})
+
+		path := basePath + "/Users?" + url.Values{"sortBy": {"emails.value"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Len(t, list.Resources, 3)
+		assert.Equal(t, "mia", list.Resources[0].UserName)
+		assert.Equal(t, "zed", list.Resources[1].UserName)
+		assert.Equal(t, "nobody", list.Resources[2].UserName)
 	})
 }
 

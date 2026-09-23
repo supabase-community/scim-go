@@ -25,18 +25,22 @@ type Repository[T Entity] interface {
 }
 
 type repository[T Entity] struct {
-	schema    *core.Schema
-	items     []T
-	accessors Accessors[T]
-	evaluator protocol.Evaluator[predicate]
+	schema           *core.Schema
+	items            []T
+	accessors        Accessors[T]
+	elementAccessors map[*core.Attribute]func(any) any
+	elements         map[*core.Attribute]func(T) []any
+	evaluator        protocol.Evaluator[predicate]
 }
 
 func NewRepository[T Entity](schema *core.Schema, fields Fields[T]) Repository[T] {
 	return &repository[T]{
-		schema:    schema,
-		items:     []T{},
-		accessors: withCommonAccessors(fields.Accessors()),
-		evaluator: NewVisitor(fields),
+		schema:           schema,
+		items:            []T{},
+		accessors:        withCommonAccessors(fields.Accessors()),
+		elementAccessors: fields.ElementAccessors(),
+		elements:         fields.Elements(),
+		evaluator:        NewVisitor(fields),
 	}
 }
 
@@ -147,24 +151,57 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
 		return []T{}, scimerrors.ErrInvalidValue(err.Error())
 	}
 
-	attribute, ok := r.schema.Resolve(path.Name)
+	parent, ok := r.schema.Resolve(path.Name)
 	if !ok {
 		return []T{}, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
 
+	attribute := parent
 	if path.SubAttribute != "" {
-		attribute = attribute.SubAttribute(path.SubAttribute)
+		attribute = parent.SubAttribute(path.SubAttribute)
 	}
 
-	accessor, ok := r.accessors[attribute]
+	key, ok := r.sortKey(parent, attribute)
 	if !ok {
 		return []T{}, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
 	slices.SortStableFunc(matching, func(a, b T) int {
-		return compareSortKeys(accessor(a), accessor(b), attribute.CaseExact, query.Descending())
+		return compareSortKeys(key(a), key(b), attribute.CaseExact, query.Descending())
 	})
 
 	return matching, nil
+}
+
+// RFC 7644 Section 3.4.2.3: a multi-valued attribute sorts by its primary value, or else its first value.
+func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (Accessor[T], bool) {
+	elements, multiValued := r.elements[parent]
+	read, readable := r.elementAccessors[attribute]
+	if !multiValued || !readable {
+		accessor, ok := r.accessors[attribute]
+		return accessor, ok
+	}
+	isPrimary := r.elementAccessors[parent.SubAttribute("primary")]
+	return func(item T) any {
+		element, ok := primaryOrFirst(elements(item), isPrimary)
+		if !ok {
+			return nil
+		}
+		return read(element)
+	}, true
+}
+
+func primaryOrFirst(elements []any, isPrimary func(any) any) (any, bool) {
+	if isPrimary != nil {
+		for _, element := range elements {
+			if isPrimary(element) == true {
+				return element, true
+			}
+		}
+	}
+	if len(elements) == 0 {
+		return nil, false
+	}
+	return elements[0], true
 }
 
 func compareSortKeys(a, b any, caseExact, descending bool) int {
