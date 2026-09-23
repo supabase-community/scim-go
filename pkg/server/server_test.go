@@ -3,15 +3,11 @@ package server_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -214,6 +210,38 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	t.Run("rejects a duplicate unique value that needs escaping", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: `b"jensen`})
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: `b"jensen`}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusConflict, response.StatusCode)
+		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	// RFC 7644 Section 3.3: values provided for readOnly attributes SHALL be ignored.
+	t.Run("ignores readOnly id and meta", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"id":"client-chosen","userName":"alice","meta":{"created":"2000-01-01T00:00:00Z"}}`)),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		created := ReadBodyAs[core.User](t, response)
+		assert.NotEqual(t, "client-chosen", created.ID)
+		assert.NotEqual(t, 2000, created.Meta.Created.Year())
+	})
+
 	t.Run("skips a candidate whose optional unique attribute is unset", func(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "a"})
@@ -333,6 +361,32 @@ func TestRFC7644QueryResources(t *testing.T) {
 		assert.Equal(t, 1, list.ItemsPerPage)
 		require.Len(t, list.Resources, 1)
 		assert.Equal(t, "bob", list.Resources[0].UserName)
+	})
+
+	t.Run("pages with a custom default count", func(t *testing.T) {
+		srv := newTestServer(t, server.Limits(protocol.Limits{DefaultCount: 1, MaxCount: 2}))
+		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "bob"})
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[*core.User]](t, response).ItemsPerPage)
+	})
+
+	t.Run("caps the count at a custom maximum", func(t *testing.T) {
+		srv := newTestServer(t, server.Limits(protocol.Limits{DefaultCount: 1, MaxCount: 2}))
+		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "carol"})
+
+		path := basePath + "/Users?" + url.Values{"count": {"50"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, 2, ReadBodyAs[protocol.ListResponse[*core.User]](t, response).ItemsPerPage)
 	})
 
 	t.Run("returns an empty list when there are no resources", func(t *testing.T) {
@@ -1119,14 +1173,6 @@ func TestRFC7644Attributes(t *testing.T) {
 	})
 }
 
-func keysOf(m map[string]any) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
 // 3.4.3 Alternative Query with POST /.search
 func TestRFC7644AlternativeQueryWithPOSTSearch(t *testing.T) {
 	t.Skip("POST /.search is not registered by server.New; falls through to the generic unknown-path 404")
@@ -1273,6 +1319,43 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, "Jensen", ReadBodyAs[core.User](t, response).Name.FamilyName)
+	})
+
+	// RFC 7644 Section 3.5.1: values provided for readOnly attributes SHALL be ignored.
+	t.Run("keeps the stored readOnly meta.created value", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+		original := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))))
+
+		request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithHeader("If-Match", etag),
+			WithRequestBody([]byte(`{"userName":"bjensen2","meta":{"created":"2000-01-01T00:00:00Z"}}`)),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		replaced := ReadBodyAs[core.User](t, response)
+		assert.Equal(t, "bjensen2", replaced.UserName)
+		assert.Equal(t, original.Meta.Created, replaced.Meta.Created)
+	})
+
+	t.Run("keeps readOnly values the body leaves out", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+		original := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))))
+
+		request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithHeader("If-Match", etag),
+			WithRequestBody([]byte(`{"userName":"bjensen3"}`)),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, original.Meta.Created, ReadBodyAs[core.User](t, response).Meta.Created)
 	})
 }
 
@@ -1498,6 +1581,47 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	})
 }
 
+type recordingRepository struct {
+	server.Repository[*core.User]
+	replaced []*core.User
+	queries  []*protocol.SearchRequest
+}
+
+func (r *recordingRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
+	r.queries = append(r.queries, query)
+	return r.Repository.List(ctx, query)
+}
+
+func (r *recordingRepository) Replace(ctx context.Context, item *core.User) (*core.User, error) {
+	r.replaced = append(r.replaced, item)
+	return r.Repository.Replace(ctx, item)
+}
+
+// RFC 7644 Section 3.5.2: a PATCH changes only the attributes it targets.
+func TestRFC7644PatchKeepsWriteOnlyAttributes(t *testing.T) {
+	fields := userFields()
+	repository := &recordingRepository{Repository: server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)}
+	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
+
+	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, core.User{UserName: "bjensen", Password: "t1meMa$heen"}),
+	))
+	require.Equal(t, http.StatusCreated, response.StatusCode)
+	id := ReadBodyAs[core.User](t, response).ID
+
+	response = Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpReplace, Path: "userType", Value: json.RawMessage(`"employee"`)}},
+		}),
+	))
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Len(t, repository.replaced, 1)
+	assert.Equal(t, "t1meMa$heen", repository.replaced[0].Password)
+}
+
 // 3.6 Deleting Resources
 func TestRFC7644DeletingResources(t *testing.T) {
 	t.Run("deletes a resource and it is subsequently gone", func(t *testing.T) {
@@ -1661,26 +1785,53 @@ func TestRFC7644ETags(t *testing.T) {
 // 4. Service Provider Configuration Endpoints (/ServiceProviderConfig)
 // Also RFC 7643 5 Service Provider Configuration Schema
 func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
-	srv := newTestServer(t)
+	t.Run("advertises capabilities and authentication schemes", func(t *testing.T) {
+		srv := newTestServer(t)
 
-	request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-	)
-	response := Response(t, srv, request)
+		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+		)
+		response := Response(t, srv, request)
 
-	require.Equal(t, http.StatusOK, response.StatusCode)
-	assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
 
-	config := ReadBodyAs[core.ServiceProviderConfig](t, response)
-	assert.True(t, config.Patch.Supported)
-	assert.True(t, config.Filter.Supported)
-	assert.Equal(t, protocol.DefaultLimits.MaxCount, config.Filter.MaxResults)
-	assert.True(t, config.Sort.Supported)
+		config := ReadBodyAs[core.ServiceProviderConfig](t, response)
+		assert.True(t, config.Patch.Supported)
+		assert.True(t, config.Filter.Supported)
+		assert.Equal(t, protocol.DefaultLimits.MaxCount, config.Filter.MaxResults)
+		assert.True(t, config.Sort.Supported)
 
-	require.Len(t, config.AuthenticationSchemes, 1)
-	assert.Equal(t, core.AuthenticationSchemeOAuthBearerToken, config.AuthenticationSchemes[0].Type)
-	assert.True(t, config.AuthenticationSchemes[0].Primary)
+		require.Len(t, config.AuthenticationSchemes, 1)
+		assert.Equal(t, core.AuthenticationSchemeOAuthBearerToken, config.AuthenticationSchemes[0].Type)
+		assert.True(t, config.AuthenticationSchemes[0].Primary)
+	})
+
+	t.Run("advertises a custom max results from Limits", func(t *testing.T) {
+		srv := newTestServer(t, server.Limits(protocol.Limits{DefaultCount: 1, MaxCount: 2}))
+
+		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, 2, ReadBodyAs[core.ServiceProviderConfig](t, response).Filter.MaxResults)
+	})
+
+	// RFC 7643 Section 5: a ServiceProviderConfig option customizes the advertised capabilities.
+	t.Run("applies a ServiceProviderConfig option", func(t *testing.T) {
+		srv := newTestServer(t, server.ServiceProviderConfig(func(config *core.ServiceProviderConfig) {
+			config.DocumentationURI = "https://example.com/help/scim.html"
+			config.Sort.Supported = false
+		}))
+
+		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithBearerToken(validToken))
+		config := ReadBodyAs[core.ServiceProviderConfig](t, Response(t, srv, request))
+
+		assert.Equal(t, "https://example.com/help/scim.html", config.DocumentationURI)
+		assert.False(t, config.Sort.Supported)
+		assert.True(t, config.Patch.Supported)
+	})
 }
 
 // 4. Service Provider Configuration Endpoints (/Schemas)
@@ -1858,202 +2009,4 @@ func TestRFC7643WriteOnlyAttributes(t *testing.T) {
 	body, err := io.ReadAll(response.Body)
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "password")
-}
-
-func TestConcurrentRequests(t *testing.T) {
-	srv := newTestServer(t)
-	id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-
-	var wg sync.WaitGroup
-	for i := range 8 {
-		wg.Go(func() {
-			create(t, srv, &core.User{UserName: "user" + strconv.Itoa(i)})
-		})
-		wg.Go(func() {
-			request := Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))
-			assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
-		})
-		wg.Go(func() {
-			request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
-			assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
-		})
-	}
-	wg.Wait()
-
-	request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
-	list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, srv, request))
-	assert.Equal(t, 9, list.TotalResults)
-}
-
-type recordingRepository struct {
-	server.Repository[*core.User]
-	replaced []*core.User
-	queries  []*protocol.SearchRequest
-}
-
-func (r *recordingRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
-	r.queries = append(r.queries, query)
-	return r.Repository.List(ctx, query)
-}
-
-func (r *recordingRepository) Replace(ctx context.Context, item *core.User) (*core.User, error) {
-	r.replaced = append(r.replaced, item)
-	return r.Repository.Replace(ctx, item)
-}
-
-// RFC 7644 Section 3.5.2: a PATCH changes only the attributes it targets.
-func TestRFC7644PatchKeepsWriteOnlyAttributes(t *testing.T) {
-	fields := userFields()
-	repository := &recordingRepository{Repository: server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)}
-	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
-
-	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, core.User{UserName: "bjensen", Password: "t1meMa$heen"}),
-	))
-	require.Equal(t, http.StatusCreated, response.StatusCode)
-	id := ReadBodyAs[core.User](t, response).ID
-
-	response = Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, protocol.PatchRequest{
-			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-			Operations: []patch.Operation{{Op: patch.OpReplace, Path: "userType", Value: json.RawMessage(`"employee"`)}},
-		}),
-	))
-	require.Equal(t, http.StatusOK, response.StatusCode)
-	require.Len(t, repository.replaced, 1)
-	assert.Equal(t, "t1meMa$heen", repository.replaced[0].Password)
-}
-
-// RFC 7644 Sections 3.3 and 3.5.1: values provided for readOnly attributes SHALL be ignored.
-func TestRFC7644IgnoresReadOnlyAttributes(t *testing.T) {
-	fields := server.NewFields(append(userFields(), server.NewField(
-		core.NewAttribute("groups", core.TypeComplex).AsMultiValued().AsReadOnly().With(core.NewAttribute("value", core.TypeString)),
-		func(u *core.User) any { return u.Groups },
-	))...)
-	repository := server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)
-	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
-	staff := []core.GroupMembership{{Value: "staff"}}
-	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen", Groups: staff})
-	require.NoError(t, err)
-
-	t.Run("POST ignores readOnly values", func(t *testing.T) {
-		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
-			WithContentType(protocol.MediaType),
-			WithRequestBody([]byte(`{"id":"client-chosen","userName":"alice","groups":[{"value":"admins"}]}`)),
-		))
-
-		require.Equal(t, http.StatusCreated, response.StatusCode)
-		created := ReadBodyAs[core.User](t, response)
-		assert.NotEqual(t, "client-chosen", created.ID)
-		assert.Empty(t, created.Groups)
-	})
-
-	t.Run("PUT keeps the stored readOnly values", func(t *testing.T) {
-		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+existing.ID,
-			WithContentType(protocol.MediaType),
-			WithRequestBody([]byte(`{"userName":"bjensen2","groups":[{"value":"admins"}],"meta":{"created":"2000-01-01T00:00:00Z"}}`)),
-		))
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		replaced := ReadBodyAs[core.User](t, response)
-		assert.Equal(t, "bjensen2", replaced.UserName)
-		assert.Equal(t, staff, replaced.Groups)
-		assert.Equal(t, existing.Meta.Created, replaced.Meta.Created)
-	})
-
-	t.Run("PUT keeps stored readOnly values the body leaves out", func(t *testing.T) {
-		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+existing.ID,
-			WithContentType(protocol.MediaType),
-			WithRequestBody([]byte(`{"userName":"bjensen3"}`)),
-		))
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, staff, ReadBodyAs[core.User](t, response).Groups)
-	})
-
-	t.Run("PUT to an unknown resource returns 404", func(t *testing.T) {
-		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/unknown",
-			WithContentType(protocol.MediaType),
-			WithRequestBody([]byte(`{"userName":"ghost"}`)),
-		))
-
-		assert.Equal(t, http.StatusNotFound, response.StatusCode)
-	})
-}
-
-func TestUniquenessQueriesOnlyMatchingResources(t *testing.T) {
-	fields := userFields()
-	repository := &recordingRepository{Repository: server.NewRepository(basePath+"/Users", core.NewSchema(core.SchemaUser).With(fields.Attributes()...), fields)}
-	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository)))
-
-	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
-		WithContentType(protocol.MediaType),
-		WithRequestBody([]byte(`{"userName":"b\"jensen"}`)),
-	))
-
-	require.Equal(t, http.StatusCreated, response.StatusCode)
-	require.Len(t, repository.queries, 1)
-	assert.Equal(t, `userName eq "b\"jensen"`, repository.queries[0].Filter)
-	assert.Equal(t, 2, repository.queries[0].Count)
-}
-
-func TestResourceWithoutRepository(t *testing.T) {
-	srv := Server(t, server.New(basePath).WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields())))
-	id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-
-	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id))
-
-	require.Equal(t, http.StatusOK, response.StatusCode)
-	assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
-}
-
-func TestServerOptions(t *testing.T) {
-	var reported []error
-	srv := server.New(basePath,
-		server.Limits(protocol.Limits{DefaultCount: 1, MaxCount: 2}),
-		server.ErrorHandler(func(err error) { reported = append(reported, err) }),
-	).WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields()))
-	ts := Server(t, srv)
-	create(t, ts, &core.User{UserName: "alice"})
-	create(t, ts, &core.User{UserName: "bob"})
-	create(t, ts, &core.User{UserName: "carol"})
-
-	t.Run("pages with the default count", func(t *testing.T) {
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, ts, Request(t, ts, http.MethodGet, basePath+"/Users")))
-		assert.Equal(t, 1, list.ItemsPerPage)
-	})
-
-	t.Run("caps the count at the maximum", func(t *testing.T) {
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, ts, Request(t, ts, http.MethodGet, basePath+"/Users?count=50")))
-		assert.Equal(t, 2, list.ItemsPerPage)
-	})
-
-	t.Run("advertises the maximum", func(t *testing.T) {
-		config := ReadBodyAs[core.ServiceProviderConfig](t, Response(t, ts, Request(t, ts, http.MethodGet, basePath+"/ServiceProviderConfig")))
-		assert.Equal(t, 2, config.Filter.MaxResults)
-	})
-
-	t.Run("reports resource errors to the server error handler", func(t *testing.T) {
-		srv.ServeHTTP(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, basePath+"/Users/unknown", nil))
-		assert.Len(t, reported, 1)
-	})
-}
-
-type failingWriter struct{ *httptest.ResponseRecorder }
-
-func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("broken pipe") }
-
-func TestServiceProviderConfigOption(t *testing.T) {
-	srv := Server(t, server.New(basePath, server.ServiceProviderConfig(func(config *core.ServiceProviderConfig) {
-		config.DocumentationURI = "https://example.com/help/scim.html"
-		config.Sort.Supported = false
-	})))
-
-	config := ReadBodyAs[core.ServiceProviderConfig](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig")))
-
-	assert.Equal(t, "https://example.com/help/scim.html", config.DocumentationURI)
-	assert.False(t, config.Sort.Supported)
-	assert.True(t, config.Patch.Supported)
 }

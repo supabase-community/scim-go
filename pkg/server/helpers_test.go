@@ -94,3 +94,11 @@ func ReadBodyAs[T any](t *testing.T, w *http.Response) T {
 	require.NoError(t, json.Unmarshal(body, &item))
 	return item
 }
+
+func keysOf(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}

@@ -132,10 +132,11 @@ func groupFields() server.Fields[*core.Group] {
 	)
 }
 
-func newTestServer(t *testing.T) *httptest.Server {
+func newTestServer(t *testing.T, options ...server.Option) *httptest.Server {
 	t.Helper()
 
-	srv := server.New(basePath, server.ErrorHandler(func(err error) { t.Errorf("%v\n", err) })).
+	options = append([]server.Option{server.ErrorHandler(func(err error) { t.Errorf("%v\n", err) })}, options...)
+	srv := server.New(basePath, options...).
 		WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithDescription("User Account").WithExtension(core.SchemaEnterpriseUser, enterpriseFields())).
 		WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())).
 		WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields())).
