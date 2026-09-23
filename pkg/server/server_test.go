@@ -1,10 +1,12 @@
 package server_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -389,22 +391,72 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[0].UserName)
 	})
 
-	t.Run("rejects eq and pr on a common attribute that has no accessor registered", func(t *testing.T) {
+	t.Run("filters by eq and pr on the common id attribute", func(t *testing.T) {
 		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "bob"})
 
-		path := basePath + "/Users?" + url.Values{"filter": {`id eq "x"`}}.Encode()
+		path := basePath + "/Users?" + url.Values{"filter": {`id eq "` + id + `"`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 
-		require.Equal(t, http.StatusBadRequest, response.StatusCode)
-		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "alice", list.Resources[0].UserName)
 
 		path = basePath + "/Users?" + url.Values{"filter": {`id pr`}}.Encode()
 		request = Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response = Response(t, srv, request)
 
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list = ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		assert.Equal(t, 2, list.TotalResults)
+	})
+
+	t.Run("rejects pr on a complex attribute that has no accessor of its own", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		path := basePath + "/Users?" + url.Values{"filter": {`name pr`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("rejects a value path filter whose inner expression is invalid", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		path := basePath + "/Users?" + url.Values{"filter": {`emails[bogus eq "x"]`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("filters by presence on the other common attributes", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", ExternalID: "ext-1"})
+		create(t, srv, &core.User{UserName: "bob"})
+
+		cases := map[string]int{
+			`externalId pr`:        1,
+			`meta.resourceType pr`: 2,
+			`meta.created pr`:      2,
+			`meta.lastModified pr`: 2,
+			`meta.version pr`:      2,
+			`meta.location pr`:     2,
+		}
+		for filterExpr, want := range cases {
+			path := basePath + "/Users?" + url.Values{"filter": {filterExpr}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode, "filter: %s", filterExpr)
+			assert.Equal(t, want, ReadBodyAs[protocol.ListResponse[*core.User]](t, response).TotalResults, "filter: %s", filterExpr)
+		}
 	})
 
 	t.Run("filters with the co, sw, and ew string operators", func(t *testing.T) {
@@ -501,16 +553,93 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a value-path filter on a multi-valued attribute as unsupported", func(t *testing.T) {
+	// 3.4.2.2 Value Filters
+	t.Run("filters using a value path expression on a multi-valued complex attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{
+			{Value: "a@work.com", Type: "work"},
+			{Value: "a@home.com", Type: "home"},
+		}})
+		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{
+			{Value: "b@home.com", Type: "home"},
+		}})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`emails[type eq "work"]`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 
-		require.Equal(t, http.StatusBadRequest, response.StatusCode)
-		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "alice", list.Resources[0].UserName)
+	})
+
+	t.Run("a value path filter with and requires both conditions on the same element", func(t *testing.T) {
+		srv := newTestServer(t)
+		alicePrimary := false
+		aliceHome := true
+		bobPrimary := true
+		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{
+			{Value: "a@work.com", Type: "work", Primary: &alicePrimary},
+			{Value: "a@home.com", Type: "home", Primary: &aliceHome},
+		}})
+		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{
+			{Value: "b@work.com", Type: "work", Primary: &bobPrimary},
+		}})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`emails[type eq "work" and primary eq true]`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "bob", list.Resources[0].UserName)
+	})
+
+	t.Run("a value path filter combines conditions with or", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
+		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{{Value: "b@other.com", Type: "other"}}})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`emails[type eq "work" or type eq "home"]`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "alice", list.Resources[0].UserName)
+	})
+
+	t.Run("a value path filter negates a condition with not", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
+		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{{Value: "b@work.com", Type: "work"}}})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`emails[not (type eq "home")]`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "bob", list.Resources[0].UserName)
+	})
+
+	t.Run("a value path filter tests presence within the element", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com"}}})
+		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{{Value: "b@work.com", Type: "work"}}})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`emails[type pr]`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "bob", list.Resources[0].UserName)
 	})
 
 	t.Run("filters an integer attribute with the ordering operators", func(t *testing.T) {
@@ -642,6 +771,24 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[2].UserName)
 	})
 
+	t.Run("sorts by the common id attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		first, _ := create(t, srv, &core.User{UserName: "alice"})
+		second, _ := create(t, srv, &core.User{UserName: "bob"})
+		want := []string{first, second}
+		slices.Sort(want)
+
+		path := basePath + "/Users?" + url.Values{"sortBy": {"id"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Len(t, list.Resources, 2)
+		assert.Equal(t, want[0], list.Resources[0].ID)
+		assert.Equal(t, want[1], list.Resources[1].ID)
+	})
+
 	t.Run("sorts by a nested sub-attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "u1", Name: core.Name{GivenName: "Zoe"}})
@@ -705,17 +852,6 @@ func TestRFC7644Sorting(t *testing.T) {
 		srv := newTestServer(t)
 
 		path := basePath + "/Users?" + url.Values{"sortBy": {"1bad"}}.Encode()
-		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusBadRequest, response.StatusCode)
-		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
-	})
-
-	t.Run("rejects sortBy on a common attribute that has no accessor registered", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		path := basePath + "/Users?" + url.Values{"sortBy": {"id"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 
@@ -891,6 +1027,22 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 			WithContentType(protocol.MediaType),
 			WithHeader("If-Match", etag),
 			WithRequestBody([]byte(`{not-json`)),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("rejects a replace with a JSON null body instead of panicking", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+		request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithHeader("If-Match", etag),
+			WithRequestBody([]byte(`null`)),
 		)
 		response := Response(t, srv, request)
 
