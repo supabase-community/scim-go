@@ -1,8 +1,21 @@
 version: "2"
-
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+    gofumpt:
+      extra:
+        group-params: true
+      module-path: github.com/supabase-community/scim-go
 linters:
   default: standard
   enable:
+    - bodyclose
+    - contextcheck
     - dupl
     - errname
     - errorlint
@@ -12,9 +25,12 @@ linters:
     - gocritic
     - gocyclo
     - gosec
+    - makezero
     - modernize
     - musttag
     - nestif
+    # - nilerr
+    - nolintlint
     - revive
     - testifylint
   settings:
@@ -38,6 +54,7 @@ linters:
     rules:
       - path: _test\.go
         linters:
+          - bodyclose
           - dupl
           - funlen
           - goconst
