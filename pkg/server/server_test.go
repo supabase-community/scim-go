@@ -1691,9 +1691,6 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 func TestRFC7643EnterpriseUserExtension(t *testing.T) {
 	srv := newTestServer(t)
 
-	// userFields() does not register EnterpriseUser, so it is unvalidated and
-	// unfilterable, but it still round-trips through Create/Get, since
-	// controller.go decodes/encodes the whole core.User via encoding/json.
 	id, _ := create(t, srv, &core.User{
 		UserName: "bjensen",
 		EnterpriseUser: &core.EnterpriseUser{
