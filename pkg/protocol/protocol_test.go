@@ -37,7 +37,7 @@ func TestSend(t *testing.T) {
 	t.Run("answers with an internal error instead of an empty 200 when the value cannot be encoded", func(t *testing.T) {
 		w := httptest.NewRecorder()
 
-		require.NoError(t, protocol.Send(w, http.StatusOK, func() {}))
+		require.Error(t, protocol.Send(w, http.StatusOK, func() {}))
 
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 		assert.NotEmpty(t, w.Body.String())
@@ -71,9 +71,11 @@ func TestSendError(t *testing.T) {
 
 	t.Run("reports an error it does not recognise without disclosing it", func(t *testing.T) {
 		w := httptest.NewRecorder()
+		cause := errors.New("pq: password authentication failed for user")
 
-		require.NoError(t, protocol.SendError(w, errors.New("pq: password authentication failed for user")))
+		err := protocol.SendError(w, cause)
 
+		require.ErrorIs(t, err, cause)
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 		assert.Equal(t, protocol.MediaType, w.Header().Get("Content-Type"))
 		assert.NotContains(t, w.Body.String(), "password")

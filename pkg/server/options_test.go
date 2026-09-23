@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
@@ -26,6 +28,38 @@ func TestErrorHandlerOption(t *testing.T) {
 	srv.ServeHTTP(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, basePath+"/Users/unknown", nil))
 
 	assert.Len(t, reported, 1)
+}
+
+type failingRepository struct{ cause error }
+
+func (r failingRepository) List(context.Context, *protocol.SearchRequest) ([]*core.User, int, error) {
+	return nil, 0, r.cause
+}
+
+func (r failingRepository) Get(context.Context, string) (*core.User, error) { return nil, r.cause }
+
+func (r failingRepository) Create(context.Context, *core.User) (*core.User, error) {
+	return nil, r.cause
+}
+
+func (r failingRepository) Replace(context.Context, *core.User) (*core.User, error) {
+	return nil, r.cause
+}
+
+func (r failingRepository) Delete(context.Context, string, string) error { return r.cause }
+
+func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T) {
+	cause := errors.New("pgx: connection pool timeout")
+	var reported error
+	srv := Server(t, server.New(fullServiceProviderConfig(),
+		server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
+		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields()).WithRepository(failingRepository{cause: cause})),
+	))
+
+	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users"))
+
+	require.Equal(t, http.StatusInternalServerError, response.StatusCode)
+	assert.ErrorIs(t, reported, cause)
 }
 
 func TestWithRepository(t *testing.T) {

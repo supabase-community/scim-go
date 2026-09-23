@@ -35,10 +35,8 @@ func Send(w http.ResponseWriter, status int, obj any) error {
 
 // SendError answers the request with err in the error form of RFC 7644, Section 3.12.
 func SendError(w http.ResponseWriter, err error) error {
-	var scimErr *scimerrors.Error
-	if !errors.As(err, &scimErr) {
-		scimErr = scimerrors.ErrInternal("Internal server error")
+	if scimErr, ok := errors.AsType[*scimerrors.Error](err); ok {
+		return Send(w, scimErr.StatusCode(), scimErr)
 	}
-
-	return Send(w, scimErr.StatusCode(), scimErr)
+	return errors.Join(err, Send(w, http.StatusInternalServerError, scimerrors.ErrInternal("Internal server error")))
 }

@@ -21,7 +21,7 @@ type Server struct {
 
 type Option[T any] func(T)
 
-// ErrorHandler receives the request and error the server could not send to the client.
+// ErrorHandler receives the request and the error the server hit while handling it.
 func ErrorHandler(fn func(*http.Request, error)) Option[*Server] {
 	return func(s *Server) { s.errorHandler = fn }
 }
