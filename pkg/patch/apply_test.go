@@ -100,6 +100,44 @@ func TestApplyValuePathReplaceSub(t *testing.T) {
 	assert.Equal(t, "h@x", emails[1].(map[string]any)["value"])
 }
 
+func TestApplyPrimaryDemotesTheOtherValues(t *testing.T) {
+	primaries := func(item core.Object) []any {
+		emails := item["emails"].([]any)
+		values := make([]any, len(emails))
+		for i, email := range emails {
+			values[i] = email.(map[string]any)["primary"]
+		}
+		return values
+	}
+
+	t.Run("when a value path sets primary", func(t *testing.T) {
+		item := core.Object{"emails": []any{
+			map[string]any{"type": "work", "primary": true},
+			map[string]any{"type": "home"},
+		}}
+
+		require.NoError(t, apply(item, nil, operation(patch.OpReplace, `emails[type eq "home"].primary`, `true`)))
+
+		assert.Equal(t, []any{false, true}, primaries(item))
+	})
+
+	t.Run("when an added value is primary", func(t *testing.T) {
+		item := core.Object{"emails": []any{map[string]any{"type": "work", "primary": true}}}
+
+		require.NoError(t, apply(item, nil, operation(patch.OpAdd, "emails", `[{"type":"home","primary":true}]`)))
+
+		assert.Equal(t, []any{false, true}, primaries(item))
+	})
+
+	t.Run("but keeps two primaries the client sent in one value", func(t *testing.T) {
+		item := core.Object{"emails": []any{}}
+
+		require.NoError(t, apply(item, nil, operation(patch.OpAdd, "emails", `[{"primary":true},{"primary":true}]`)))
+
+		assert.Equal(t, []any{true, true}, primaries(item))
+	})
+}
+
 func TestApplyValuePathRemoveElement(t *testing.T) {
 	item := map[string]any{"emails": []any{
 		map[string]any{"type": "work", "value": "w@x"},

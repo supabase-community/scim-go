@@ -2048,6 +2048,18 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("sets primary to false on the other values when a value becomes primary", func(t *testing.T) {
+		srv := newTestServer(t)
+		primary := true
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com", Type: "work", Primary: &primary}}})
+
+		patched := patchUser(t, srv, id, patch.Operation{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"b@example.com","type":"home","primary":true}]`)})
+
+		require.Len(t, patched.Emails, 2)
+		assert.False(t, *patched.Emails[0].Primary)
+		assert.True(t, *patched.Emails[1].Primary)
+	})
 }
 
 // RFC 7644 3.5.2.1 Add Operation
