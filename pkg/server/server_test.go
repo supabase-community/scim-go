@@ -104,6 +104,15 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_token"`)
 	})
 
+	t.Run("rejects a Bearer scheme without a token with invalid_request", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithHeader("Authorization", "Bearer")))
+
+		assert.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_request"`)
+	})
+
 	t.Run("hides why the token is invalid behind a fixed description", func(t *testing.T) {
 		srv := bearerServer(t, func(ctx context.Context, _ string) (context.Context, error) {
 			return ctx, fmt.Errorf("%w: expired at noon", server.ErrInvalidToken)

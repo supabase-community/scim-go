@@ -23,11 +23,17 @@ type TokenValidator func(ctx context.Context, token string) (context.Context, er
 func RequireBearerToken(validate TokenValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			scheme, token, hasScheme := strings.Cut(r.Header.Get("Authorization"), " ")
+			scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
 
-			if !hasScheme || !strings.EqualFold(scheme, "Bearer") {
+			if !strings.EqualFold(scheme, "Bearer") {
 				w.Header().Set("WWW-Authenticate", "Bearer")
 				_ = protocol.SendError(w, scimerrors.ErrUnauthorized("authentication required"))
+				return
+			}
+
+			if token == "" {
+				challenge(w, "invalid_request", "missing bearer token")
+				_ = protocol.SendError(w, scimerrors.ErrInvalidSyntax("missing bearer token"))
 				return
 			}
 
