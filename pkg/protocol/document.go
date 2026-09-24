@@ -23,7 +23,10 @@ func toDocument(resource any) (map[string]any, error) {
 // RFC 7644 Section 3.3: the request body MUST be a JSON object.
 func readDocument(r io.Reader) (map[string]any, error) {
 	document, err := Decode[map[string]any](r)
-	if err != nil || document == nil {
+	if err != nil {
+		return nil, err
+	}
+	if document == nil {
 		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
 	}
 	return document, nil

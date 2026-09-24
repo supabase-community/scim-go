@@ -16,8 +16,12 @@ type Server struct {
 	schemas       []*core.Schema
 	config        *core.ServiceProviderConfig
 	limits        protocol.Limits
+	maxBodySize   int64
+	registrations []Registration
 	errorHandler  func(*http.Request, error)
 }
+
+const DefaultMaxBodySize = 1 << 20
 
 type Option[T any] func(T)
 
@@ -31,13 +35,13 @@ func DefaultCount(n int) Option[*Server] {
 	return func(s *Server) { s.limits.DefaultCount = n }
 }
 
+// MaxBodySize caps the request body; larger bodies get 413, per RFC 7644, Section 3.12.
+func MaxBodySize(n int64) Option[*Server] {
+	return func(s *Server) { s.maxBodySize = n }
+}
+
 func WithResource(resource Registration) Option[*Server] {
-	return func(s *Server) {
-		schemas := resource.schemas(s.basePath)
-		s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
-		s.schemas = append(s.schemas, schemas...)
-		resource.mount(s, schemas)
-	}
+	return func(s *Server) { s.registrations = append(s.registrations, resource) }
 }
 
 // WithAuthentication advertises and enforces scheme, per RFC 7643, Section 5.
@@ -56,10 +60,14 @@ func New(config *core.ServiceProviderConfig, options ...Option[*Server]) *Server
 		basePath:     config.BasePath(),
 		config:       config,
 		limits:       limitsFrom(config),
+		maxBodySize:  DefaultMaxBodySize,
 		errorHandler: func(*http.Request, error) {},
 	}
 	for _, option := range options {
 		option(s)
+	}
+	for _, resource := range s.registrations {
+		s.mount(resource)
 	}
 
 	mux.HandleFunc("GET "+s.basePath+"/ServiceProviderConfig", s.handle(s.serviceProviderConfig))
@@ -80,8 +88,17 @@ func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
 	return limits
 }
 
+func (s *Server) mount(resource Registration) {
+	schemas := resource.schemas(s.basePath)
+	s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
+	s.schemas = append(s.schemas, schemas...)
+	resource.mount(s, schemas)
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.handler.ServeHTTP(w, withReporter(r, s.errorHandler))
+	r = withReporter(r, s.errorHandler)
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodySize)
+	s.handler.ServeHTTP(w, r)
 }
 
 func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {

@@ -2,6 +2,8 @@ package protocol
 
 import (
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/filter"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 // SortOrder is the direction a sort runs in, per RFC 7644, Section 3.4.2.3.
@@ -34,6 +36,40 @@ func (s *SearchRequest) Offset() int {
 
 func (s *SearchRequest) Descending() bool {
 	return s.SortOrder == SortDescending
+}
+
+// Validate rejects a malformed filter or an unknown sortBy, per RFC 7644, Section 3.4.2.
+func (s *SearchRequest) Validate(schemas core.Schemas) error {
+	if s.Filter != "" {
+		if _, err := filter.Parse(s.Filter); err != nil {
+			return scimerrors.ErrInvalidFilter(err.Error())
+		}
+	}
+	if s.SortBy != "" {
+		_, _, err := s.SortAttribute(schemas)
+		return err
+	}
+	return nil
+}
+
+// SortAttribute resolves sortBy to its attribute and that attribute's parent, per RFC 7644, Section 3.4.2.3.
+func (s *SearchRequest) SortAttribute(schemas core.Schemas) (parent, attribute *core.Attribute, err error) {
+	path, err := filter.NewAttrPath(s.SortBy)
+	if err != nil {
+		return nil, nil, scimerrors.ErrInvalidValue(err.Error())
+	}
+	parent, ok := schemas.Resolve(core.SchemaURI(path.URI), path.Name, "")
+	if !ok {
+		return nil, nil, scimerrors.ErrInvalidValue("Unknown sortBy")
+	}
+	attribute = parent
+	if path.SubAttribute != "" {
+		attribute = parent.SubAttribute(path.SubAttribute)
+	}
+	if attribute == nil {
+		return nil, nil, scimerrors.ErrInvalidValue("Unknown sortBy")
+	}
+	return parent, attribute, nil
 }
 
 func (s *SearchRequest) Projection(schemas core.Schemas) (Projection, error) {

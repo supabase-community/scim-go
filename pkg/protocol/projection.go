@@ -152,6 +152,9 @@ func (n names) within(name string) bool {
 }
 
 func (p Projection) project(key string, value any) (any, bool) {
+	if p.schemas == nil {
+		return value, true
+	}
 	base := p.schemas.Base()
 	if attribute, ok := p.schemas.Resolve("", key, ""); ok {
 		return p.value(attribute, qualifiedKey(base.ID, attribute.Name), value)

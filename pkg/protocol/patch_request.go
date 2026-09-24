@@ -2,7 +2,9 @@ package protocol
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
+	"net/http"
 	"slices"
 	"strconv"
 	"strings"
@@ -67,6 +69,9 @@ func Decode[T any](body io.Reader) (T, error) {
 	decoder := json.NewDecoder(body)
 	decoder.UseNumber()
 	if err := decoder.Decode(&req); err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return req, scimerrors.ErrTooLarge("request body is too large")
+		}
 		return req, scimerrors.ErrInvalidSyntax("request body is not valid JSON")
 	}
 	return req, nil

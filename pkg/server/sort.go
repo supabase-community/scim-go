@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -21,19 +20,9 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
 		return matching, nil
 	}
 
-	path, err := filter.NewAttrPath(query.SortBy)
+	parent, attribute, err := query.SortAttribute(r.schemas)
 	if err != nil {
-		return []T{}, scimerrors.ErrInvalidValue(err.Error())
-	}
-
-	parent, ok := r.schemas.Resolve(core.SchemaURI(path.URI), path.Name, "")
-	if !ok {
-		return []T{}, scimerrors.ErrInvalidValue("Unknown sortBy")
-	}
-
-	attribute := parent
-	if path.SubAttribute != "" {
-		attribute = parent.SubAttribute(path.SubAttribute)
+		return []T{}, err
 	}
 
 	key, ok := r.sortKey(parent, attribute)

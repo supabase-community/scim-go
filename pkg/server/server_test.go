@@ -1795,6 +1795,19 @@ func TestRFC7644ETags(t *testing.T) {
 		assert.Equal(t, response.Header.Get("ETag"), replaced.Meta.Version)
 	})
 
+	t.Run("If-Match * matches any version", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithHeader("If-Match", "*"),
+		)
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusNoContent, response.StatusCode)
+	})
+
 	t.Run("advertises etag support in ServiceProviderConfig", func(t *testing.T) {
 		srv := newTestServer(t)
 

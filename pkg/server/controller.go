@@ -46,6 +46,9 @@ func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	if err := query.Validate(c.schemas); err != nil {
+		return protocol.SendError(w, err)
+	}
 	projection, err := query.Projection(c.schemas)
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -161,8 +164,9 @@ func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
 }
 
 func (c *controller[T]) ifMatch(r *http.Request) string {
-	if !c.config.SupportsVersioning() {
+	match := r.Header.Get("If-Match")
+	if !c.config.SupportsVersioning() || match == "*" {
 		return ""
 	}
-	return r.Header.Get("If-Match")
+	return match
 }

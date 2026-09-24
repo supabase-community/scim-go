@@ -11,7 +11,7 @@ type Field[T any] struct {
 }
 
 func NewField[T any](attribute *core.Attribute, accessor Accessor[T]) *Field[T] {
-	return &Field[T]{Attribute: attribute, accessor: accessor}
+	return &Field[T]{Attribute: attribute, accessor: normalized(accessor)}
 }
 
 func (f *Field[T]) With(children ...*Field[T]) *Field[T] {

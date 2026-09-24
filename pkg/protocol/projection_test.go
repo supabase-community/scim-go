@@ -164,6 +164,13 @@ func TestProjection(t *testing.T) {
 	})
 }
 
+func TestZeroProjection(t *testing.T) {
+	raw, err := json.Marshal(protocol.Projection{}.Of(map[string]any{"id": "2819c223", "userName": "bjensen"}))
+
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"id":"2819c223","userName":"bjensen"}`, string(raw))
+}
+
 func TestProjectionAll(t *testing.T) {
 	schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString))}
 	projection, err := protocol.ParseProjection(url.Values{"attributes": {"userName"}}, schemas)

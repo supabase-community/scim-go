@@ -62,6 +62,47 @@ func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T)
 	assert.ErrorIs(t, reported, cause)
 }
 
+func TestDefaultCountAfterWithResource(t *testing.T) {
+	srv := Server(t, server.New(fullServiceProviderConfig(),
+		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields())),
+		server.DefaultCount(1),
+	))
+	for _, name := range []string{"bjensen", "jsmith"} {
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: name})))
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+	}
+
+	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users"))
+
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).ItemsPerPage)
+}
+
+func TestMaxBodySize(t *testing.T) {
+	srv := Server(t, server.New(fullServiceProviderConfig(),
+		server.MaxBodySize(16),
+		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields())),
+	))
+
+	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode)
+}
+
+func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
+	srv := Server(t, server.New(fullServiceProviderConfig(),
+		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields()).WithRepository(failingRepository{cause: errors.New("unreachable")})),
+	))
+
+	for _, query := range []string{"filter=((garbage", "sortBy=unknown"} {
+		t.Run(query, func(t *testing.T) {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?"+query))
+
+			assert.Equal(t, http.StatusBadRequest, response.StatusCode)
+		})
+	}
+}
+
 func TestWithRepository(t *testing.T) {
 	fields := userFields()
 	repository := server.NewRepository(basePath+"/Users", []*core.Schema{core.NewSchema(core.SchemaUser).With(fields.Attributes()...)}, fields)

@@ -166,6 +166,28 @@ func TestSearchRequest(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("validates its filter and sortBy", func(t *testing.T) {
+		schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("userName", core.TypeString),
+			core.NewAttribute("name", core.TypeComplex).With(core.NewAttribute("givenName", core.TypeString)),
+		)}
+		tt := []struct {
+			request protocol.SearchRequest
+			valid   bool
+		}{
+			{protocol.SearchRequest{}, true},
+			{protocol.SearchRequest{Filter: `userName eq "bjensen"`, SortBy: "name.givenName"}, true},
+			{protocol.SearchRequest{Filter: `userName eq`}, false},
+			{protocol.SearchRequest{SortBy: "1bad"}, false},
+			{protocol.SearchRequest{SortBy: "nickName"}, false},
+			{protocol.SearchRequest{SortBy: "name.familyName"}, false},
+		}
+		for _, tc := range tt {
+			err := tc.request.Validate(schemas)
+			assert.Equal(t, tc.valid, err == nil, "%+v", tc.request)
+		}
+	})
+
 	t.Run("serializes as the SearchRequest of RFC 7644, Section 3.4.3", func(t *testing.T) {
 		request := &protocol.SearchRequest{
 			Schemas:            []core.SchemaURI{protocol.SchemaSearchRequest},
