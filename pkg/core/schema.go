@@ -20,20 +20,8 @@ func NewSchema(id SchemaURI) *Schema {
 	}
 }
 
-func (s *Schema) Resolve(name string) (*Attribute, bool) {
-	attribute := commonAttributes.Lookup(name)
-	if attribute == nil && s != nil {
-		attribute = s.Attributes.Lookup(name)
-	}
-	return attribute, attribute != nil
-}
-
-func (s *Schema) ResourceID() string {
-	return string(s.ID)
-}
-
-func (s *Schema) With(attributes ...*Attribute) *Schema {
-	s.Attributes = attributes
+func (s *Schema) WithName(name ResourceTypeName) *Schema {
+	s.Name = name
 	return s
 }
 
@@ -47,7 +35,19 @@ func (s *Schema) WithLocation(location string) *Schema {
 	return s
 }
 
-func (s *Schema) WithName(name ResourceTypeName) *Schema {
-	s.Name = name
+func (s *Schema) With(attributes ...*Attribute) *Schema {
+	s.Attributes = attributes
 	return s
+}
+
+func (s *Schema) ResourceID() string {
+	return string(s.ID)
+}
+
+func (s *Schema) Resolve(name string) (*Attribute, bool) {
+	attribute := commonAttributes.Lookup(name)
+	if attribute == nil && s != nil {
+		attribute = s.Attributes.Lookup(name)
+	}
+	return attribute, attribute != nil
 }

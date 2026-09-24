@@ -37,8 +37,23 @@ func NewMultiValuedAttribute(name string, types ...string) *Attribute {
 	)
 }
 
+func (a *Attribute) AsRequired() *Attribute {
+	a.Required = true
+	return a
+}
+
+func (a *Attribute) AsMultiValued() *Attribute {
+	a.MultiValued = true
+	return a
+}
+
 func (a *Attribute) AsCaseExact() *Attribute {
 	a.CaseExact = true
+	return a
+}
+
+func (a *Attribute) DescribedAs(description string) *Attribute {
+	a.Description = description
 	return a
 }
 
@@ -48,19 +63,9 @@ func (a *Attribute) AsImmutable() *Attribute {
 	return a
 }
 
-func (a *Attribute) AsMultiValued() *Attribute {
-	a.MultiValued = true
-	return a
-}
-
 // AsReadOnly sets "mutability" to "readOnly", per RFC 7643, Section 7.
 func (a *Attribute) AsReadOnly() *Attribute {
 	a.Mutability = MutabilityReadOnly
-	return a
-}
-
-func (a *Attribute) AsRequired() *Attribute {
-	a.Required = true
 	return a
 }
 
@@ -70,37 +75,21 @@ func (a *Attribute) AsWriteOnly() *Attribute {
 	return a
 }
 
-func (a *Attribute) Coerce(value any) (any, bool) {
-	if value == nil {
-		return nil, true
-	}
-	return a.Type.coerce(value)
-}
-
-func (a *Attribute) DescribedAs(description string) *Attribute {
-	a.Description = description
-	return a
-}
-
-// Referencing sets "referenceTypes", per RFC 7643, Section 7.
-func (a *Attribute) Referencing(referenceTypes ...ReferenceType) *Attribute {
-	a.ReferenceTypes = referenceTypes
-	return a
-}
-
 // ReturnedAs sets "returned", per RFC 7643, Section 7.
 func (a *Attribute) ReturnedAs(returned Returned) *Attribute {
 	a.Returned = returned
 	return a
 }
 
-func (a *Attribute) SubAttribute(name string) *Attribute {
-	return a.SubAttributes.Lookup(name)
-}
-
 // Suggesting sets "canonicalValues", per RFC 7643, Section 7.
 func (a *Attribute) Suggesting(values ...string) *Attribute {
 	a.CanonicalValues = values
+	return a
+}
+
+// Referencing sets "referenceTypes", per RFC 7643, Section 7.
+func (a *Attribute) Referencing(referenceTypes ...ReferenceType) *Attribute {
+	a.ReferenceTypes = referenceTypes
 	return a
 }
 
@@ -112,4 +101,15 @@ func (a *Attribute) UniqueOn(uniqueness Uniqueness) *Attribute {
 func (a *Attribute) With(subAttributes ...*Attribute) *Attribute {
 	a.SubAttributes = subAttributes
 	return a
+}
+
+func (a *Attribute) SubAttribute(name string) *Attribute {
+	return a.SubAttributes.Lookup(name)
+}
+
+func (a *Attribute) Coerce(value any) (any, bool) {
+	if value == nil {
+		return nil, true
+	}
+	return a.Type.coerce(value)
 }

@@ -8,14 +8,6 @@ type Base struct {
 	Meta       Meta        `json:"meta"`
 }
 
-func (b *Base) GetExternalID() string {
-	return b.ExternalID
-}
-
-func (b *Base) GetMeta() Meta {
-	return b.Meta
-}
-
 func (b *Base) ResourceID() string {
 	return b.ID
 }
@@ -24,10 +16,18 @@ func (b *Base) SetID(id string) {
 	b.ID = id
 }
 
-func (b *Base) SetMeta(meta Meta) {
-	b.Meta = meta
-}
-
 func (b *Base) SetSchemas(schemas []SchemaURI) {
 	b.Schemas = schemas
+}
+
+func (b *Base) GetExternalID() string {
+	return b.ExternalID
+}
+
+func (b *Base) GetMeta() Meta {
+	return b.Meta
+}
+
+func (b *Base) SetMeta(meta Meta) {
+	b.Meta = meta
 }

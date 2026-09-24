@@ -14,11 +14,9 @@ func NewNode(raw peg.ASTNode) *Node {
 	return &Node{raw: token}
 }
 
-func (n *Node) AttrPath() AttrPath {
-	if n.HasPath() {
-		return newAttrPath(n.Path())
-	}
-	return newAttrPath(n.Attribute())
+func (n *Node) Operator() string {
+	s, _ := n.raw["operator"].(string)
+	return s
 }
 
 func (n *Node) Attribute() string {
@@ -26,12 +24,15 @@ func (n *Node) Attribute() string {
 	return s
 }
 
-func (n *Node) HasPath() bool {
-	return n.hasKey("path")
+func (n *Node) AttrPath() AttrPath {
+	if n.HasPath() {
+		return newAttrPath(n.Path())
+	}
+	return newAttrPath(n.Attribute())
 }
 
-func (n *Node) Left() *Node {
-	return NewNode(n.raw["left"])
+func (n *Node) Value() any {
+	return n.raw["value"]
 }
 
 func (n *Node) Not() bool {
@@ -42,9 +43,16 @@ func (n *Node) Operand() *Node {
 	return NewNode(n.raw["not"])
 }
 
-func (n *Node) Operator() string {
-	s, _ := n.raw["operator"].(string)
-	return s
+func (n *Node) Left() *Node {
+	return NewNode(n.raw["left"])
+}
+
+func (n *Node) Right() *Node {
+	return NewNode(n.raw["right"])
+}
+
+func (n *Node) HasPath() bool {
+	return n.hasKey("path")
 }
 
 func (n *Node) Path() string {
@@ -52,21 +60,13 @@ func (n *Node) Path() string {
 	return s
 }
 
-func (n *Node) Right() *Node {
-	return NewNode(n.raw["right"])
+func (n *Node) ValueFilter() *Node {
+	return NewNode(n.raw["value_filter"])
 }
 
 func (n *Node) SubAttribute() string {
 	s, _ := n.raw["sub_attribute"].(string)
 	return s
-}
-
-func (n *Node) Value() any {
-	return n.raw["value"]
-}
-
-func (n *Node) ValueFilter() *Node {
-	return NewNode(n.raw["value_filter"])
 }
 
 func (n *Node) hasKey(key string) bool {
