@@ -26,9 +26,9 @@ func (n *Node) Attribute() string {
 
 func (n *Node) AttrPath() AttrPath {
 	if n.HasPath() {
-		return newAttrPath(n.Path())
+		return splitAttrPath(n.Path())
 	}
-	return newAttrPath(n.Attribute())
+	return splitAttrPath(n.Attribute())
 }
 
 func (n *Node) Value() any {

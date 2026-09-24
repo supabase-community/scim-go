@@ -25,7 +25,7 @@ func NewPath(text string) (Path, error) {
 		return Path{}, newParseError(text, 0)
 	}
 	path := Path{
-		AttrPath:    newAttrPath(node.Path()),
+		AttrPath:    splitAttrPath(node.Path()),
 		ValueFilter: node.ValueFilter(),
 	}
 	if sub := node.SubAttribute(); sub != "" {

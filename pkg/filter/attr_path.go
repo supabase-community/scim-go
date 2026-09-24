@@ -14,10 +14,10 @@ func NewAttrPath(text string) (AttrPath, error) {
 	if err != nil {
 		return AttrPath{}, err
 	}
-	return newAttrPath(raw.(string)), nil
+	return splitAttrPath(raw.(string)), nil
 }
 
-func newAttrPath(raw string) AttrPath {
+func splitAttrPath(raw string) AttrPath {
 	var path AttrPath
 	if i := strings.LastIndex(raw, ":"); i >= 0 {
 		path.URI, raw = raw[:i], raw[i+1:]
