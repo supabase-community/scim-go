@@ -67,67 +67,9 @@ func (g *grammar) Parse(text string) (*Node, error) {
 	return node, nil
 }
 
-func (g *grammar) run(text string, p peg.Parser) (peg.ASTNode, error) {
-	if g.exceedsMax(text) {
-		return nil, ErrInputTooLarge
-	}
-	ctx := peg.NewContext(text)
-	raw, err := p(ctx)
-	if err != nil || ctx.Position() != len(text) {
-		return nil, newParseError(text, ctx.Position())
-	}
-	return raw, nil
-}
-
-func (g *grammar) exceedsMax(text string) bool {
-	return g.maxInputBytes > 0 && len(text) > g.maxInputBytes
-}
-
-// logExp = FILTER SP "or" SP FILTER (loosest precedence, right-associative).
-func (g *grammar) or(left, filter peg.Parser) peg.Parser {
-	return binaryExpression(left, peg.Fold("or"), "or", filter)
-}
-
 // logExp = FILTER SP "and" SP FILTER (binds tighter than "or").
 func (g *grammar) and(atom, self peg.Parser) peg.Parser {
 	return binaryExpression(atom, peg.Fold("and"), "and", self)
-}
-
-// *1"not" "(" sub ")": an optional negation around a parenthesized sub-filter.
-func (g *grammar) parenGroup(sub peg.Parser) peg.Parser {
-	return func(c *peg.Context) (peg.ASTNode, error) {
-		start := c.Position()
-		_, err := peg.Sequence(peg.Fold("not"), peg.Optional(peg.Space()))(c)
-		negated := err == nil
-		if _, err := peg.Str("(")(c); err != nil {
-			c.Seek(start)
-			return nil, err
-		}
-		inner, err := sub(c)
-		if err != nil {
-			c.Seek(start)
-			return nil, err
-		}
-		if _, err := peg.Str(")")(c); err != nil {
-			c.Seek(start)
-			return nil, err
-		}
-		if !negated {
-			return inner, nil
-		}
-		return peg.Token{"not": inner}, nil
-	}
-}
-
-// valuePath = attrPath "[" valFilter "]" [subAttr]
-func (g *grammar) valuePath(valueFilter peg.Parser) peg.Parser {
-	return peg.Sequence(
-		peg.Tag("path", g.attributePath()),
-		peg.Str("["),
-		peg.Tag("value_filter", valueFilter),
-		peg.Str("]"),
-		peg.Optional(peg.Tag("sub_attribute", g.subAttribute())),
-	)
 }
 
 // attrExp = (attrPath SP "pr") / (attrPath SP compareOp SP compValue)
@@ -144,6 +86,35 @@ func (g *grammar) attributeExpression() peg.Parser {
 			peg.Tag("value", g.comparisonValue()),
 		),
 	)
+}
+
+// ATTRNAME = ALPHA *(nameChar)
+func (g *grammar) attributeName() peg.Parser {
+	return peg.Match(reAttributeName)
+}
+
+// attrPath = [URI ":"] ATTRNAME *1subAttr
+func (g *grammar) attributePath() peg.Parser {
+	attrName := g.attributeName()
+	schemaURI := g.schemaURI()
+	subAttr := g.subAttribute()
+	return func(c *peg.Context) (peg.ASTNode, error) {
+		start := c.Position()
+		prefix := ""
+		if uri, err := schemaURI(c); err == nil {
+			prefix = uri.(string) + ":"
+		}
+		name, err := attrName(c)
+		if err != nil {
+			c.Seek(start)
+			return nil, err
+		}
+		path := prefix + name.(string)
+		if sub, err := subAttr(c); err == nil {
+			path += "." + sub.(string)
+		}
+		return path, nil
+	}
 }
 
 // compareOp = "eq" / "ne" / "co" / "sw" / "ew" / "gt" / "lt" / "ge" / "le"
@@ -173,33 +144,58 @@ func (g *grammar) comparisonValue() peg.Parser {
 	)
 }
 
-// attrPath = [URI ":"] ATTRNAME *1subAttr
-func (g *grammar) attributePath() peg.Parser {
-	attrName := g.attributeName()
-	schemaURI := g.schemaURI()
-	subAttr := g.subAttribute()
+func (g *grammar) exceedsMax(text string) bool {
+	return g.maxInputBytes > 0 && len(text) > g.maxInputBytes
+}
+
+// logExp = FILTER SP "or" SP FILTER (loosest precedence, right-associative).
+func (g *grammar) or(left, filter peg.Parser) peg.Parser {
+	return binaryExpression(left, peg.Fold("or"), "or", filter)
+}
+
+// *1"not" "(" sub ")": an optional negation around a parenthesized sub-filter.
+func (g *grammar) parenGroup(sub peg.Parser) peg.Parser {
 	return func(c *peg.Context) (peg.ASTNode, error) {
 		start := c.Position()
-		prefix := ""
-		if uri, err := schemaURI(c); err == nil {
-			prefix = uri.(string) + ":"
+		_, err := peg.Sequence(peg.Fold("not"), peg.Optional(peg.Space()))(c)
+		negated := err == nil
+		if _, err := peg.Str("(")(c); err != nil {
+			c.Seek(start)
+			return nil, err
 		}
-		name, err := attrName(c)
+		inner, err := sub(c)
 		if err != nil {
 			c.Seek(start)
 			return nil, err
 		}
-		path := prefix + name.(string)
-		if sub, err := subAttr(c); err == nil {
-			path += "." + sub.(string)
+		if _, err := peg.Str(")")(c); err != nil {
+			c.Seek(start)
+			return nil, err
 		}
-		return path, nil
+		if !negated {
+			return inner, nil
+		}
+		return peg.Token{"not": inner}, nil
 	}
 }
 
-// ATTRNAME = ALPHA *(nameChar)
-func (g *grammar) attributeName() peg.Parser {
-	return peg.Match(reAttributeName)
+func (g *grammar) run(text string, p peg.Parser) (peg.ASTNode, error) {
+	if g.exceedsMax(text) {
+		return nil, ErrInputTooLarge
+	}
+	ctx := peg.NewContext(text)
+	raw, err := p(ctx)
+	if err != nil || ctx.Position() != len(text) {
+		return nil, newParseError(text, ctx.Position())
+	}
+	return raw, nil
+}
+
+// URI ":" prefix on an attrPath. The trailing ":" is stripped from the value.
+func (g *grammar) schemaURI() peg.Parser {
+	return convert(peg.Match(reSchemaURI), func(s string) (peg.ASTNode, error) {
+		return s[:len(s)-1], nil
+	})
 }
 
 // subAttr = "." ATTRNAME
@@ -219,11 +215,15 @@ func (g *grammar) subAttribute() peg.Parser {
 	}
 }
 
-// URI ":" prefix on an attrPath. The trailing ":" is stripped from the value.
-func (g *grammar) schemaURI() peg.Parser {
-	return convert(peg.Match(reSchemaURI), func(s string) (peg.ASTNode, error) {
-		return s[:len(s)-1], nil
-	})
+// valuePath = attrPath "[" valFilter "]" [subAttr]
+func (g *grammar) valuePath(valueFilter peg.Parser) peg.Parser {
+	return peg.Sequence(
+		peg.Tag("path", g.attributePath()),
+		peg.Str("["),
+		peg.Tag("value_filter", valueFilter),
+		peg.Str("]"),
+		peg.Optional(peg.Tag("sub_attribute", g.subAttribute())),
+	)
 }
 
 func binaryExpression(left, op peg.Parser, name string, right peg.Parser) peg.Parser {

@@ -70,11 +70,6 @@ func listParam(values url.Values, name string) []string {
 	return list
 }
 
-// Of renders resource through the projection when the result is marshaled to JSON.
-func (p Projection) Of(resource any) json.Marshaler {
-	return projected{projection: p, resource: resource}
-}
-
 // All renders each of resources through the projection when the result is marshaled to JSON.
 func (p Projection) All[T any](resources []T) []json.Marshaler {
 	out := make([]json.Marshaler, len(resources))
@@ -82,6 +77,11 @@ func (p Projection) All[T any](resources []T) []json.Marshaler {
 		out[i] = p.Of(resource)
 	}
 	return out
+}
+
+// Of renders resource through the projection when the result is marshaled to JSON.
+func (p Projection) Of(resource any) json.Marshaler {
+	return projected{projection: p, resource: resource}
 }
 
 type projected struct {
@@ -107,26 +107,30 @@ func (v projected) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
+func (p Projection) extension(schema *core.Schema, value any) (any, bool) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	out := map[string]any{}
+	for key, item := range object {
+		attribute := schema.Attributes.Lookup(key)
+		if attribute == nil {
+			continue
+		}
+		if projected, ok := p.value(attribute, qualifiedKey(schema.ID, attribute.Name), item); ok {
+			out[key] = projected
+		}
+	}
+	return out, len(out) > 0
+}
+
 func (p Projection) fillResourceType(document map[string]any) {
 	if meta, ok := document["meta"].(map[string]any); ok && p.schemas != nil {
 		if name, _ := meta["resourceType"].(string); name == "" {
 			meta["resourceType"] = p.schemas.Base().Name
 		}
 	}
-}
-
-// RFC 7643 Section 3: "schemas" is required and lists the base schema and each extension present.
-func (p Projection) fillSchemas(out map[string]any) {
-	if list, _ := out["schemas"].([]any); len(list) > 0 || p.schemas == nil {
-		return
-	}
-	uris := []any{string(p.schemas.Base().ID)}
-	for _, extension := range p.schemas.Extensions() {
-		if _, ok := out[string(extension.ID)]; ok {
-			uris = append(uris, string(extension.ID))
-		}
-	}
-	out["schemas"] = uris
 }
 
 // names holds fully qualified, lowercase attribute paths: "<schema uri>:<name>[.<sub-name>]",
@@ -175,6 +179,34 @@ func (n names) within(name string) bool {
 	return slices.ContainsFunc(n, func(e string) bool { return strings.HasPrefix(e, name+".") })
 }
 
+// RFC 7643 Section 3: "schemas" is required and lists the base schema and each extension present.
+func (p Projection) fillSchemas(out map[string]any) {
+	if list, _ := out["schemas"].([]any); len(list) > 0 || p.schemas == nil {
+		return
+	}
+	uris := []any{string(p.schemas.Base().ID)}
+	for _, extension := range p.schemas.Extensions() {
+		if _, ok := out[string(extension.ID)]; ok {
+			uris = append(uris, string(extension.ID))
+		}
+	}
+	out["schemas"] = uris
+}
+
+func (p Projection) object(attribute *core.Attribute, parentName string, object map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range object {
+		sub := attribute.SubAttribute(key)
+		if sub == nil {
+			continue
+		}
+		if projected, ok := p.value(sub, parentName+"."+strings.ToLower(sub.Name), value); ok {
+			out[key] = projected
+		}
+	}
+	return out
+}
+
 func (p Projection) project(key string, value any) (any, bool) {
 	if p.schemas == nil {
 		return value, true
@@ -187,24 +219,6 @@ func (p Projection) project(key string, value any) (any, bool) {
 		return p.extension(extension, value)
 	}
 	return nil, false
-}
-
-func (p Projection) extension(schema *core.Schema, value any) (any, bool) {
-	object, ok := value.(map[string]any)
-	if !ok {
-		return nil, false
-	}
-	out := map[string]any{}
-	for key, item := range object {
-		attribute := schema.Attributes.Lookup(key)
-		if attribute == nil {
-			continue
-		}
-		if projected, ok := p.value(attribute, qualifiedKey(schema.ID, attribute.Name), item); ok {
-			out[key] = projected
-		}
-	}
-	return out, len(out) > 0
 }
 
 // RFC 7643 Section 7: "returned" decides whether an attribute can appear in a response.
@@ -245,18 +259,4 @@ func (p Projection) value(attribute *core.Attribute, name string, value any) (an
 		return elements, true
 	}
 	return value, true
-}
-
-func (p Projection) object(attribute *core.Attribute, parentName string, object map[string]any) map[string]any {
-	out := map[string]any{}
-	for key, value := range object {
-		sub := attribute.SubAttribute(key)
-		if sub == nil {
-			continue
-		}
-		if projected, ok := p.value(sub, parentName+"."+strings.ToLower(sub.Name), value); ok {
-			out[key] = projected
-		}
-	}
-	return out
 }

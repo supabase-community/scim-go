@@ -42,19 +42,14 @@ func NewServiceProviderConfig(basePath string) *ServiceProviderConfig {
 	}
 }
 
-// BasePath is the URL prefix this provider mounts its endpoints under.
-func (c *ServiceProviderConfig) BasePath() string { return c.basePath }
-
-func (c *ServiceProviderConfig) SupportsPatch() bool      { return c.Patch.Supported }
-func (c *ServiceProviderConfig) SupportsFilter() bool     { return c.Filter.Supported }
-func (c *ServiceProviderConfig) SupportsSort() bool       { return c.Sort.Supported }
-func (c *ServiceProviderConfig) SupportsVersioning() bool { return c.ETag.Supported }
-
-// Sorting states that this provider honours "sortBy" and "sortOrder", per RFC 7644, Section 3.4.2.3.
-func (c *ServiceProviderConfig) Sorting() *ServiceProviderConfig {
-	c.Sort.Supported = true
+// Authentication advertises the given schemes, per RFC 7643, Section 5.
+func (c *ServiceProviderConfig) Authentication(schemes ...*AuthenticationScheme) *ServiceProviderConfig {
+	c.AuthenticationSchemes = append(c.AuthenticationSchemes, schemes...)
 	return c
 }
+
+// BasePath is the URL prefix this provider mounts its endpoints under.
+func (c *ServiceProviderConfig) BasePath() string { return c.basePath }
 
 // Filtering states that this provider honours "filter" up to maxResults, per RFC 7644, Section 3.4.2.2.
 func (c *ServiceProviderConfig) Filtering(maxResults int) *ServiceProviderConfig {
@@ -69,14 +64,22 @@ func (c *ServiceProviderConfig) Patching() *ServiceProviderConfig {
 	return c
 }
 
-// Versioning states that this provider issues resource versions via ETags, per RFC 7644, Section 3.14.
-func (c *ServiceProviderConfig) Versioning() *ServiceProviderConfig {
-	c.ETag.Supported = true
+// Sorting states that this provider honours "sortBy" and "sortOrder", per RFC 7644, Section 3.4.2.3.
+func (c *ServiceProviderConfig) Sorting() *ServiceProviderConfig {
+	c.Sort.Supported = true
 	return c
 }
 
-// Authentication advertises the given schemes, per RFC 7643, Section 5.
-func (c *ServiceProviderConfig) Authentication(schemes ...*AuthenticationScheme) *ServiceProviderConfig {
-	c.AuthenticationSchemes = append(c.AuthenticationSchemes, schemes...)
+func (c *ServiceProviderConfig) SupportsFilter() bool { return c.Filter.Supported }
+
+func (c *ServiceProviderConfig) SupportsPatch() bool { return c.Patch.Supported }
+
+func (c *ServiceProviderConfig) SupportsSort() bool { return c.Sort.Supported }
+
+func (c *ServiceProviderConfig) SupportsVersioning() bool { return c.ETag.Supported }
+
+// Versioning states that this provider issues resource versions via ETags, per RFC 7644, Section 3.14.
+func (c *ServiceProviderConfig) Versioning() *ServiceProviderConfig {
+	c.ETag.Supported = true
 	return c
 }

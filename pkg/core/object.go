@@ -28,12 +28,12 @@ func (o Object) Has(name string) bool {
 	return ok
 }
 
-func (o Object) Set(name string, value any) {
-	o[o.key(name)] = value
-}
-
 func (o Object) Remove(name string) {
 	delete(o, o.key(name))
+}
+
+func (o Object) Set(name string, value any) {
+	o[o.key(name)] = value
 }
 
 func (o Object) key(name string) string {

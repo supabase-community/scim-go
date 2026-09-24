@@ -9,19 +9,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-func exampleSchema() *core.Schema {
-	return core.NewSchema(core.SchemaUser).WithName("User").With(
-		core.NewAttribute("userName", core.TypeString).AsRequired(),
-		core.NewAttribute("name", core.TypeComplex).With(
-			core.NewAttribute("familyName", core.TypeString),
-		),
-		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
-			core.NewAttribute("value", core.TypeString),
-			core.NewAttribute("primary", core.TypeBoolean),
-		),
-	)
-}
-
 func TestSchema(t *testing.T) {
 	t.Run("serializes to JSON correctly", func(t *testing.T) {
 		schema := core.NewSchema(core.SchemaUser).
@@ -179,4 +166,17 @@ func TestSchemas(t *testing.T) {
 		_, ok = schemas.Resolve("", "name", "bogus")
 		assert.False(t, ok)
 	})
+}
+
+func exampleSchema() *core.Schema {
+	return core.NewSchema(core.SchemaUser).WithName("User").With(
+		core.NewAttribute("userName", core.TypeString).AsRequired(),
+		core.NewAttribute("name", core.TypeComplex).With(
+			core.NewAttribute("familyName", core.TypeString),
+		),
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString),
+			core.NewAttribute("primary", core.TypeBoolean),
+		),
+	)
 }

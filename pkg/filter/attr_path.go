@@ -30,6 +30,13 @@ func newAttrPath(raw string) AttrPath {
 	return path
 }
 
+func (p AttrPath) Key() string {
+	if p.SubAttribute == "" {
+		return strings.ToLower(p.Name)
+	}
+	return strings.ToLower(p.Name + "." + p.SubAttribute)
+}
+
 func (p AttrPath) String() string {
 	s := p.Name
 	if p.SubAttribute != "" {
@@ -39,11 +46,4 @@ func (p AttrPath) String() string {
 		s = p.URI + ":" + s
 	}
 	return s
-}
-
-func (p AttrPath) Key() string {
-	if p.SubAttribute == "" {
-		return strings.ToLower(p.Name)
-	}
-	return strings.ToLower(p.Name + "." + p.SubAttribute)
 }

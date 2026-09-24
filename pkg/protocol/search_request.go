@@ -26,6 +26,10 @@ type SearchRequest struct {
 	Count              int              `json:"count,omitempty"`
 }
 
+func (s *SearchRequest) Descending() bool {
+	return s.SortOrder == SortDescending
+}
+
 // Offset is the zero-based start index, per Table 6 of RFC 7644, Section 3.4.2.4.
 func (s *SearchRequest) Offset() int {
 	if s.StartIndex < 1 {
@@ -34,22 +38,8 @@ func (s *SearchRequest) Offset() int {
 	return s.StartIndex - 1
 }
 
-func (s *SearchRequest) Descending() bool {
-	return s.SortOrder == SortDescending
-}
-
-// Validate rejects a malformed filter or an unknown sortBy, per RFC 7644, Section 3.4.2.
-func (s *SearchRequest) Validate(schemas core.Schemas) error {
-	if s.Filter != "" {
-		if _, err := filter.Parse(s.Filter); err != nil {
-			return scimerrors.ErrInvalidFilter(err.Error())
-		}
-	}
-	if s.SortBy != "" {
-		_, _, err := s.SortAttribute(schemas)
-		return err
-	}
-	return nil
+func (s *SearchRequest) Projection(schemas core.Schemas) (Projection, error) {
+	return newProjection(schemas, s.Attributes, s.ExcludedAttributes)
 }
 
 // SortAttribute resolves sortBy to its attribute and that attribute's parent, per RFC 7644, Section 3.4.2.3.
@@ -76,6 +66,16 @@ func (s *SearchRequest) SortAttribute(schemas core.Schemas) (parent, attribute *
 	return parent, attribute, nil
 }
 
-func (s *SearchRequest) Projection(schemas core.Schemas) (Projection, error) {
-	return newProjection(schemas, s.Attributes, s.ExcludedAttributes)
+// Validate rejects a malformed filter or an unknown sortBy, per RFC 7644, Section 3.4.2.
+func (s *SearchRequest) Validate(schemas core.Schemas) error {
+	if s.Filter != "" {
+		if _, err := filter.Parse(s.Filter); err != nil {
+			return scimerrors.ErrInvalidFilter(err.Error())
+		}
+	}
+	if s.SortBy != "" {
+		_, _, err := s.SortAttribute(schemas)
+		return err
+	}
+	return nil
 }

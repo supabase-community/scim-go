@@ -33,20 +33,6 @@ func AssertJSON(t TB, name string, value any, ignore ...string) bool {
 	return false
 }
 
-func without(paths, ignore []string) []string {
-	if len(ignore) == 0 {
-		return paths
-	}
-
-	kept := paths[:0]
-	for _, path := range paths {
-		if !slices.Contains(ignore, path) {
-			kept = append(kept, path)
-		}
-	}
-	return kept
-}
-
 func RoundTripDiff(t TB, name string, value any) []string {
 	t.Helper()
 
@@ -71,6 +57,20 @@ func RoundTripDiff(t TB, name string, value any) []string {
 	paths := diff("", want, got)
 	sort.Strings(paths)
 	return paths
+}
+
+func without(paths, ignore []string) []string {
+	if len(ignore) == 0 {
+		return paths
+	}
+
+	kept := paths[:0]
+	for _, path := range paths {
+		if !slices.Contains(ignore, path) {
+			kept = append(kept, path)
+		}
+	}
+	return kept
 }
 
 func decode(data []byte) (any, error) {

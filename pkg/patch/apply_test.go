@@ -449,64 +449,6 @@ func TestApplyRemoveSubAttributeMultiValuedNoTarget(t *testing.T) {
 	assert.Equal(t, scimerrors.NoTarget, err.ScimType)
 }
 
-func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
-	patched, err := patch.Apply(resource, ops, schemas)
-	if err != nil {
-		return err
-	}
-	clear(resource)
-	maps.Copy(resource, patched)
-	return nil
-}
-
-func operation(kind patch.Op, path, value string) patch.Operation {
-	if value != "" {
-		return patch.Operation{
-			Op:    kind,
-			Path:  path,
-			Value: json.RawMessage(value),
-		}
-	}
-	return patch.Operation{
-		Op:   kind,
-		Path: path,
-	}
-}
-
-func userSchemas() []*core.Schema {
-	return []*core.Schema{
-		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("userName", core.TypeString),
-			core.NewAttribute("displayName", core.TypeString),
-			core.NewAttribute("groups", core.TypeComplex).AsMultiValued().AsReadOnly().With(
-				core.NewAttribute("value", core.TypeString),
-			),
-			core.NewAttribute("name", core.TypeComplex).With(
-				core.NewAttribute("familyName", core.TypeString),
-			),
-			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
-				core.NewAttribute("type", core.TypeString),
-				core.NewAttribute("value", core.TypeString),
-			),
-		),
-	}
-}
-
-func enterpriseSchemas() []*core.Schema {
-	return append(userSchemas(), (&core.Schema{ID: core.SchemaEnterpriseUser}).With(
-		core.NewAttribute("department", core.TypeString),
-		core.NewAttribute("employeeNumber", core.TypeString).AsReadOnly(),
-		core.NewAttribute("manager", core.TypeComplex).With(
-			core.NewAttribute("value", core.TypeString),
-		),
-	))
-}
-
-func extension(item map[string]any) map[string]any {
-	nested, _ := item[string(core.SchemaEnterpriseUser)].(map[string]any)
-	return nested
-}
-
 // RFC 7644 Section 3.10: a URN-qualified path reaches into the schema extension object.
 func TestApplyExtensionPath(t *testing.T) {
 	uri := string(core.SchemaEnterpriseUser)
@@ -585,14 +527,6 @@ func TestApplyExtensionPath(t *testing.T) {
 	})
 }
 
-func requireMutability(t *testing.T, err error) {
-	t.Helper()
-
-	var scimErr *scimerrors.Error
-	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
-}
-
 func TestApplyRemoveReadOnlyRejected(t *testing.T) {
 	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
 
@@ -656,4 +590,70 @@ func TestApplyComplexMerge(t *testing.T) {
 
 		assert.Equal(t, []any{map[string]any{"value": "c@d.com"}}, item["emails"])
 	})
+}
+
+func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
+	patched, err := patch.Apply(resource, ops, schemas)
+	if err != nil {
+		return err
+	}
+	clear(resource)
+	maps.Copy(resource, patched)
+	return nil
+}
+
+func operation(kind patch.Op, path, value string) patch.Operation {
+	if value != "" {
+		return patch.Operation{
+			Op:    kind,
+			Path:  path,
+			Value: json.RawMessage(value),
+		}
+	}
+	return patch.Operation{
+		Op:   kind,
+		Path: path,
+	}
+}
+
+func userSchemas() []*core.Schema {
+	return []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("userName", core.TypeString),
+			core.NewAttribute("displayName", core.TypeString),
+			core.NewAttribute("groups", core.TypeComplex).AsMultiValued().AsReadOnly().With(
+				core.NewAttribute("value", core.TypeString),
+			),
+			core.NewAttribute("name", core.TypeComplex).With(
+				core.NewAttribute("familyName", core.TypeString),
+			),
+			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("type", core.TypeString),
+				core.NewAttribute("value", core.TypeString),
+			),
+		),
+	}
+}
+
+func enterpriseSchemas() []*core.Schema {
+	return append(userSchemas(), (&core.Schema{ID: core.SchemaEnterpriseUser}).With(
+		core.NewAttribute("department", core.TypeString),
+		core.NewAttribute("employeeNumber", core.TypeString).AsReadOnly(),
+		core.NewAttribute("manager", core.TypeComplex).With(
+			core.NewAttribute("value", core.TypeString),
+		),
+	))
+}
+
+func extension(item map[string]any) map[string]any {
+	nested, _ := item[string(core.SchemaEnterpriseUser)].(map[string]any)
+	return nested
+}
+
+func requireMutability(t *testing.T, err error) {
+	t.Helper()
+
+	var scimErr *scimerrors.Error
+	require.ErrorAs(t, err, &scimErr)
+	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
 }

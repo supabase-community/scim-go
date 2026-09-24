@@ -243,6 +243,10 @@ type clause struct {
 
 type sqlEvaluator struct{}
 
+func (sqlEvaluator) And(left, right clause) (clause, error) {
+	return clause{sql: "(" + left.sql + " AND " + right.sql + ")", args: concat(left.args, right.args)}, nil
+}
+
 func (sqlEvaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (clause, error) {
 	key := attribute.Path.Key()
 	switch op {
@@ -260,20 +264,16 @@ func (sqlEvaluator) Compare(attribute *protocol.Attribute, op filter.Operator, v
 	return clause{sql: key + " " + symbol + " ?", args: []any{value}}, nil
 }
 
-func (sqlEvaluator) Present(attribute *protocol.Attribute) (clause, error) {
-	return clause{sql: attribute.Path.Key() + " IS NOT NULL"}, nil
-}
-
-func (sqlEvaluator) And(left, right clause) (clause, error) {
-	return clause{sql: "(" + left.sql + " AND " + right.sql + ")", args: concat(left.args, right.args)}, nil
+func (sqlEvaluator) Not(operand clause) (clause, error) {
+	return clause{sql: "NOT (" + operand.sql + ")", args: operand.args}, nil
 }
 
 func (sqlEvaluator) Or(left, right clause) (clause, error) {
 	return clause{sql: "(" + left.sql + " OR " + right.sql + ")", args: concat(left.args, right.args)}, nil
 }
 
-func (sqlEvaluator) Not(operand clause) (clause, error) {
-	return clause{sql: "NOT (" + operand.sql + ")", args: operand.args}, nil
+func (sqlEvaluator) Present(attribute *protocol.Attribute) (clause, error) {
+	return clause{sql: attribute.Path.Key() + " IS NOT NULL"}, nil
 }
 
 func (sqlEvaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (clause, error)) (clause, error) {

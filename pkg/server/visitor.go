@@ -21,6 +21,10 @@ func newVisitor(readers readers) protocol.Evaluator[predicate] {
 	return &evaluator{readers: readers}
 }
 
+func (e *evaluator) And(left, right predicate) (predicate, error) {
+	return func(row any) bool { return left(row) && right(row) }, nil
+}
+
 func (e *evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (predicate, error) {
 	read, err := e.reader(attribute)
 	if err != nil {
@@ -33,6 +37,14 @@ func (e *evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, v
 	}, nil
 }
 
+func (e *evaluator) Not(operand predicate) (predicate, error) {
+	return func(row any) bool { return !operand(row) }, nil
+}
+
+func (e *evaluator) Or(left, right predicate) (predicate, error) {
+	return func(row any) bool { return left(row) || right(row) }, nil
+}
+
 func (e *evaluator) Present(attribute *protocol.Attribute) (predicate, error) {
 	read, err := e.reader(attribute)
 	if err != nil {
@@ -41,18 +53,6 @@ func (e *evaluator) Present(attribute *protocol.Attribute) (predicate, error) {
 	return func(row any) bool {
 		return anyMatch(read(row), hasValue)
 	}, nil
-}
-
-func (e *evaluator) And(left, right predicate) (predicate, error) {
-	return func(row any) bool { return left(row) && right(row) }, nil
-}
-
-func (e *evaluator) Or(left, right predicate) (predicate, error) {
-	return func(row any) bool { return left(row) || right(row) }, nil
-}
-
-func (e *evaluator) Not(operand predicate) (predicate, error) {
-	return func(row any) bool { return !operand(row) }, nil
 }
 
 func (e *evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (predicate, error)) (predicate, error) {

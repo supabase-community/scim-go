@@ -12,32 +12,16 @@ func (Stringify) VisitAnd(left, right string) (string, error) {
 	return fmt.Sprintf("(%s and %s)", left, right), nil
 }
 
-func (Stringify) VisitOr(left, right string) (string, error) {
-	return fmt.Sprintf("(%s or %s)", left, right), nil
-}
-
-func (Stringify) VisitNot(operand string) (string, error) {
-	return fmt.Sprintf("not (%s)", operand), nil
-}
-
-func (Stringify) VisitEquals(attribute AttrPath, value any) (string, error) {
-	return compareString(attribute, "eq", value), nil
-}
-
-func (Stringify) VisitNotEquals(attribute AttrPath, value any) (string, error) {
-	return compareString(attribute, "ne", value), nil
-}
-
 func (Stringify) VisitContains(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "co", value), nil
 }
 
-func (Stringify) VisitStartsWith(attribute AttrPath, value any) (string, error) {
-	return compareString(attribute, "sw", value), nil
-}
-
 func (Stringify) VisitEndsWith(attribute AttrPath, value any) (string, error) {
 	return compareString(attribute, "ew", value), nil
+}
+
+func (Stringify) VisitEquals(attribute AttrPath, value any) (string, error) {
+	return compareString(attribute, "eq", value), nil
 }
 
 func (Stringify) VisitGreaterThan(attribute AttrPath, value any) (string, error) {
@@ -56,8 +40,24 @@ func (Stringify) VisitLessThanEquals(attribute AttrPath, value any) (string, err
 	return compareString(attribute, "le", value), nil
 }
 
+func (Stringify) VisitNot(operand string) (string, error) {
+	return fmt.Sprintf("not (%s)", operand), nil
+}
+
+func (Stringify) VisitNotEquals(attribute AttrPath, value any) (string, error) {
+	return compareString(attribute, "ne", value), nil
+}
+
+func (Stringify) VisitOr(left, right string) (string, error) {
+	return fmt.Sprintf("(%s or %s)", left, right), nil
+}
+
 func (Stringify) VisitPresence(attribute AttrPath) (string, error) {
 	return fmt.Sprintf("%s pr", attribute), nil
+}
+
+func (Stringify) VisitStartsWith(attribute AttrPath, value any) (string, error) {
+	return compareString(attribute, "sw", value), nil
 }
 
 func (Stringify) VisitValuePath(path AttrPath, subAttribute string, valueFilter func() (string, error)) (string, error) {

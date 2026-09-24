@@ -12,15 +12,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-func parseQuery(t *testing.T, query string) (*protocol.SearchRequest, error) {
-	t.Helper()
-
-	values, err := url.ParseQuery(query)
-	require.NoError(t, err)
-
-	return protocol.DefaultLimits.ParseSearchRequest(values)
-}
-
 func TestParseSearchRequest(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -231,4 +222,13 @@ func TestSearchRequest(t *testing.T) {
 		assert.Equal(t, `userName eq "bjensen"`, request.Filter)
 		assert.Equal(t, 10, request.Offset())
 	})
+}
+
+func parseQuery(t *testing.T, query string) (*protocol.SearchRequest, error) {
+	t.Helper()
+
+	values, err := url.ParseQuery(query)
+	require.NoError(t, err)
+
+	return protocol.DefaultLimits.ParseSearchRequest(values)
 }

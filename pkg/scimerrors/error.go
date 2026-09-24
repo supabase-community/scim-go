@@ -54,15 +54,15 @@ func (e *Error) Error() string {
 	return message
 }
 
+func (e *Error) Is(target error) bool {
+	other, ok := target.(*Error)
+	return ok && other.Status == e.Status && other.ScimType == e.ScimType
+}
+
 func (e *Error) StatusCode() int {
 	status, err := strconv.Atoi(e.Status)
 	if err != nil {
 		return http.StatusInternalServerError
 	}
 	return status
-}
-
-func (e *Error) Is(target error) bool {
-	other, ok := target.(*Error)
-	return ok && other.Status == e.Status && other.ScimType == e.ScimType
 }

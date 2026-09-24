@@ -8,14 +8,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
-func chain(op string, n int) string {
-	parts := make([]string, n)
-	for i := range parts {
-		parts[i] = "a" + strconv.Itoa(i) + ` eq "` + strconv.Itoa(i) + `"`
-	}
-	return strings.Join(parts, " "+op+" ")
-}
-
 func BenchmarkParseLeaf(b *testing.B) {
 	input := `userName eq "bjensen"`
 	b.ReportAllocs()
@@ -55,4 +47,12 @@ func BenchmarkParseNestedParens(b *testing.B) {
 			b.Fatal("parse failed")
 		}
 	}
+}
+
+func chain(op string, n int) string {
+	parts := make([]string, n)
+	for i := range parts {
+		parts[i] = "a" + strconv.Itoa(i) + ` eq "` + strconv.Itoa(i) + `"`
+	}
+	return strings.Join(parts, " "+op+" ")
 }

@@ -36,12 +36,12 @@ func (before primaries) demote(root core.Object) {
 	}
 }
 
-func (before primaries) promoted(member map[string]any) bool {
-	return isPrimary(member) && !before.has(member)
-}
-
 func (before primaries) has(member map[string]any) bool {
 	return before[pointer(member)]
+}
+
+func (before primaries) promoted(member map[string]any) bool {
+	return isPrimary(member) && !before.has(member)
 }
 
 func pointer(member map[string]any) uintptr {

@@ -56,17 +56,6 @@ func (r *readers) add(parent func(core.Object) core.Object, attributes ...*core.
 	}
 }
 
-func (r *readers) set(attribute *core.Attribute, read reader) {
-	r.values[attribute] = read
-	r.order = append(r.order, attribute)
-}
-
-func (r *readers) track(attribute *core.Attribute) {
-	if attribute.Mutability == core.MutabilityImmutable {
-		r.immutable = append(r.immutable, attribute)
-	}
-}
-
 func (r readers) all() iter.Seq2[*core.Attribute, reader] {
 	return func(yield func(*core.Attribute, reader) bool) {
 		for _, attribute := range r.order {
@@ -75,6 +64,11 @@ func (r readers) all() iter.Seq2[*core.Attribute, reader] {
 			}
 		}
 	}
+}
+
+func (r *readers) set(attribute *core.Attribute, read reader) {
+	r.values[attribute] = read
+	r.order = append(r.order, attribute)
 }
 
 // RFC 7644 Section 3.4.2.2: outside a value path, a sub-attribute holds the values of every element.
@@ -90,6 +84,12 @@ func (r readers) sub(parent, sub *core.Attribute, read reader) reader {
 			values[i] = asObject(element).Get(sub.Name)
 		}
 		return coerce(sub, values)
+	}
+}
+
+func (r *readers) track(attribute *core.Attribute) {
+	if attribute.Mutability == core.MutabilityImmutable {
+		r.immutable = append(r.immutable, attribute)
 	}
 }
 

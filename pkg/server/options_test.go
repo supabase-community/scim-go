@@ -32,21 +32,21 @@ func TestErrorHandlerOption(t *testing.T) {
 
 type failingRepository struct{ cause error }
 
-func (r failingRepository) List(context.Context, *protocol.SearchRequest) ([]*core.User, int, error) {
-	return nil, 0, r.cause
+func (r failingRepository) Create(context.Context, *core.User) (*core.User, error) {
+	return nil, r.cause
 }
+
+func (r failingRepository) Delete(context.Context, string, string) error { return r.cause }
 
 func (r failingRepository) Get(context.Context, string) (*core.User, error) { return nil, r.cause }
 
-func (r failingRepository) Create(context.Context, *core.User) (*core.User, error) {
-	return nil, r.cause
+func (r failingRepository) List(context.Context, *protocol.SearchRequest) ([]*core.User, int, error) {
+	return nil, 0, r.cause
 }
 
 func (r failingRepository) Replace(context.Context, *core.User) (*core.User, error) {
 	return nil, r.cause
 }
-
-func (r failingRepository) Delete(context.Context, string, string) error { return r.cause }
 
 func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T) {
 	cause := errors.New("pgx: connection pool timeout")

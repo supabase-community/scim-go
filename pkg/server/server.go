@@ -89,31 +89,25 @@ func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
 	return limits
 }
 
-func (s *Server) mount(resource Registration) {
-	schemas := resource.schemas(s.basePath)
-	s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
-	s.schemas = append(s.schemas, schemas...)
-	resource.mount(s, schemas)
-}
-
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r = withReporter(r, s.errorHandler)
 	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodySize)
 	s.handler.ServeHTTP(w, r)
 }
 
-// route answers a request no endpoint matches with a SCIM error, per RFC 7644, Section 3.12.
-func (s *Server) route(w http.ResponseWriter, r *http.Request) {
-	if _, pattern := s.mux.Handler(r); pattern != "" {
-		s.mux.ServeHTTP(w, r)
-		return
+func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := fn(w, r); err != nil {
+			s.errorHandler(r, err)
+		}
 	}
-	unmatched := &unmatched{header: http.Header{}}
-	s.mux.ServeHTTP(unmatched, r)
-	if allow := unmatched.header.Get("Allow"); allow != "" {
-		w.Header().Set("Allow", allow)
+}
+
+func (s *Server) listResourceTypes(w http.ResponseWriter, r *http.Request) error {
+	if err := rejectFilter(r); err != nil {
+		return protocol.SendError(w, err)
 	}
-	report(r, protocol.SendError(w, scimerrors.NewError(unmatched.status, "", http.StatusText(unmatched.status))))
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.resourceTypes), s.resourceTypes))
 }
 
 type unmatched struct {
@@ -132,23 +126,18 @@ func me(w http.ResponseWriter, _ *http.Request) error {
 	return protocol.SendError(w, scimerrors.ErrNotImplemented(`"/Me" is not supported`))
 }
 
-func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if err := fn(w, r); err != nil {
-			s.errorHandler(r, err)
-		}
-	}
-}
-
-func (s *Server) serviceProviderConfig(w http.ResponseWriter, _ *http.Request) error {
-	return protocol.Send(w, http.StatusOK, s.config)
-}
-
-func (s *Server) listResourceTypes(w http.ResponseWriter, r *http.Request) error {
+func (s *Server) listSchemas(w http.ResponseWriter, r *http.Request) error {
 	if err := rejectFilter(r); err != nil {
 		return protocol.SendError(w, err)
 	}
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.resourceTypes), s.resourceTypes))
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.schemas), s.schemas))
+}
+
+func (s *Server) mount(resource Registration) {
+	schemas := resource.schemas(s.basePath)
+	s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
+	s.schemas = append(s.schemas, schemas...)
+	resource.mount(s, schemas)
 }
 
 func (s *Server) resourceTypeByID(w http.ResponseWriter, r *http.Request) error {
@@ -160,11 +149,18 @@ func (s *Server) resourceTypeByID(w http.ResponseWriter, r *http.Request) error 
 	return protocol.SendError(w, scimerrors.ErrNotFound("resource type not found"))
 }
 
-func (s *Server) listSchemas(w http.ResponseWriter, r *http.Request) error {
-	if err := rejectFilter(r); err != nil {
-		return protocol.SendError(w, err)
+// route answers a request no endpoint matches with a SCIM error, per RFC 7644, Section 3.12.
+func (s *Server) route(w http.ResponseWriter, r *http.Request) {
+	if _, pattern := s.mux.Handler(r); pattern != "" {
+		s.mux.ServeHTTP(w, r)
+		return
 	}
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.schemas), s.schemas))
+	unmatched := &unmatched{header: http.Header{}}
+	s.mux.ServeHTTP(unmatched, r)
+	if allow := unmatched.header.Get("Allow"); allow != "" {
+		w.Header().Set("Allow", allow)
+	}
+	report(r, protocol.SendError(w, scimerrors.NewError(unmatched.status, "", http.StatusText(unmatched.status))))
 }
 
 func (s *Server) schemaByID(w http.ResponseWriter, r *http.Request) error {
@@ -174,6 +170,10 @@ func (s *Server) schemaByID(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	return protocol.SendError(w, scimerrors.ErrNotFound("schema not found"))
+}
+
+func (s *Server) serviceProviderConfig(w http.ResponseWriter, _ *http.Request) error {
+	return protocol.Send(w, http.StatusOK, s.config)
 }
 
 // rejectFilter forbids "filter" on /ResourceTypes and /Schemas, per RFC 7644, Section 4.
