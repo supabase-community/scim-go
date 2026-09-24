@@ -176,7 +176,7 @@ func (r *repository[T]) conflictingAttribute(id string, candidate core.Object) *
 		if other.item.ResourceID() == id {
 			continue
 		}
-		for attribute, read := range r.values {
+		for attribute, read := range r.all() {
 			if attribute.Uniqueness == core.UniquenessNone {
 				continue
 			}

@@ -36,7 +36,7 @@ func characteristics[T Entity](schemas core.Schemas, repo Repository[T]) Validat
 
 // required rejects a candidate missing a value for an attribute marked "required", per RFC 7643, Section 7.
 func required(readers readers, candidate core.Object) error {
-	for attribute, read := range readers.values {
+	for attribute, read := range readers.all() {
 		if attribute.Required && isMissing(attribute, read(candidate)) {
 			return scimerrors.ErrInvalidValue(strconv.Quote(attribute.Name) + " is required")
 		}
@@ -53,7 +53,7 @@ func isMissing(attribute *core.Attribute, value any) bool {
 
 // canonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.
 func canonicalValues(readers readers, candidate core.Object) error {
-	for attribute, read := range readers.values {
+	for attribute, read := range readers.all() {
 		if len(attribute.CanonicalValues) == 0 {
 			continue
 		}

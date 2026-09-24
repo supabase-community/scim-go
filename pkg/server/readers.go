@@ -1,6 +1,8 @@
 package server
 
 import (
+	"iter"
+
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
@@ -19,6 +21,7 @@ type reader func(core.Object) any
 type readers struct {
 	values    map[*core.Attribute]reader
 	elements  map[*core.Attribute]func(core.Object) []any
+	order     []*core.Attribute
 	immutable []*core.Attribute
 }
 
@@ -38,24 +41,32 @@ func readersOf(schemas core.Schemas) readers {
 
 func (r *readers) add(parent func(core.Object) core.Object, attributes ...*core.Attribute) {
 	for _, attribute := range attributes {
-		r.track(attribute)
 		read := func(d core.Object) any { return parent(d).Get(attribute.Name) }
-		r.values[attribute] = func(d core.Object) any { return coerce(attribute, read(d)) }
+		r.set(attribute, func(d core.Object) any { return coerce(attribute, read(d)) }, true)
 		if attribute.MultiValued {
 			r.elements[attribute] = func(d core.Object) []any { list, _ := read(d).([]any); return list }
 		}
 		for _, sub := range attribute.SubAttributes {
-			r.values[sub] = r.sub(attribute, sub, read)
-			if !attribute.MultiValued {
-				r.track(sub)
-			}
+			r.set(sub, r.sub(attribute, sub, read), !attribute.MultiValued)
 		}
 	}
 }
 
-func (r *readers) track(attribute *core.Attribute) {
-	if attribute.Mutability == core.MutabilityImmutable {
+func (r *readers) set(attribute *core.Attribute, read reader, singular bool) {
+	r.values[attribute] = read
+	r.order = append(r.order, attribute)
+	if singular && attribute.Mutability == core.MutabilityImmutable {
 		r.immutable = append(r.immutable, attribute)
+	}
+}
+
+func (r readers) all() iter.Seq2[*core.Attribute, reader] {
+	return func(yield func(*core.Attribute, reader) bool) {
+		for _, attribute := range r.order {
+			if !yield(attribute, r.values[attribute]) {
+				return
+			}
+		}
 	}
 }
 

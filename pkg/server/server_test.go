@@ -166,6 +166,22 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	t.Run("reports the first missing required attribute in schema order", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		for range 20 {
+			request := Request(t, srv, http.MethodPost, basePath+"/Widgets",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, &widget{Parts: []part{{}}}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			require.Equal(t, `"name" is required`, ReadBodyAs[scimerrors.Error](t, response).Detail)
+		}
+	})
+
 	t.Run("rejects a resource missing a required multi-valued attribute", func(t *testing.T) {
 		srv := newTestServer(t, server.WithResource(server.NewResource[*widget]("Kit", "/Kits", kitSchema, kitAttributes()...)))
 
