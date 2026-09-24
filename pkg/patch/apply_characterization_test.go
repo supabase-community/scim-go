@@ -85,21 +85,6 @@ func TestApplyRemoveSubAttribute(t *testing.T) {
 	assert.Equal(t, "Barbara", name["givenName"])
 }
 
-func TestApplyImmutableSubAttributeChangeRejectedWhenPresent(t *testing.T) {
-	schemas := []*core.Schema{
-		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("name", core.TypeComplex).With(
-				core.NewAttribute("familyName", core.TypeString).AsImmutable(),
-			),
-		),
-	}
-	item := map[string]any{"name": map[string]any{"familyName": "Jensen"}}
-
-	var scimErr *scimerrors.Error
-	require.ErrorAs(t, apply(item, schemas, operation(patch.OpReplace, "name.familyName", `"Smith"`)), &scimErr)
-	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
-}
-
 func TestApplyResolvesMixedCaseTopLevelKey(t *testing.T) {
 	item := map[string]any{"UserName": "old"}
 
@@ -133,17 +118,6 @@ func TestApplyNoPathMergeRejectsReadOnly(t *testing.T) {
 	assert.Empty(t, item)
 }
 
-func TestApplyNoPathMergeRejectsImmutableWhenPresent(t *testing.T) {
-	item := map[string]any{"employeeNumber": "e1"}
-
-	var scimErr *scimerrors.Error
-	require.ErrorAs(t, apply(item, userSchemas(), patch.Operation{
-		Op:    patch.OpReplace,
-		Value: json.RawMessage(`{"employeeNumber":"e2"}`),
-	}), &scimErr)
-	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
-}
-
 func TestApplySubAttributeOnNonComplexRejected(t *testing.T) {
 	item := map[string]any{"userName": "bob"}
 
@@ -166,21 +140,6 @@ func TestApplyRejectsInvalidPath(t *testing.T) {
 	var scimErr *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, operation(patch.OpRemove, `emails[`, "")), &scimErr)
 	assert.Equal(t, scimerrors.InvalidPath, scimErr.ScimType)
-}
-
-func TestApplyImmutableAddThenReplaceInSameBatchRejected(t *testing.T) {
-	item := map[string]any{}
-
-	var scimErr *scimerrors.Error
-	err := apply(item, userSchemas(),
-		operation(patch.OpAdd, "employeeNumber", `"e1"`),
-		operation(patch.OpReplace, "employeeNumber", `"e2"`),
-	)
-
-	require.ErrorAs(t, err, &scimErr)
-	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
-	_, present := item["employeeNumber"]
-	assert.False(t, present)
 }
 
 func TestApplyValuePathReadOnlySubAttributeRejected(t *testing.T) {

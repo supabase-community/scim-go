@@ -17,12 +17,13 @@ func asObject(value any) core.Object {
 type reader func(core.Object) any
 
 type readers struct {
-	values   map[*core.Attribute]reader
-	elements map[*core.Attribute]func(core.Object) []any
+	values    map[*core.Attribute]reader
+	elements  map[*core.Attribute]func(core.Object) []any
+	immutable []*core.Attribute
 }
 
 func readersOf(schemas core.Schemas) readers {
-	r := readers{values: map[*core.Attribute]reader{}, elements: map[*core.Attribute]func(core.Object) []any{}}
+	r := &readers{values: map[*core.Attribute]reader{}, elements: map[*core.Attribute]func(core.Object) []any{}}
 	root := func(d core.Object) core.Object { return d }
 	for _, name := range []string{"id", "externalId", "meta"} {
 		attribute, _ := core.CommonAttribute(name)
@@ -32,11 +33,12 @@ func readersOf(schemas core.Schemas) readers {
 	for _, extension := range schemas.Extensions() {
 		r.add(func(d core.Object) core.Object { return asObject(d.Get(string(extension.ID))) }, extension.Attributes...)
 	}
-	return r
+	return *r
 }
 
-func (r readers) add(parent func(core.Object) core.Object, attributes ...*core.Attribute) {
+func (r *readers) add(parent func(core.Object) core.Object, attributes ...*core.Attribute) {
 	for _, attribute := range attributes {
+		r.track(attribute)
 		read := func(d core.Object) any { return parent(d).Get(attribute.Name) }
 		r.values[attribute] = func(d core.Object) any { return coerce(attribute, read(d)) }
 		if attribute.MultiValued {
@@ -44,7 +46,16 @@ func (r readers) add(parent func(core.Object) core.Object, attributes ...*core.A
 		}
 		for _, sub := range attribute.SubAttributes {
 			r.values[sub] = r.sub(attribute, sub, read)
+			if !attribute.MultiValued {
+				r.track(sub)
+			}
 		}
+	}
+}
+
+func (r *readers) track(attribute *core.Attribute) {
+	if attribute.Mutability == core.MutabilityImmutable {
+		r.immutable = append(r.immutable, attribute)
 	}
 }
 

@@ -156,21 +156,6 @@ func TestIdIsProtected(t *testing.T) {
 	assert.Equal(t, "keep", item["id"])
 }
 
-func TestImmutableAddWhenAbsentAllowed(t *testing.T) {
-	item := map[string]any{}
-
-	require.NoError(t, apply(item, userSchemas(), operation(patch.OpAdd, "employeeNumber", `"E1"`)))
-	assert.Equal(t, "E1", item["employeeNumber"])
-}
-
-func TestImmutableReplaceWhenAbsentAllowed(t *testing.T) {
-	item := map[string]any{}
-
-	require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, "employeeNumber", `"E1"`)))
-
-	assert.Equal(t, "E1", item["employeeNumber"])
-}
-
 func TestApplyValuePathRelationalIsCaseInsensitive(t *testing.T) {
 	item := map[string]any{"emails": []any{
 		map[string]any{"type": "Zebra", "value": "z@x"},
@@ -182,15 +167,6 @@ func TestApplyValuePathRelationalIsCaseInsensitive(t *testing.T) {
 	emails := item["emails"].([]any)
 	require.Len(t, emails, 1)
 	assert.Equal(t, "ant", emails[0].(map[string]any)["type"])
-}
-
-func TestImmutableChangeRejected(t *testing.T) {
-	item := map[string]any{"employeeNumber": "E1"}
-
-	var err *scimerrors.Error
-	require.ErrorAs(t, apply(item, userSchemas(), operation(patch.OpReplace, "employeeNumber", `"E2"`)), &err)
-
-	assert.Equal(t, scimerrors.Mutability, err.ScimType)
 }
 
 func TestUnknownAttributeRejected(t *testing.T) {
@@ -216,17 +192,16 @@ func TestSchemaURISelectsSchema(t *testing.T) {
 }
 
 func TestApplyIsAtomicOnFailure(t *testing.T) {
-	item := map[string]any{"userName": "keep", "employeeNumber": "E1"}
+	item := map[string]any{"userName": "keep"}
 
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(item, userSchemas(),
 		operation(patch.OpReplace, "userName", `"changed"`),
-		operation(patch.OpReplace, "employeeNumber", `"E2"`),
+		operation(patch.OpReplace, "groups", `[{"value":"g1"}]`),
 	), &err)
 
 	assert.Equal(t, scimerrors.Mutability, err.ScimType)
-	assert.Equal(t, "keep", item["userName"])
-	assert.Equal(t, "E1", item["employeeNumber"])
+	assert.Equal(t, map[string]any{"userName": "keep"}, item)
 }
 
 func TestInvalidOpRejected(t *testing.T) {
@@ -317,7 +292,7 @@ func TestApplyValuePathReplaceRespectsSubAttributeMutability(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
 			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
-				core.NewAttribute("type", core.TypeString).AsImmutable(),
+				core.NewAttribute("type", core.TypeString).AsReadOnly(),
 				core.NewAttribute("value", core.TypeString),
 			),
 		),
@@ -447,7 +422,6 @@ func userSchemas() []*core.Schema {
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
 			core.NewAttribute("userName", core.TypeString),
 			core.NewAttribute("displayName", core.TypeString),
-			core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
 			core.NewAttribute("groups", core.TypeComplex).AsMultiValued().AsReadOnly().With(
 				core.NewAttribute("value", core.TypeString),
 			),
@@ -465,7 +439,7 @@ func userSchemas() []*core.Schema {
 func enterpriseSchemas() []*core.Schema {
 	return append(userSchemas(), (&core.Schema{ID: core.SchemaEnterpriseUser}).With(
 		core.NewAttribute("department", core.TypeString),
-		core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
+		core.NewAttribute("employeeNumber", core.TypeString).AsReadOnly(),
 		core.NewAttribute("manager", core.TypeComplex).With(
 			core.NewAttribute("value", core.TypeString),
 		),
@@ -578,7 +552,7 @@ func TestApplyComplexMerge(t *testing.T) {
 				core.NewAttribute("name", core.TypeComplex).With(
 					core.NewAttribute("givenName", core.TypeString),
 					core.NewAttribute("familyName", core.TypeString),
-					core.NewAttribute("formatted", core.TypeString).AsImmutable(),
+					core.NewAttribute("formatted", core.TypeString).AsReadOnly(),
 				),
 			),
 		}

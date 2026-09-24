@@ -69,7 +69,7 @@ func (p *patcher) writeAt(root core.Object, path filter.Path, m mutation) error 
 	if err != nil {
 		return err
 	}
-	if err := gate(attr, present(p.within(root, path), path)); err != nil {
+	if err := gate(attr); err != nil {
 		return err
 	}
 	container, err := p.container(root, path)
@@ -112,7 +112,7 @@ func (p *patcher) remove(root core.Object, op Operation) error {
 		return err
 	}
 	container := p.within(root, path)
-	if err := gate(attr, present(container, path)); err != nil {
+	if err := gate(attr); err != nil {
 		return err
 	}
 	if path.SubAttribute == "" {
@@ -145,7 +145,7 @@ func (p *patcher) valueWrite(root core.Object, path filter.Path, m mutation) err
 	if err != nil {
 		return err
 	}
-	if err := gate(parent, present(p.within(root, path), base(path))); err != nil {
+	if err := gate(parent); err != nil {
 		return err
 	}
 	pred, err := compile(parent, path.ValueFilter)
@@ -184,7 +184,7 @@ func (p *patcher) memberWriter(path filter.Path, parent *core.Attribute, m mutat
 		return nil, err
 	}
 	return func(member core.Object) error {
-		if err := gate(attr, member.Has(path.SubAttribute)); err != nil {
+		if err := gate(attr); err != nil {
 			return err
 		}
 		p.store(member, path.SubAttribute, attr, m)
@@ -198,7 +198,7 @@ func (p *patcher) valueRemove(root core.Object, path filter.Path) error {
 		return err
 	}
 	container := p.within(root, path)
-	if err := gate(parent, present(container, base(path))); err != nil {
+	if err := gate(parent); err != nil {
 		return err
 	}
 	pred, err := compile(parent, path.ValueFilter)
@@ -217,7 +217,7 @@ func (p *patcher) clearSub(container core.Object, path filter.Path, elements []a
 	if err != nil {
 		return err
 	}
-	if err := gate(attr, present(container, path)); err != nil {
+	if err := gate(attr); err != nil {
 		return err
 	}
 	matched, _ := eachMatch(elements, pred, func(member core.Object) error {
@@ -289,7 +289,7 @@ func (p *patcher) keyPath(key string) filter.Path {
 func (p *patcher) mergeMember(target core.Object, values map[string]any, parent *core.Attribute, appendMode bool) error {
 	for key, value := range values {
 		attr := subAttr(parent, key)
-		if err := gate(attr, target.Has(key)); err != nil {
+		if err := gate(attr); err != nil {
 			return err
 		}
 		p.store(target, key, attr, mutation{value: value, appendMode: appendMode})
@@ -365,24 +365,9 @@ func base(path filter.Path) filter.Path {
 	return path
 }
 
-func present(root core.Object, path filter.Path) bool {
-	if path.SubAttribute == "" {
-		return root.Has(path.Name)
-	}
-	if nested, ok := root.Get(path.Name).(map[string]any); ok {
-		return core.Object(nested).Has(path.SubAttribute)
-	}
-	return false
-}
-
-func gate(attr *core.Attribute, present bool) error {
-	switch attr.Mutability {
-	case core.MutabilityReadOnly:
+func gate(attr *core.Attribute) error {
+	if attr.Mutability == core.MutabilityReadOnly {
 		return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is readOnly")
-	case core.MutabilityImmutable:
-		if present {
-			return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is immutable")
-		}
 	}
 	return nil
 }

@@ -101,10 +101,8 @@ func changedImmutable(readers readers, existing any, after core.Object) (*core.A
 	if err != nil {
 		return nil, err
 	}
-	for attribute, read := range readers.values {
-		if attribute.Mutability != core.MutabilityImmutable {
-			continue
-		}
+	for _, attribute := range readers.immutable {
+		read := readers.values[attribute]
 		previous := read(before)
 		if isEmpty(previous) || reflect.DeepEqual(previous, read(after)) {
 			continue
