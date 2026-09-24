@@ -133,27 +133,20 @@ func (r tenantRepository) List(ctx context.Context, query *protocol.SearchReques
 
 func TestWithAuthentication(t *testing.T) {
 	t.Run("reports a validator failure to the ErrorHandler", func(t *testing.T) {
-		cause := errors.New("connection refused")
 		var reported error
-		srv := bearerServer(t,
-			func(ctx context.Context, _ string) (context.Context, error) { return ctx, cause },
-			server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
-		)
+		srv := newTestServer(t, withOption(server.ErrorHandler(func(_ *http.Request, err error) { reported = err })))
 
-		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("anything")))
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(unreachableToken)))
 
 		assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
-		assert.ErrorIs(t, reported, cause)
+		assert.ErrorIs(t, reported, errUnreachable)
 	})
 
 	t.Run("does not report an invalid token to the ErrorHandler", func(t *testing.T) {
 		var reported error
-		srv := bearerServer(t,
-			func(ctx context.Context, _ string) (context.Context, error) { return ctx, server.ErrInvalidToken },
-			server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
-		)
+		srv := newTestServer(t, withOption(server.ErrorHandler(func(_ *http.Request, err error) { reported = err })))
 
-		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("anything")))
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("wrong")))
 
 		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
 		assert.NoError(t, reported)

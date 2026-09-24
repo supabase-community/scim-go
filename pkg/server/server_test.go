@@ -1,10 +1,7 @@
 package server_test
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -22,11 +19,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
-)
-
-const (
-	basePath   = "/scim/v2"
-	validToken = "s3cr3t"
 )
 
 // RFC 6750 2.1 Authorization Request Header Field
@@ -113,11 +105,9 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 	})
 
 	t.Run("hides why the token is invalid behind a fixed description", func(t *testing.T) {
-		srv := bearerServer(t, func(ctx context.Context, _ string) (context.Context, error) {
-			return ctx, fmt.Errorf("%w: expired at noon", server.ErrInvalidToken)
-		})
+		srv := newTestServer(t)
 
-		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("expired")))
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(expiredToken)))
 
 		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
 		assert.Equal(t, `Bearer realm="scim", error="invalid_token", error_description="The access token is invalid"`, response.Header.Get("WWW-Authenticate"))
@@ -125,11 +115,9 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 	})
 
 	t.Run("answers a validator failure with 500, no challenge and no internal detail", func(t *testing.T) {
-		srv := bearerServer(t, func(ctx context.Context, _ string) (context.Context, error) {
-			return ctx, errors.New("dial tcp 10.0.0.1:5432: connection refused")
-		})
+		srv := newTestServer(t)
 
-		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("anything")))
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(unreachableToken)))
 
 		assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
 		assert.Empty(t, response.Header.Get("WWW-Authenticate"))
@@ -204,12 +192,12 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 	})
 
 	t.Run("rejects a resource missing a required multi-valued attribute", func(t *testing.T) {
-		srv := newTestServer(t, server.WithResource(server.NewResource[*widget]("Kit", "/Kits", kitSchema, kitAttributes()...)))
+		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodPost, basePath+"/Kits",
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, &widget{Name: "gear"}),
+			WithRequestBodyAs(t, map[string]any{"active": true, "name": map[string]any{"givenName": "gear"}}),
 		)
 		response := Response(t, srv, request)
 
@@ -294,25 +282,19 @@ func TestRFC7643MultiValuedAttributes(t *testing.T) {
 // RFC 7643 2.5 Unassigned and Null Values
 func TestRFC7643UnassignedAndNullValues(t *testing.T) {
 	t.Run("treats false as a value and an empty complex or multi-valued attribute as missing", func(t *testing.T) {
-		resource := server.NewResource[*core.User]("User", "/Users", core.SchemaUser,
-			core.NewAttribute("userName", core.TypeString).AsRequired(),
-			core.NewAttribute("active", core.TypeBoolean).AsRequired(),
-			core.NewAttribute("name", core.TypeComplex).AsRequired().With(core.NewAttribute("givenName", core.TypeString)),
-			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().AsRequired().With(core.NewAttribute("value", core.TypeString)),
-		)
-		srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(resource)))
+		srv := newTestServer(t)
 
 		for _, test := range []struct {
 			name   string
 			body   map[string]any
 			status int
 		}{
-			{"accepts false for a required boolean", map[string]any{"userName": "b", "active": false, "name": map[string]any{"givenName": "B"}, "emails": []any{map[string]any{"value": "a@b.com"}}}, http.StatusCreated},
-			{"rejects an empty complex value", map[string]any{"userName": "b", "active": true, "name": map[string]any{}, "emails": []any{map[string]any{"value": "a@b.com"}}}, http.StatusBadRequest},
-			{"rejects an empty multi-valued value", map[string]any{"userName": "b", "active": true, "name": map[string]any{"givenName": "B"}, "emails": []any{}}, http.StatusBadRequest},
+			{"accepts false for a required boolean", map[string]any{"active": false, "name": map[string]any{"givenName": "B"}, "parts": []any{map[string]any{"serial": "s-1"}}}, http.StatusCreated},
+			{"rejects an empty complex value", map[string]any{"active": true, "name": map[string]any{}, "parts": []any{map[string]any{"serial": "s-1"}}}, http.StatusBadRequest},
+			{"rejects an empty multi-valued value", map[string]any{"active": true, "name": map[string]any{"givenName": "B"}, "parts": []any{}}, http.StatusBadRequest},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				request := Request(t, srv, http.MethodPost, basePath+"/Users", WithContentType(protocol.MediaType), WithRequestBodyAs(t, test.body))
+				request := Request(t, srv, http.MethodPost, basePath+"/Kits", WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, test.body))
 
 				assert.Equal(t, test.status, Response(t, srv, request).StatusCode)
 			})
@@ -504,7 +486,7 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	t.Run("PATCH is declined when Patch.Supported is false", func(t *testing.T) {
 		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Versioning()
-		srv := Server(t, server.New(config, standardOptions(t)...))
+		srv := newTestServer(t, withConfig(config))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
@@ -521,7 +503,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	})
 
 	t.Run("filter is declined when Filter.Supported is false", func(t *testing.T) {
-		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig(basePath)))
 
 		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "bjensen"`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
@@ -531,7 +513,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	})
 
 	t.Run("plain listing still works when Filter.Supported is false", func(t *testing.T) {
-		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig(basePath)))
 
 		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
 		response := Response(t, srv, request)
@@ -540,7 +522,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	})
 
 	t.Run("sortBy is declined when Sort.Supported is false", func(t *testing.T) {
-		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig(basePath)))
 
 		path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
@@ -551,7 +533,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 
 	t.Run("no ETag header when ETag.Supported is false, and a stale If-Match is ignored", func(t *testing.T) {
 		config := core.NewServiceProviderConfig(basePath).Patching()
-		srv := Server(t, server.New(config, standardOptions(t)...))
+		srv := newTestServer(t, withConfig(config))
 
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
 			WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
@@ -578,7 +560,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	})
 
 	t.Run("runs a minimal server with only CRUD end to end", func(t *testing.T) {
-		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig(basePath)))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		get := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
@@ -1594,7 +1576,7 @@ func TestRFC7644Pagination(t *testing.T) {
 	})
 
 	t.Run("pages with a custom default count", func(t *testing.T) {
-		srv := newTestServer(t, server.DefaultCount(1))
+		srv := newTestServer(t, withOption(server.DefaultCount(1)))
 		create(t, srv, &core.User{UserName: "alice"})
 		create(t, srv, &core.User{UserName: "bob"})
 
@@ -1607,7 +1589,7 @@ func TestRFC7644Pagination(t *testing.T) {
 
 	t.Run("caps the count at a custom maximum", func(t *testing.T) {
 		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(2).Patching().Versioning()
-		srv := Server(t, server.New(config, standardOptions(t)...))
+		srv := newTestServer(t, withConfig(config))
 		create(t, srv, &core.User{UserName: "alice"})
 		create(t, srv, &core.User{UserName: "bob"})
 		create(t, srv, &core.User{UserName: "carol"})
@@ -2180,30 +2162,31 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	})
 
 	t.Run("rejects changing an immutable value but allows adding and removing members", func(t *testing.T) {
-		emails := core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
-			core.NewAttribute("type", core.TypeString).AsImmutable(),
-			core.NewAttribute("value", core.TypeString),
-		)
-		resource := server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.NewAttribute("userName", core.TypeString), emails).
-			WithExtension(core.SchemaEnterpriseUser, core.NewAttribute("employeeNumber", core.TypeString).AsImmutable())
-		srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(resource)))
 		extension := string(core.SchemaEnterpriseUser)
+		active := true
+		user := &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "E1"}}
+		gear := &kit{Active: &active, Name: &core.Name{GivenName: "gear"}, Parts: []part{{Serial: "s-1"}, {Serial: "s-2"}}}
 
 		for _, test := range []struct {
-			name   string
-			op     patch.Operation
-			status int
+			name     string
+			endpoint string
+			resource any
+			op       patch.Operation
+			status   int
 		}{
-			{"rejects a changed extension value", patch.Operation{Op: patch.OpReplace, Path: extension + ":employeeNumber", Value: json.RawMessage(`"E2"`)}, http.StatusBadRequest},
-			{"accepts the same extension value", patch.Operation{Op: patch.OpReplace, Path: extension + ":employeeNumber", Value: json.RawMessage(`"E1"`)}, http.StatusOK},
-			{"accepts adding a member", patch.Operation{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"type":"home","value":"c@d.com"}]`)}, http.StatusOK},
-			{"accepts removing a member", patch.Operation{Op: patch.OpRemove, Path: `emails[value eq "a@b.com"]`}, http.StatusOK},
+			{"rejects a changed extension value", "/Users", user, patch.Operation{Op: patch.OpReplace, Path: extension + ":employeeNumber", Value: json.RawMessage(`"E2"`)}, http.StatusBadRequest},
+			{"accepts the same extension value", "/Users", user, patch.Operation{Op: patch.OpReplace, Path: extension + ":employeeNumber", Value: json.RawMessage(`"E1"`)}, http.StatusOK},
+			{"accepts adding a member", "/Kits", gear, patch.Operation{Op: patch.OpAdd, Path: "parts", Value: json.RawMessage(`[{"serial":"s-3"}]`)}, http.StatusOK},
+			{"accepts removing a member", "/Kits", gear, patch.Operation{Op: patch.OpRemove, Path: `parts[serial eq "s-1"]`}, http.StatusOK},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				user := &core.User{UserName: "bjensen", Emails: []core.Email{{Type: "work", Value: "a@b.com"}}, EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "E1"}}
-				created := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithContentType(protocol.MediaType), WithRequestBodyAs(t, user))))
+				srv := newTestServer(t)
+				created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+test.endpoint, WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, test.resource)))
+				require.Equal(t, http.StatusCreated, created.StatusCode)
+				id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
 
-				request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+created.ID,
+				request := Request(t, srv, http.MethodPatch, basePath+test.endpoint+"/"+id,
+					WithBearerToken(validToken),
 					WithContentType(protocol.MediaType),
 					WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{test.op}}),
 				)
@@ -2584,15 +2567,11 @@ func TestRFC7644VersioningResources(t *testing.T) {
 	})
 
 	t.Run("answers a patch that loses a race with 409 unless the client sent If-Match", func(t *testing.T) {
-		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
-		repository := racingRepository{server.NewRepository[*core.User](basePath+"/Users", schemas)}
-		existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
-		require.NoError(t, err)
-		srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(
-			server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository),
-		)))
+		srv := newTestServer(t)
+		id, etag := create(t, srv, &core.User{UserName: racer})
 		patch := func(options ...Option[*http.Request]) int {
-			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+existing.ID, append(options,
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, append(options,
+				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, protocol.PatchRequest{
 					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
@@ -2603,7 +2582,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		}
 
 		assert.Equal(t, http.StatusConflict, patch())
-		assert.Equal(t, http.StatusPreconditionFailed, patch(WithHeader("If-Match", existing.Meta.Version)))
+		assert.Equal(t, http.StatusPreconditionFailed, patch(WithHeader("If-Match", etag)))
 	})
 
 	t.Run("retrieves a resource only if it changed with If-None-Match", func(t *testing.T) {
@@ -2647,7 +2626,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 
 	t.Run("advertises the custom max results configured via Filtering", func(t *testing.T) {
 		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(2).Patching().Versioning()
-		srv := Server(t, server.New(config, standardOptions(t)...))
+		srv := newTestServer(t, withConfig(config))
 
 		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithBearerToken(validToken))
 		response := Response(t, srv, request)
@@ -2660,7 +2639,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 	t.Run("advertises a mutated config directly", func(t *testing.T) {
 		config := core.NewServiceProviderConfig(basePath).Patching().Filtering(protocol.DefaultLimits.MaxCount)
 		config.DocumentationURI = "https://example.com/help/scim.html"
-		srv := Server(t, server.New(config, standardOptions(t)...))
+		srv := newTestServer(t, withConfig(config))
 
 		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithBearerToken(validToken))
 		advertised := ReadBodyAs[core.ServiceProviderConfig](t, Response(t, srv, request))
@@ -2698,12 +2677,13 @@ func TestRFC7644Schemas(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.Schema]](t, response)
-		require.Equal(t, 4, list.TotalResults)
+		require.Equal(t, 5, list.TotalResults)
 		schema := list.Resources[0]
 		assert.Equal(t, core.SchemaUser, schema.ID)
 		assert.Equal(t, core.SchemaEnterpriseUser, list.Resources[1].ID)
 		assert.Equal(t, core.SchemaGroup, list.Resources[2].ID)
 		assert.Equal(t, widgetSchema, list.Resources[3].ID)
+		assert.Equal(t, kitSchema, list.Resources[4].ID)
 
 		userName := schema.Attributes.Lookup("userName")
 		require.NotNil(t, userName)
@@ -2768,7 +2748,7 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.ResourceType]](t, response)
-		require.Equal(t, 3, list.TotalResults)
+		require.Equal(t, 4, list.TotalResults)
 		assert.Equal(t, core.ResourceTypeName("User"), list.Resources[0].ID)
 		assert.Equal(t, basePath+"/Users", list.Resources[0].Endpoint)
 		assert.Equal(t, core.SchemaUser, list.Resources[0].Schema)
@@ -2778,6 +2758,9 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 		assert.Equal(t, core.ResourceTypeName("Widget"), list.Resources[2].ID)
 		assert.Equal(t, basePath+"/Widgets", list.Resources[2].Endpoint)
 		assert.Equal(t, widgetSchema, list.Resources[2].Schema)
+		assert.Equal(t, core.ResourceTypeName("Kit"), list.Resources[3].ID)
+		assert.Equal(t, basePath+"/Kits", list.Resources[3].Endpoint)
+		assert.Equal(t, kitSchema, list.Resources[3].Schema)
 	})
 
 	t.Run("fetches a resource type by id", func(t *testing.T) {
