@@ -2321,7 +2321,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 						Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
 					}),
 				)
-				assert.Contains(t, []int{http.StatusOK, http.StatusPreconditionFailed}, Response(t, srv, request).StatusCode)
+				assert.Contains(t, []int{http.StatusOK, http.StatusConflict}, Response(t, srv, request).StatusCode)
 			})
 		}
 		wg.Wait()
@@ -2329,6 +2329,29 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, srv, request))
 		assert.Equal(t, 9, list.TotalResults)
+	})
+
+	t.Run("answers a patch that loses a race with 409 unless the client sent If-Match", func(t *testing.T) {
+		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
+		repository := racingRepository{server.NewRepository[*core.User](basePath+"/Users", schemas)}
+		existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
+		require.NoError(t, err)
+		srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(
+			server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository),
+		)))
+		patch := func(options ...Option[*http.Request]) int {
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+existing.ID, append(options,
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
+				}),
+			)...)
+			return Response(t, srv, request).StatusCode
+		}
+
+		assert.Equal(t, http.StatusConflict, patch())
+		assert.Equal(t, http.StatusPreconditionFailed, patch(WithHeader("If-Match", existing.Meta.Version)))
 	})
 
 	t.Run("retrieves a resource only if it changed with If-None-Match", func(t *testing.T) {

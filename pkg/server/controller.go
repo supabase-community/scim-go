@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -140,7 +141,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	patched.SetMeta(core.Meta{Version: existing.GetMeta().Version})
 	replaced, err := c.service.Replace(r.Context(), patched)
 	if err != nil {
-		return protocol.SendError(w, err)
+		return protocol.SendError(w, c.lostRace(r, err))
 	}
 	c.setVersion(w, replaced)
 	return c.send(w, http.StatusOK, replaced, projection)
@@ -161,6 +162,14 @@ func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
 	if c.config.SupportsVersioning() {
 		w.Header().Set("ETag", resource.GetMeta().Version)
 	}
+}
+
+// lostRace reports a concurrent change as 409, since 412 answers only a precondition the client sent, per RFC 7232, Section 4.2.
+func (c *controller[T]) lostRace(r *http.Request, err error) error {
+	if c.ifMatch(r) == "" && errors.Is(err, scimerrors.ErrPreconditionFailed("")) {
+		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the patch; retry")
+	}
+	return err
 }
 
 func (c *controller[T]) ifMatch(r *http.Request) string {
