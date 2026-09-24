@@ -2,6 +2,7 @@ package patch_test
 
 import (
 	"encoding/json"
+	"maps"
 	"strings"
 	"testing"
 
@@ -400,7 +401,13 @@ func TestApplyRemoveSubAttributeMultiValuedNoTarget(t *testing.T) {
 }
 
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
-	return patch.Apply(resource, ops, schemas)
+	patched, err := patch.Apply(resource, ops, schemas)
+	if err != nil {
+		return err
+	}
+	clear(resource)
+	maps.Copy(resource, patched)
+	return nil
 }
 
 func operation(kind patch.Op, path, value string) patch.Operation {

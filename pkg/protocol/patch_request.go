@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -43,8 +42,8 @@ func isPatchOp(uri core.SchemaURI) bool {
 	return strings.EqualFold(string(uri), string(SchemaPatchOp))
 }
 
-// Apply applies the operations to resource atomically, per RFC 7644, Section 3.5.2.
-func (r *PatchRequest) Apply(resource core.Object, schemas core.Schemas) error {
+// Apply returns a copy of resource with the operations applied atomically, per RFC 7644, Section 3.5.2.
+func (r *PatchRequest) Apply(resource core.Object, schemas core.Schemas) (core.Object, error) {
 	return patch.Apply(resource, r.Operations, schemas)
 }
 
@@ -55,11 +54,11 @@ func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error)
 	if err != nil {
 		return zero, err
 	}
-	document := maps.Clone(existing)
-	if err := r.Apply(document, schemas); err != nil {
+	patched, err := r.Apply(existing, schemas)
+	if err != nil {
 		return zero, err
 	}
-	return fromDocument[T](writable(document, existing, schemas))
+	return fromDocument[T](writable(patched, existing, schemas))
 }
 
 func Decode[T any](body io.Reader) (T, error) {

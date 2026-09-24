@@ -54,7 +54,7 @@ func benchApply(b *testing.B, doc map[string]any, ops []patch.Operation, schemas
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := patch.Apply(doc, ops, schemas); err != nil {
+		if _, err := patch.Apply(doc, ops, schemas); err != nil {
 			b.Fatal(err)
 		}
 	}

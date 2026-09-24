@@ -3,20 +3,17 @@ package patch
 import (
 	"bytes"
 	"encoding/json"
-	"maps"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// Apply applies the operations to resource atomically, per RFC 7644, Section 3.5.2.
-func Apply(resource core.Object, ops []Operation, schemas core.Schemas) error {
-	working := clone(map[string]any(resource)).(map[string]any)
+// Apply returns a copy of resource with the operations applied atomically, per RFC 7644, Section 3.5.2.
+func Apply(resource core.Object, ops []Operation, schemas core.Schemas) (core.Object, error) {
+	working := core.Object(clone(map[string]any(resource)).(map[string]any))
 	if err := (&patcher{schemas: schemas}).run(working, ops); err != nil {
-		return err
+		return nil, err
 	}
-	clear(resource)
-	maps.Copy(resource, working)
-	return nil
+	return working, nil
 }
 
 func decode[T any](raw []byte) (T, error) {

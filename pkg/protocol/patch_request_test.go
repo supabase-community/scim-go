@@ -26,9 +26,11 @@ func TestPatchRequestApplyDelegates(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, request.Apply(item, nil))
+	patched, err := request.Apply(item, nil)
+	require.NoError(t, err)
 
-	assert.Equal(t, "new", item["userName"])
+	assert.Equal(t, "new", patched["userName"])
+	assert.Equal(t, "old", item["userName"])
 }
 
 func TestPatchRequestApplyReturnsProtocolError(t *testing.T) {
@@ -42,7 +44,8 @@ func TestPatchRequestApplyReturnsProtocolError(t *testing.T) {
 	}
 
 	var err *scimerrors.Error
-	require.ErrorAs(t, request.Apply(map[string]any{}, nil), &err)
+	_, applyErr := request.Apply(map[string]any{}, nil)
+	require.ErrorAs(t, applyErr, &err)
 
 	assert.Equal(t, scimerrors.InvalidValue, err.ScimType)
 }
