@@ -2,6 +2,7 @@ package patch
 
 import (
 	"reflect"
+	"slices"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 )
@@ -13,7 +14,7 @@ func primariesOf(root core.Object) primaries {
 	for _, list := range lists(root) {
 		for _, member := range membersOf(list) {
 			if isPrimary(member) {
-				found[reflect.ValueOf(member).Pointer()] = true
+				found[pointer(member)] = true
 			}
 		}
 	}
@@ -24,15 +25,27 @@ func primariesOf(root core.Object) primaries {
 func (before primaries) demote(root core.Object) {
 	for _, list := range lists(root) {
 		members := membersOf(list)
-		if count(members, isPrimary) < 2 {
+		if !slices.ContainsFunc(members, before.promoted) {
 			continue
 		}
 		for _, member := range members {
-			if before[reflect.ValueOf(member).Pointer()] {
+			if before.has(member) {
 				core.Object(member).Set("primary", false)
 			}
 		}
 	}
+}
+
+func (before primaries) promoted(member map[string]any) bool {
+	return isPrimary(member) && !before.has(member)
+}
+
+func (before primaries) has(member map[string]any) bool {
+	return before[pointer(member)]
+}
+
+func pointer(member map[string]any) uintptr {
+	return reflect.ValueOf(member).Pointer()
 }
 
 func lists(object map[string]any) [][]any {
@@ -56,16 +69,6 @@ func membersOf(list []any) []map[string]any {
 		}
 	}
 	return members
-}
-
-func count(members []map[string]any, fn func(map[string]any) bool) int {
-	n := 0
-	for _, member := range members {
-		if fn(member) {
-			n++
-		}
-	}
-	return n
 }
 
 func isPrimary(member map[string]any) bool {

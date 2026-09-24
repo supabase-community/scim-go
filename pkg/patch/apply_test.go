@@ -129,6 +129,17 @@ func TestApplyPrimaryDemotesTheOtherValues(t *testing.T) {
 		assert.Equal(t, []any{false, true}, primaries(item))
 	})
 
+	t.Run("but leaves the values of an attribute the patch does not make primary", func(t *testing.T) {
+		item := core.Object{"active": false, "emails": []any{
+			map[string]any{"type": "work", "primary": true},
+			map[string]any{"type": "home", "primary": true},
+		}}
+
+		require.NoError(t, apply(item, nil, operation(patch.OpReplace, "active", `true`)))
+
+		assert.Equal(t, []any{true, true}, primaries(item))
+	})
+
 	t.Run("but keeps two primaries the client sent in one value", func(t *testing.T) {
 		item := core.Object{"emails": []any{}}
 
