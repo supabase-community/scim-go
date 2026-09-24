@@ -43,7 +43,7 @@ linters:
     funcorder:
       constructor: true
       struct-method: true
-      alphabetical: true
+      alphabetical: false
       function: true
     funlen:
       lines: 60
