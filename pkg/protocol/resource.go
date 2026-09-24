@@ -2,12 +2,13 @@ package protocol
 
 import (
 	"io"
+	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 // DecodeResource decodes a resource body; RFC 7644 Sections 3.3 and 3.5.1: readOnly attribute values SHALL be ignored.
-func DecodeResource[T any](body io.Reader, existing any, schemas []*core.Schema) (T, error) {
+func DecodeResource[T any](body io.Reader, existing any, schemas core.Schemas) (T, error) {
 	var item T
 	document, err := readDocument(body)
 	if err != nil {
@@ -20,24 +21,47 @@ func DecodeResource[T any](body io.Reader, existing any, schemas []*core.Schema)
 	return fromDocument[T](writable(document, prior, schemas))
 }
 
-func writable(document, existing map[string]any, schemas []*core.Schema) map[string]any {
+func writable(document, existing map[string]any, schemas core.Schemas) map[string]any {
 	if len(schemas) == 0 {
 		return document
 	}
 	base := func(name string) *core.Attribute {
-		attribute, _ := schemas[0].Resolve(name)
+		attribute, _ := schemas.Resolve("", name, "")
 		return attribute
 	}
 	out := writableObject(base, document, existing)
-	for _, extension := range schemas[1:] {
+	for _, extension := range schemas.Extensions() {
 		uri := string(extension.ID)
-		body, _ := out[uri].(map[string]any)
-		previous, _ := existing[uri].(map[string]any)
+		raw := take(out, uri)
+		body, isObject := raw.(map[string]any)
+		previous, _ := lookup(existing, uri).(map[string]any)
 		if object := writableObject(extension.Attributes.Lookup, body, previous); len(object) > 0 {
 			out[uri] = object
+		} else if raw != nil && !isObject {
+			out[uri] = raw
 		}
 	}
 	return out
+}
+
+// take removes and returns the value under key; RFC 7644 Section 3.10: schema URNs are case insensitive.
+func take(object map[string]any, key string) any {
+	for name, value := range object {
+		if strings.EqualFold(name, key) {
+			delete(object, name)
+			return value
+		}
+	}
+	return nil
+}
+
+func lookup(object map[string]any, key string) any {
+	for name, value := range object {
+		if strings.EqualFold(name, key) {
+			return value
+		}
+	}
+	return nil
 }
 
 func writableObject(lookup func(string) *core.Attribute, body, existing map[string]any) map[string]any {

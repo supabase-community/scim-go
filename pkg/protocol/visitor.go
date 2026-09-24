@@ -9,7 +9,7 @@ import (
 )
 
 type visitor[Output any] struct {
-	schemas []*core.Schema
+	schemas core.Schemas
 	inner   Evaluator[Output]
 	scope   *core.Attribute
 }
@@ -97,19 +97,9 @@ func (r *visitor[Output]) resolve(path filter.AttrPath) (*core.Attribute, error)
 	if r.scope != nil {
 		return r.resolveWithin(path)
 	}
-	schema, ok := r.selectSchema(path.URI)
+	attribute, ok := r.schemas.Resolve(core.SchemaURI(path.URI), path.Name, path.SubAttribute)
 	if !ok {
 		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
-	}
-	attribute, ok := schema.Resolve(path.Name)
-	if !ok {
-		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
-	}
-	if path.SubAttribute != "" {
-		attribute = attribute.SubAttribute(path.SubAttribute)
-		if attribute == nil {
-			return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
-		}
 	}
 	return attribute, nil
 }
@@ -120,21 +110,6 @@ func (r *visitor[Output]) resolveWithin(path filter.AttrPath) (*core.Attribute, 
 		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
 	}
 	return attribute, nil
-}
-
-func (r *visitor[Output]) selectSchema(uri string) (*core.Schema, bool) {
-	if uri == "" {
-		if len(r.schemas) == 0 {
-			return nil, false
-		}
-		return r.schemas[0], true
-	}
-	for _, schema := range r.schemas {
-		if string(schema.ID) == uri {
-			return schema, true
-		}
-	}
-	return nil, false
 }
 
 func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, value any) (Output, error) {

@@ -13,13 +13,13 @@ import (
 
 // Projection selects and renders the attributes of a resource, per RFC 7644, Section 3.9.
 type Projection struct {
-	schemas  []*core.Schema
+	schemas  core.Schemas
 	included names
 	excluded names
 }
 
 // ParseProjection reads "attributes"/"excludedAttributes"; RFC 7644 Section 3.9: they are mutually exclusive.
-func ParseProjection(values url.Values, schemas []*core.Schema) (Projection, error) {
+func ParseProjection(values url.Values, schemas core.Schemas) (Projection, error) {
 	attributes, excluded, err := parseAttributeParams(values)
 	if err != nil {
 		return Projection{}, err
@@ -41,7 +41,7 @@ func parseAttributeParams(values url.Values) (attributes, excluded []string, err
 	return attributes, excluded, nil
 }
 
-func newProjection(schemas []*core.Schema, attributes, excluded []string) (Projection, error) {
+func newProjection(schemas core.Schemas, attributes, excluded []string) (Projection, error) {
 	included, err := qualify(schemas, attributes)
 	if err != nil {
 		return Projection{}, err
@@ -109,10 +109,10 @@ func (v projected) MarshalJSON() ([]byte, error) {
 // or a bare lowercase schema URI when a whole schema/extension was selected.
 type names []string
 
-func qualify(schemas []*core.Schema, list []string) (names, error) {
+func qualify(schemas core.Schemas, list []string) (names, error) {
 	out := make(names, 0, len(list))
 	for _, raw := range list {
-		if schema := schemaNamed(schemas, raw); schema != nil {
+		if schema := schemas.Lookup(core.SchemaURI(raw)); schema != nil {
 			out = append(out, strings.ToLower(string(schema.ID)))
 			continue
 		}
@@ -120,11 +120,11 @@ func qualify(schemas []*core.Schema, list []string) (names, error) {
 		if err != nil {
 			return nil, invalidName(raw)
 		}
-		uri := path.URI
-		if uri == "" {
-			uri = string(schemas[0].ID)
+		schema := schemas.Lookup(core.SchemaURI(path.URI))
+		if schema == nil {
+			return nil, invalidName(raw)
 		}
-		qualified := qualifiedKey(core.SchemaURI(uri), path.Name)
+		qualified := qualifiedKey(schema.ID, path.Name)
 		if path.SubAttribute != "" {
 			qualified += "." + strings.ToLower(path.SubAttribute)
 		}
@@ -135,15 +135,6 @@ func qualify(schemas []*core.Schema, list []string) (names, error) {
 
 func qualifiedKey(uri core.SchemaURI, name string) string {
 	return strings.ToLower(string(uri)) + ":" + strings.ToLower(name)
-}
-
-func schemaNamed(schemas []*core.Schema, name string) *core.Schema {
-	for _, schema := range schemas {
-		if strings.EqualFold(string(schema.ID), name) {
-			return schema
-		}
-	}
-	return nil
 }
 
 // covers reports whether name is selected: an exact match, or nested under a selected
@@ -161,10 +152,11 @@ func (n names) within(name string) bool {
 }
 
 func (p Projection) project(key string, value any) (any, bool) {
-	if attribute, ok := p.schemas[0].Resolve(key); ok {
-		return p.value(attribute, qualifiedKey(p.schemas[0].ID, attribute.Name), value)
+	base := p.schemas.Base()
+	if attribute, ok := p.schemas.Resolve("", key, ""); ok {
+		return p.value(attribute, qualifiedKey(base.ID, attribute.Name), value)
 	}
-	if extension := schemaNamed(p.schemas[1:], key); extension != nil {
+	if extension := p.schemas.Lookup(core.SchemaURI(key)); p.schemas.IsExtension(extension) {
 		return p.extension(extension, value)
 	}
 	return nil, false

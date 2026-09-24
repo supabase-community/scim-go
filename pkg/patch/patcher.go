@@ -16,7 +16,7 @@ var (
 )
 
 type patcher struct {
-	schemas []*core.Schema
+	schemas core.Schemas
 }
 
 func (p *patcher) run(root object, ops []Operation) error {
@@ -47,7 +47,7 @@ func (p *patcher) write(root object, op Operation, appendMode bool) error {
 		if err != nil || values == nil {
 			return scimerrors.ErrInvalidValue(`"value" must be an object when "path" is omitted`)
 		}
-		return p.mergeAll(root, values, nil, appendMode)
+		return p.mergeRoot(root, values, appendMode)
 	}
 
 	path, err := filter.NewPath(op.Path)
@@ -65,15 +65,22 @@ func (p *patcher) write(root object, op Operation, appendMode bool) error {
 	if path.ValueFilter != nil {
 		return p.valueWrite(root, path, m)
 	}
+	return skip(p.writeAt(root, path, m))
+}
 
+func (p *patcher) writeAt(root object, path filter.Path, m mutation) error {
 	attr, err := resolve(p.schemas, path)
 	if err != nil {
 		return err
 	}
-	if err := gate(attr, present(root, path)); err != nil {
-		return skip(err)
+	if err := gate(attr, present(p.within(root, path), path)); err != nil {
+		return err
 	}
-	target, key, err := p.locate(root, path)
+	container, err := p.container(root, path)
+	if err != nil {
+		return err
+	}
+	target, key, err := locate(container, path)
 	if err != nil {
 		return err
 	}
@@ -96,14 +103,15 @@ func (p *patcher) remove(root object, op Operation) error {
 	if err != nil {
 		return err
 	}
-	if err := gate(attr, present(root, path)); err != nil {
+	container := p.within(root, path)
+	if err := gate(attr, present(container, path)); err != nil {
 		return skip(err)
 	}
 	if path.SubAttribute == "" {
-		root.remove(path.Name)
+		container.remove(path.Name)
 		return nil
 	}
-	return removeSub(root, path)
+	return removeSub(container, path)
 }
 
 func removeSub(root object, path filter.Path) error {
@@ -129,7 +137,7 @@ func (p *patcher) valueWrite(root object, path filter.Path, m mutation) error {
 	if err != nil {
 		return err
 	}
-	if err := gate(parent, present(root, base(path))); err != nil {
+	if err := gate(parent, present(p.within(root, path), base(path))); err != nil {
 		return skip(err)
 	}
 	pred, err := compile(parent, path.ValueFilter)
@@ -140,8 +148,9 @@ func (p *patcher) valueWrite(root object, path filter.Path, m mutation) error {
 	if err != nil {
 		return err
 	}
-	key := root.key(path.Name)
-	elements, _ := root[key].([]any)
+	container := p.within(root, path)
+	key := container.key(path.Name)
+	elements, _ := container[key].([]any)
 	matched, err := eachMatch(elements, pred, writeOne)
 	if err != nil {
 		return err
@@ -149,7 +158,7 @@ func (p *patcher) valueWrite(root object, path filter.Path, m mutation) error {
 	if matched == 0 {
 		return scimerrors.ErrNoTarget(`"path" filter matched no elements`)
 	}
-	root[key] = elements
+	container[key] = elements
 	return nil
 }
 
@@ -160,7 +169,7 @@ func (p *patcher) memberWriter(path filter.Path, parent *core.Attribute, m mutat
 			return nil, scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
 		}
 		return func(member object) error {
-			return p.mergeAll(member, values, parent, m.appendMode)
+			return p.mergeMember(member, values, parent, m.appendMode)
 		}, nil
 	}
 	attr, err := resolve(p.schemas, path)
@@ -181,27 +190,28 @@ func (p *patcher) valueRemove(root object, path filter.Path) error {
 	if err != nil {
 		return err
 	}
-	if err := gate(parent, present(root, base(path))); err != nil {
+	container := p.within(root, path)
+	if err := gate(parent, present(container, base(path))); err != nil {
 		return skip(err)
 	}
 	pred, err := compile(parent, path.ValueFilter)
 	if err != nil {
 		return err
 	}
-	key := root.key(path.Name)
-	elements, _ := root[key].([]any)
+	key := container.key(path.Name)
+	elements, _ := container[key].([]any)
 	if path.SubAttribute != "" {
-		return p.clearSub(root, path, elements, pred)
+		return p.clearSub(container, path, elements, pred)
 	}
-	return dropMembers(root, key, elements, pred)
+	return dropMembers(container, key, elements, pred)
 }
 
-func (p *patcher) clearSub(root object, path filter.Path, elements []any, pred predicate) error {
+func (p *patcher) clearSub(container object, path filter.Path, elements []any, pred predicate) error {
 	attr, err := resolve(p.schemas, path)
 	if err != nil {
 		return err
 	}
-	if err := gate(attr, present(root, path)); err != nil {
+	if err := gate(attr, present(container, path)); err != nil {
 		return skip(err)
 	}
 	matched, _ := eachMatch(elements, pred, func(member object) error {
@@ -214,7 +224,7 @@ func (p *patcher) clearSub(root object, path filter.Path, elements []any, pred p
 	return nil
 }
 
-func dropMembers(root object, key string, elements []any, pred predicate) error {
+func dropMembers(container object, key string, elements []any, pred predicate) error {
 	kept := make([]any, 0, len(elements))
 	matched := 0
 	for _, element := range elements {
@@ -227,16 +237,52 @@ func dropMembers(root object, key string, elements []any, pred predicate) error 
 	if matched == 0 {
 		return scimerrors.ErrNoTarget(`"path" filter matched no elements`)
 	}
-	root[key] = kept
+	container[key] = kept
 	return nil
 }
 
-func (p *patcher) mergeAll(target object, values map[string]any, parent *core.Attribute, appendMode bool) error {
+// RFC 7644 Section 3.5.2: without a "path" the value names attributes, possibly URN-qualified or grouped under an extension URN.
+func (p *patcher) mergeRoot(root object, values map[string]any, appendMode bool) error {
 	for key, value := range values {
-		attr, err := p.attrFor(parent, key)
-		if err != nil {
+		if schema := p.schemas.Lookup(core.SchemaURI(key)); schema != nil {
+			if err := p.mergeSchema(root, schema, value, appendMode); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := skip(p.writeAt(root, p.keyPath(key), mutation{value: value, appendMode: appendMode})); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (p *patcher) mergeSchema(root object, schema *core.Schema, value any, appendMode bool) error {
+	values, ok := value.(map[string]any)
+	if !ok {
+		return scimerrors.ErrInvalidValue(strconv.Quote(string(schema.ID)) + " must be an object")
+	}
+	for name, item := range values {
+		path := filter.Path{URI: string(schema.ID), Name: name}
+		if err := skip(p.writeAt(root, path, mutation{value: item, appendMode: appendMode})); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *patcher) keyPath(key string) filter.Path {
+	if len(p.schemas) > 0 {
+		if path, err := filter.NewAttrPath(key); err == nil {
+			return filter.Path{AttrPath: path}
+		}
+	}
+	return filter.Path{Name: key}
+}
+
+func (p *patcher) mergeMember(target object, values map[string]any, parent *core.Attribute, appendMode bool) error {
+	for key, value := range values {
+		attr := subAttr(parent, key)
 		if err := gate(attr, target.has(key)); err != nil {
 			if errors.Is(err, errSkip) {
 				continue
@@ -252,7 +298,7 @@ func (p *patcher) store(target object, key string, attr *core.Attribute, m mutat
 	target.set(key, shaped(m.value, attr.MultiValued), m.appendMode)
 }
 
-func (p *patcher) locate(root object, path filter.Path) (object, string, error) {
+func locate(root object, path filter.Path) (object, string, error) {
 	if path.SubAttribute == "" {
 		return root, path.Name, nil
 	}
@@ -263,45 +309,45 @@ func (p *patcher) locate(root object, path filter.Path) (object, string, error) 
 	return nested, path.SubAttribute, nil
 }
 
-func (p *patcher) attrFor(parent *core.Attribute, key string) (*core.Attribute, error) {
-	if parent == nil {
-		return resolve(p.schemas, topLevelPath(key))
+// RFC 7643 Section 3.3: extension attributes live in an object keyed by the extension URN.
+func (p *patcher) extension(path filter.Path) *core.Schema {
+	if path.URI == "" {
+		return nil
 	}
-	return subAttr(parent, key), nil
+	if schema := p.schemas.Lookup(core.SchemaURI(path.URI)); p.schemas.IsExtension(schema) {
+		return schema
+	}
+	return nil
 }
 
-func resolve(schemas []*core.Schema, path filter.Path) (*core.Attribute, error) {
+func (p *patcher) within(root object, path filter.Path) object {
+	if schema := p.extension(path); schema != nil {
+		nested, _ := root[root.key(string(schema.ID))].(map[string]any)
+		return nested
+	}
+	return root
+}
+
+func (p *patcher) container(root object, path filter.Path) (object, error) {
+	if schema := p.extension(path); schema != nil {
+		return root.child(string(schema.ID))
+	}
+	return root, nil
+}
+
+func resolve(schemas core.Schemas, path filter.Path) (*core.Attribute, error) {
 	if len(schemas) == 0 {
 		return permissiveAttr, nil
 	}
-	schema := selectSchema(schemas, path.URI)
-	if schema == nil {
+	uri := core.SchemaURI(path.URI)
+	if schemas.Lookup(uri) == nil {
 		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.URI) + " is not a known schema")
 	}
-	attr, ok := schema.Resolve(path.Name)
+	attr, ok := schemas.Resolve(uri, path.Name, path.SubAttribute)
 	if !ok {
-		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.Name) + " is not a known attribute")
+		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.String()) + " is not a known attribute")
 	}
-	if path.SubAttribute == "" {
-		return attr, nil
-	}
-	sub := attr.SubAttribute(path.SubAttribute)
-	if sub == nil {
-		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.SubAttribute) + " is not a known attribute")
-	}
-	return sub, nil
-}
-
-func selectSchema(schemas []*core.Schema, uri string) *core.Schema {
-	if uri == "" {
-		return schemas[0]
-	}
-	for _, schema := range schemas {
-		if string(schema.ID) == uri {
-			return schema
-		}
-	}
-	return nil
+	return attr, nil
 }
 
 func subAttr(parent *core.Attribute, name string) *core.Attribute {
@@ -309,10 +355,6 @@ func subAttr(parent *core.Attribute, name string) *core.Attribute {
 		return sub
 	}
 	return permissiveAttr
-}
-
-func topLevelPath(name string) filter.Path {
-	return filter.Path{Name: name}
 }
 
 func base(path filter.Path) filter.Path {

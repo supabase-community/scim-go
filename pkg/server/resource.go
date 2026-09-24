@@ -69,8 +69,8 @@ func (c *Resource[T]) resourceType(basePath string) *core.ResourceType {
 	return resourceType
 }
 
-func (c *Resource[T]) schemas(basePath string) []*core.Schema {
-	schemas := make([]*core.Schema, 1, 1+len(c.extensions))
+func (c *Resource[T]) schemas(basePath string) core.Schemas {
+	schemas := make(core.Schemas, 1, 1+len(c.extensions))
 	schemas[0] = c.schema(basePath)
 	for _, extension := range c.extensions {
 		schemas = append(schemas, core.NewSchema(extension.id).
@@ -88,7 +88,7 @@ func (c *Resource[T]) allFields() Fields[T] {
 	return fields
 }
 
-func (c *Resource[T]) mount(s *Server, schemas []*core.Schema) {
+func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	fields := c.allFields()
 	path := s.basePath + c.endpoint
 	repository := c.repository

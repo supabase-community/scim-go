@@ -2,6 +2,7 @@ package patch_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -504,4 +505,97 @@ func userSchemas() []*core.Schema {
 			),
 		),
 	}
+}
+
+func enterpriseSchemas() []*core.Schema {
+	return append(userSchemas(), (&core.Schema{ID: core.SchemaEnterpriseUser}).With(
+		core.NewAttribute("department", core.TypeString),
+		core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
+		core.NewAttribute("manager", core.TypeComplex).With(
+			core.NewAttribute("value", core.TypeString),
+		),
+	))
+}
+
+func extension(item map[string]any) map[string]any {
+	nested, _ := item[string(core.SchemaEnterpriseUser)].(map[string]any)
+	return nested
+}
+
+// RFC 7644 Section 3.10: a URN-qualified path reaches into the schema extension object.
+func TestApplyExtensionPath(t *testing.T) {
+	uri := string(core.SchemaEnterpriseUser)
+
+	t.Run("replaces an extension attribute", func(t *testing.T) {
+		item := map[string]any{uri: map[string]any{"department": "eng"}}
+
+		require.NoError(t, apply(item, enterpriseSchemas(), operation(patch.OpReplace, uri+":department", `"sales"`)))
+
+		assert.Equal(t, map[string]any{"department": "sales"}, extension(item))
+		assert.NotContains(t, item, "department")
+	})
+
+	t.Run("adds the extension object when it is absent", func(t *testing.T) {
+		item := map[string]any{}
+
+		require.NoError(t, apply(item, enterpriseSchemas(), operation(patch.OpAdd, uri+":manager.value", `"42"`)))
+
+		assert.Equal(t, map[string]any{"manager": map[string]any{"value": "42"}}, extension(item))
+	})
+
+	t.Run("matches the URN case-insensitively", func(t *testing.T) {
+		item := map[string]any{uri: map[string]any{"department": "eng"}}
+
+		require.NoError(t, apply(item, enterpriseSchemas(), operation(patch.OpReplace, strings.ToUpper(uri)+":department", `"sales"`)))
+
+		assert.Equal(t, map[string]any{"department": "sales"}, extension(item))
+		assert.Len(t, item, 1)
+	})
+
+	t.Run("removes an extension attribute", func(t *testing.T) {
+		item := map[string]any{"department": "top", uri: map[string]any{"department": "eng", "employeeNumber": "E1"}}
+
+		require.NoError(t, apply(item, enterpriseSchemas(), operation(patch.OpRemove, uri+":department", "")))
+
+		assert.Equal(t, map[string]any{"employeeNumber": "E1"}, extension(item))
+		assert.Equal(t, "top", item["department"])
+	})
+
+	t.Run("enforces the mutability of an extension attribute", func(t *testing.T) {
+		item := map[string]any{uri: map[string]any{"employeeNumber": "E1"}}
+
+		var err *scimerrors.Error
+		require.ErrorAs(t, apply(item, enterpriseSchemas(), operation(patch.OpReplace, uri+":employeeNumber", `"E2"`)), &err)
+		assert.Equal(t, scimerrors.Mutability, err.ScimType)
+	})
+
+	t.Run("does not resolve common attributes through an extension", func(t *testing.T) {
+		var err *scimerrors.Error
+		require.ErrorAs(t, apply(map[string]any{}, enterpriseSchemas(), operation(patch.OpReplace, uri+":externalId", `"x"`)), &err)
+		assert.Equal(t, scimerrors.InvalidPath, err.ScimType)
+	})
+
+	t.Run("merges an extension object when the path is omitted", func(t *testing.T) {
+		item := map[string]any{uri: map[string]any{"employeeNumber": "E1"}}
+
+		require.NoError(t, apply(item, enterpriseSchemas(), patch.Operation{
+			Op:    patch.OpReplace,
+			Value: json.RawMessage(`{"userName":"bjensen","` + uri + `":{"department":"ops"}}`),
+		}))
+
+		assert.Equal(t, "bjensen", item["userName"])
+		assert.Equal(t, map[string]any{"employeeNumber": "E1", "department": "ops"}, extension(item))
+	})
+
+	t.Run("writes a URN-qualified key when the path is omitted", func(t *testing.T) {
+		item := map[string]any{}
+
+		require.NoError(t, apply(item, enterpriseSchemas(), patch.Operation{
+			Op:    patch.OpReplace,
+			Value: json.RawMessage(`{"` + uri + `:department":"hr","` + string(core.SchemaUser) + `:userName":"bjensen"}`),
+		}))
+
+		assert.Equal(t, "bjensen", item["userName"])
+		assert.Equal(t, map[string]any{"department": "hr"}, extension(item))
+	})
 }

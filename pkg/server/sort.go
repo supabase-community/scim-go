@@ -26,11 +26,7 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
 		return []T{}, scimerrors.ErrInvalidValue(err.Error())
 	}
 
-	schema, ok := r.schemaFor(path.URI)
-	if !ok {
-		return []T{}, scimerrors.ErrInvalidValue("Unknown sortBy")
-	}
-	parent, ok := schema.Resolve(path.Name)
+	parent, ok := r.schemas.Resolve(core.SchemaURI(path.URI), path.Name, "")
 	if !ok {
 		return []T{}, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
@@ -49,19 +45,6 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
 	})
 
 	return matching, nil
-}
-
-// RFC 7644 Section 3.4.2.2: an unqualified attribute name resolves against the resource's base schema.
-func (r *repository[T]) schemaFor(uri string) (*core.Schema, bool) {
-	if uri == "" {
-		return r.schemas[0], true
-	}
-	for _, schema := range r.schemas {
-		if string(schema.ID) == uri {
-			return schema, true
-		}
-	}
-	return nil, false
 }
 
 // RFC 7644 Section 3.4.2.3: a multi-valued attribute sorts by its primary value, or else its first value.

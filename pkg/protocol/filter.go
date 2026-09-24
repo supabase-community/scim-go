@@ -6,7 +6,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-func Filter[Output any](schemas []*core.Schema, text string, v Evaluator[Output]) (Output, error) {
+func Filter[Output any](schemas core.Schemas, text string, v Evaluator[Output]) (Output, error) {
 	var zero Output
 	node, err := filter.Parse(text)
 	if err != nil {

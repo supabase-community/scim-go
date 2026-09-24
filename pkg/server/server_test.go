@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
@@ -2101,6 +2102,53 @@ func TestRFC7643EnterpriseUserExtension(t *testing.T) {
 		assert.Equal(t, "amorris", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.10: every facet of an attribute path, including the URN, is case insensitive.
+	t.Run("filters by an extension attribute with an upper-case URN", func(t *testing.T) {
+		filterQuery := strings.ToUpper(string(core.SchemaEnterpriseUser)) + `:employeeNumber eq "1234"`
+		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, id, list.Resources[0].ID)
+	})
+
+	t.Run("sorts by an extension attribute with an upper-case URN", func(t *testing.T) {
+		sortBy := strings.ToUpper(string(core.SchemaEnterpriseUser)) + ":employeeNumber"
+		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+	})
+
+	// RFC 7644 Section 3.5.2: a PATCH path may be qualified with the schema extension URN.
+	t.Run("patches an extension attribute by its URN-qualified path", func(t *testing.T) {
+		patchID, _ := create(t, srv, &core.User{UserName: "patched", EnterpriseUser: &core.EnterpriseUser{Department: "eng"}})
+
+		patched := patchUser(t, srv, patchID, patch.Operation{
+			Op:    patch.OpReplace,
+			Path:  string(core.SchemaEnterpriseUser) + ":department",
+			Value: json.RawMessage(`"sales"`),
+		})
+
+		require.NotNil(t, patched.EnterpriseUser)
+		assert.Equal(t, "sales", patched.EnterpriseUser.Department)
+	})
+
+	t.Run("patches an extension object when the path is omitted", func(t *testing.T) {
+		patchID, _ := create(t, srv, &core.User{UserName: "merged", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "9"}})
+
+		patched := patchUser(t, srv, patchID, patch.Operation{
+			Op:    patch.OpReplace,
+			Value: json.RawMessage(`{"` + string(core.SchemaEnterpriseUser) + `":{"department":"ops"}}`),
+		})
+
+		require.NotNil(t, patched.EnterpriseUser)
+		assert.Equal(t, "ops", patched.EnterpriseUser.Department)
+		assert.Equal(t, "9", patched.EnterpriseUser.EmployeeNumber)
+	})
+
 	// RFC 7643 Section 6: a resource type lists the schema extensions it accepts.
 	t.Run("advertises the extension on the resource type", func(t *testing.T) {
 		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User", WithBearerToken(validToken))
@@ -2137,4 +2185,20 @@ func TestRFC7643WriteOnlyAttributes(t *testing.T) {
 	body, err := io.ReadAll(response.Body)
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "password")
+}
+
+func patchUser(t *testing.T, srv *httptest.Server, id string, operations ...patch.Operation) core.User {
+	t.Helper()
+
+	request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+		WithBearerToken(validToken),
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: operations,
+		}),
+	)
+	response := Response(t, srv, request)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	return ReadBodyAs[core.User](t, response)
 }

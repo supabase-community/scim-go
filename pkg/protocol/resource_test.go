@@ -3,6 +3,7 @@ package protocol_test
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -91,6 +92,21 @@ func TestDecodeResource(t *testing.T) {
 		assert.Equal(t, existing["groups"], out["groups"])
 		assert.Equal(t, map[string]any{"employeeNumber": "701984"}, out[uri])
 		assert.NotContains(t, out, "badge")
+	})
+
+	// RFC 7644 Section 3.10: the schema URN of an extension is case insensitive.
+	t.Run("matches the extension URN case-insensitively", func(t *testing.T) {
+		document := map[string]any{strings.ToUpper(uri): map[string]any{"department": "Ops", "employeeNumber": "client"}}
+		out, err := protocol.DecodeResource[map[string]any](requestBody(document), existing, schemas)
+		require.NoError(t, err)
+		assert.NotContains(t, out, strings.ToUpper(uri))
+		assert.Equal(t, map[string]any{"department": "Ops", "employeeNumber": "701984"}, out[uri])
+	})
+
+	t.Run("drops an extension that holds only readOnly values", func(t *testing.T) {
+		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{uri: map[string]any{"employeeNumber": "client"}}), nil, schemas)
+		require.NoError(t, err)
+		assert.NotContains(t, out, uri)
 	})
 
 	t.Run("leaves an extension that is not an object for decoding to reject", func(t *testing.T) {

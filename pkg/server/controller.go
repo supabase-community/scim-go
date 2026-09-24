@@ -19,13 +19,13 @@ type Controller[T Entity] interface {
 }
 
 type controller[T Entity] struct {
-	schemas []*core.Schema
+	schemas core.Schemas
 	service Service[T]
 	limits  protocol.Limits
 	config  *core.ServiceProviderConfig
 }
 
-func NewController[T Entity](service Service[T], schemas []*core.Schema, limits protocol.Limits, config *core.ServiceProviderConfig) Controller[T] {
+func NewController[T Entity](service Service[T], schemas core.Schemas, limits protocol.Limits, config *core.ServiceProviderConfig) Controller[T] {
 	return &controller[T]{
 		schemas: schemas,
 		service: service,

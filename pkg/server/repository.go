@@ -25,14 +25,14 @@ type Repository[T Entity] interface {
 type repository[T Entity] struct {
 	mu       sync.Mutex
 	endpoint string
-	schemas  []*core.Schema
+	schemas  core.Schemas
 	items    []T
 	readers[T]
 	evaluator protocol.Evaluator[predicate]
 }
 
 // NewRepository stores resources in memory, for tests and reference servers.
-func NewRepository[T Entity](endpoint string, schemas []*core.Schema, fields Fields[T]) Repository[T] {
+func NewRepository[T Entity](endpoint string, schemas core.Schemas, fields Fields[T]) Repository[T] {
 	readers := fields.readers()
 	return &repository[T]{
 		endpoint:  endpoint,
@@ -43,7 +43,7 @@ func NewRepository[T Entity](endpoint string, schemas []*core.Schema, fields Fie
 	}
 }
 
-func schemaURIs(schemas []*core.Schema) []core.SchemaURI {
+func schemaURIs(schemas core.Schemas) []core.SchemaURI {
 	ids := make([]core.SchemaURI, len(schemas))
 	for i, schema := range schemas {
 		ids[i] = schema.ID

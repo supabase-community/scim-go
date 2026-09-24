@@ -11,7 +11,7 @@ import (
 )
 
 // Apply applies the operations to resource atomically, per RFC 7644, Section 3.5.2.
-func Apply(resource any, ops []Operation, schemas []*core.Schema) error {
+func Apply(resource any, ops []Operation, schemas core.Schemas) error {
 	p := &patcher{schemas: schemas}
 
 	if m, ok := resource.(map[string]any); ok {
