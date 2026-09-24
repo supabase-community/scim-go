@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -40,7 +40,7 @@ func (e *evaluator) Present(attribute *protocol.Attribute) (predicate, error) {
 		return nil, err
 	}
 	return func(row any) bool {
-		return anyMatch(read(row), func(v any) bool { return !core.IsUnassigned(v) })
+		return anyMatch(read(row), func(v any) bool { return !value.IsUnassigned(v) })
 	}, nil
 }
 

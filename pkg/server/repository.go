@@ -8,6 +8,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -262,7 +263,7 @@ func schemaURIs(schemas core.Schemas) []core.SchemaURI {
 // sharesValue reports whether a and b hold a common value, per RFC 7644 Section 3.4.2.2 (multi-valued "any match").
 func sharesValue(a, b any, caseExact bool) bool {
 	for _, x := range valuesOf(a) {
-		if core.IsUnassigned(x) {
+		if value.IsUnassigned(x) {
 			continue
 		}
 		for _, y := range valuesOf(b) {

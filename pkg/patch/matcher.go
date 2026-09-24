@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -90,7 +91,7 @@ func (m matcher) leaf(attr filter.AttrPath, op filter.Operator, want any) predic
 	return func(member map[string]any) bool {
 		got := core.Object(member).Get(key)
 		if op == opPresent {
-			return !core.IsUnassigned(got)
+			return !value.IsUnassigned(got)
 		}
 		if got == nil {
 			return false

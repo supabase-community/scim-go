@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -47,11 +48,11 @@ func required(readers readers, candidate core.Object) error {
 	return nil
 }
 
-func isMissing(attribute *core.Attribute, value any) bool {
+func isMissing(attribute *core.Attribute, raw any) bool {
 	if attribute.MultiValued {
-		return core.IsUnassigned(value)
+		return value.IsUnassigned(raw)
 	}
-	return slices.ContainsFunc(valuesOf(value), core.IsUnassigned)
+	return slices.ContainsFunc(valuesOf(raw), value.IsUnassigned)
 }
 
 // canonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.
@@ -118,7 +119,7 @@ func immutable(readers readers, before, after core.Object) error {
 	for _, attribute := range readers.immutable {
 		read := readers.values[attribute]
 		assigned := read(before)
-		if core.IsUnassigned(assigned) || reflect.DeepEqual(assigned, read(after)) {
+		if value.IsUnassigned(assigned) || reflect.DeepEqual(assigned, read(after)) {
 			continue
 		}
 		return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
