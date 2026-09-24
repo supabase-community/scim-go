@@ -30,9 +30,9 @@ const (
 	validToken = "s3cr3t"
 )
 
-// RFC 6750 Bearer Token Usage
-func TestRFC6750(t *testing.T) {
-	t.Run("2.1 Authorization Request Header Field", func(t *testing.T) {
+// RFC 6750 2.1 Authorization Request Header Field
+func TestRFC6750AuthorizationRequestHeaderField(t *testing.T) {
+	t.Run("accepts a valid bearer token", func(t *testing.T) {
 		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodGet, basePath+"/Users",
@@ -51,33 +51,37 @@ func TestRFC6750(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 	})
+}
 
-	t.Run("3 The WWW-Authenticate Response Header Field", func(t *testing.T) {
-		t.Run("omits error info when no Authorization header is present", func(t *testing.T) {
-			srv := newTestServer(t)
+// RFC 6750 3 The WWW-Authenticate Response Header Field
+func TestRFC6750TheWWWAuthenticateResponseHeaderField(t *testing.T) {
+	t.Run("omits error info when no Authorization header is present", func(t *testing.T) {
+		srv := newTestServer(t)
 
-			request := Request(t, srv, http.MethodGet, basePath+"/Users", WithContentType(protocol.MediaType))
-			response := Response(t, srv, request)
+		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
 
-			assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
-			assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
-		})
-
-		t.Run("omits error info for a non-Bearer scheme", func(t *testing.T) {
-			srv := newTestServer(t)
-
-			request := Request(t, srv, http.MethodGet, basePath+"/Users",
-				WithContentType(protocol.MediaType),
-				WithHeader("Authorization", "Basic dXNlcjpwYXNz"),
-			)
-			response := Response(t, srv, request)
-
-			assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
-			assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
-		})
+		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+		assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
 	})
 
-	t.Run("3.1 Error Codes", func(t *testing.T) {
+	t.Run("omits error info for a non-Bearer scheme", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users",
+			WithContentType(protocol.MediaType),
+			WithHeader("Authorization", "Basic dXNlcjpwYXNz"),
+		)
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+		assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
+	})
+}
+
+// RFC 6750 3.1 Error Codes
+func TestRFC6750ErrorCodes(t *testing.T) {
+	t.Run("rejects an invalid token with invalid_token", func(t *testing.T) {
 		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodGet, basePath+"/Users",
@@ -90,7 +94,7 @@ func TestRFC6750(t *testing.T) {
 		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_token"`)
 	})
 
-	t.Run("3.1 Error Codes (a fixed description hides why the token is invalid)", func(t *testing.T) {
+	t.Run("hides why the token is invalid behind a fixed description", func(t *testing.T) {
 		srv := bearerServer(t, func(ctx context.Context, _ string) (context.Context, error) {
 			return ctx, fmt.Errorf("%w: expired at noon", server.ErrInvalidToken)
 		})
@@ -115,65 +119,8 @@ func TestRFC6750(t *testing.T) {
 	})
 }
 
-// RFC 7644 2 Authentication and Authorization
-func TestRFC7644AuthenticationAndAuthorization(t *testing.T) {
-	srv := newTestServer(t)
-
-	request := Request(t, srv, http.MethodPost, basePath+"/Users", WithContentType(protocol.MediaType))
-	response := Response(t, srv, request)
-
-	require.Equal(t, http.StatusUnauthorized, response.StatusCode)
-}
-
-// RFC 7644 3.3 Creating Resources
-func TestRFC7644CreatingResources(t *testing.T) {
-	t.Run("creates a resource and returns 201 with Location and ETag", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodPost, basePath+"/Users",
-			WithAcceptHeader(protocol.MediaType),
-			WithContentType(protocol.MediaType),
-			WithBearerToken(validToken),
-			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusCreated, response.StatusCode)
-		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
-		user := ReadBodyAs[*core.User](t, response)
-		assert.Equal(t, basePath+"/Users/"+user.ID, response.Header.Get("Location"))
-		assert.NotEmpty(t, response.Header.Get("ETag"))
-		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, user.Schemas)
-		assert.NotEmpty(t, user.ID)
-		assert.Equal(t, "bjensen", user.UserName)
-		assert.Equal(t, core.ResourceTypeName("User"), user.Meta.ResourceType)
-		assert.NotZero(t, user.Meta.Created)
-		assert.NotZero(t, user.Meta.LastModified)
-		assert.NotEmpty(t, user.Meta.Location)
-		assert.NotEmpty(t, user.Meta.Version)
-	})
-
-	t.Run("rejects a malformed JSON body", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodPost, basePath+"/Users", WithBearerToken(validToken), WithRequestBody([]byte(`{`)))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusBadRequest, response.StatusCode)
-		scimErr := ReadBodyAs[scimerrors.Error](t, response)
-		assert.Equal(t, scimerrors.InvalidSyntax, scimErr.ScimType)
-	})
-
-	t.Run("rejects a body that does not match the resource", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodPost, basePath+"/Users", WithBearerToken(validToken), WithRequestBody([]byte(`{"userName":5}`)))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusBadRequest, response.StatusCode)
-		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
-	})
-
+// RFC 7643 2.2 Attribute Characteristics
+func TestRFC7643AttributeCharacteristics(t *testing.T) {
 	t.Run("rejects a resource missing a required attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -263,6 +210,349 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	t.Run("skips a candidate whose optional unique attribute is unset", func(t *testing.T) {
+		srv := newTestServer(t)
+		createWidget(t, srv, &widget{Name: "a"})
+		createWidget(t, srv, &widget{Name: "b"})
+	})
+
+	t.Run("a case-exact unique attribute treats different casing as distinct", func(t *testing.T) {
+		srv := newTestServer(t)
+		createWidget(t, srv, &widget{Name: "a", Nick: "Al"})
+		createWidget(t, srv, &widget{Name: "b", Nick: "al"})
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Widgets",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, &widget{Name: "c", Nick: "Al"}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusConflict, response.StatusCode)
+		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+}
+
+// RFC 7643 2.5 Unassigned and Null Values
+func TestRFC7643UnassignedAndNullValues(t *testing.T) {
+	t.Run("treats false as a value and an empty complex or multi-valued attribute as missing", func(t *testing.T) {
+		resource := server.NewResource[*core.User]("User", "/Users", core.SchemaUser,
+			core.NewAttribute("userName", core.TypeString).AsRequired(),
+			core.NewAttribute("active", core.TypeBoolean).AsRequired(),
+			core.NewAttribute("name", core.TypeComplex).AsRequired().With(core.NewAttribute("givenName", core.TypeString)),
+			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().AsRequired().With(core.NewAttribute("value", core.TypeString)),
+		)
+		srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(resource)))
+
+		for _, test := range []struct {
+			name   string
+			body   map[string]any
+			status int
+		}{
+			{"accepts false for a required boolean", map[string]any{"userName": "b", "active": false, "name": map[string]any{"givenName": "B"}, "emails": []any{map[string]any{"value": "a@b.com"}}}, http.StatusCreated},
+			{"rejects an empty complex value", map[string]any{"userName": "b", "active": true, "name": map[string]any{}, "emails": []any{map[string]any{"value": "a@b.com"}}}, http.StatusBadRequest},
+			{"rejects an empty multi-valued value", map[string]any{"userName": "b", "active": true, "name": map[string]any{"givenName": "B"}, "emails": []any{}}, http.StatusBadRequest},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				request := Request(t, srv, http.MethodPost, basePath+"/Users", WithContentType(protocol.MediaType), WithRequestBodyAs(t, test.body))
+
+				assert.Equal(t, test.status, Response(t, srv, request).StatusCode)
+			})
+		}
+	})
+}
+
+// RFC 7643 4.3 Enterprise User Schema Extension
+func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
+	srv := newTestServer(t)
+
+	id, _ := create(t, srv, &core.User{
+		UserName: "bjensen",
+		EnterpriseUser: &core.EnterpriseUser{
+			EmployeeNumber: "1234",
+			Department:     "Tour Operations",
+		},
+	})
+
+	request := Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
+		WithBearerToken(validToken),
+		WithContentType(protocol.MediaType),
+	)
+	response := Response(t, srv, request)
+
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	user := ReadBodyAs[core.User](t, response)
+	require.NotNil(t, user.EnterpriseUser)
+	assert.Equal(t, "1234", user.EnterpriseUser.EmployeeNumber)
+	assert.Equal(t, "Tour Operations", user.EnterpriseUser.Department)
+
+	// RFC 7643 Section 6: "schemas" lists every schema, including extensions, used by the resource.
+
+	t.Run("lists the extension in the resource's own schemas array", func(t *testing.T) {
+		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, user.Schemas)
+	})
+
+	// RFC 7644 Section 3.4.2.2: a URI-qualified attribute name reaches into a schema extension.
+	t.Run("filters by a URI-qualified extension attribute", func(t *testing.T) {
+		filterQuery := string(core.SchemaEnterpriseUser) + `:employeeNumber eq "1234"`
+		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, id, list.Resources[0].ID)
+	})
+
+	// RFC 7644 Section 3.4.2.3: sortBy also reaches into a schema extension.
+	t.Run("sorts by a URI-qualified extension attribute", func(t *testing.T) {
+		create(t, srv, &core.User{UserName: "amorris", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "0001"}})
+
+		sortBy := string(core.SchemaEnterpriseUser) + ":employeeNumber"
+		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.GreaterOrEqual(t, len(list.Resources), 2)
+		assert.Equal(t, "amorris", list.Resources[0].UserName)
+	})
+
+	// RFC 7644 Section 3.10: every facet of an attribute path, including the URN, is case insensitive.
+	t.Run("filters by an extension attribute with an upper-case URN", func(t *testing.T) {
+		filterQuery := strings.ToUpper(string(core.SchemaEnterpriseUser)) + `:employeeNumber eq "1234"`
+		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, id, list.Resources[0].ID)
+	})
+
+	t.Run("sorts by an extension attribute with an upper-case URN", func(t *testing.T) {
+		sortBy := strings.ToUpper(string(core.SchemaEnterpriseUser)) + ":employeeNumber"
+		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+	})
+
+	// RFC 7644 Section 3.5.2: a PATCH path may be qualified with the schema extension URN.
+	t.Run("patches an extension attribute by its URN-qualified path", func(t *testing.T) {
+		patchID, _ := create(t, srv, &core.User{UserName: "patched", EnterpriseUser: &core.EnterpriseUser{Department: "eng"}})
+
+		patched := patchUser(t, srv, patchID, patch.Operation{
+			Op:    patch.OpReplace,
+			Path:  string(core.SchemaEnterpriseUser) + ":department",
+			Value: json.RawMessage(`"sales"`),
+		})
+
+		require.NotNil(t, patched.EnterpriseUser)
+		assert.Equal(t, "sales", patched.EnterpriseUser.Department)
+	})
+
+	t.Run("patches an extension object when the path is omitted", func(t *testing.T) {
+		patchID, _ := create(t, srv, &core.User{UserName: "merged", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "9"}})
+
+		patched := patchUser(t, srv, patchID, patch.Operation{
+			Op:    patch.OpReplace,
+			Value: json.RawMessage(`{"` + string(core.SchemaEnterpriseUser) + `":{"department":"ops"}}`),
+		})
+
+		require.NotNil(t, patched.EnterpriseUser)
+		assert.Equal(t, "ops", patched.EnterpriseUser.Department)
+		assert.Equal(t, "9", patched.EnterpriseUser.EmployeeNumber)
+	})
+
+	// RFC 7643 Section 6: a resource type lists the schema extensions it accepts.
+	t.Run("advertises the extension on the resource type", func(t *testing.T) {
+		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User", WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		resourceType := ReadBodyAs[core.ResourceType](t, response)
+		assert.Equal(t, []core.SchemaExtension{{Schema: core.SchemaEnterpriseUser}}, resourceType.SchemaExtensions)
+	})
+
+	t.Run("publishes the extension schema", func(t *testing.T) {
+		request := Request(t, srv, http.MethodGet, basePath+"/Schemas/"+string(core.SchemaEnterpriseUser), WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		schema := ReadBodyAs[core.Schema](t, response)
+		assert.NotNil(t, schema.Attributes.Lookup("employeeNumber"))
+		assert.Equal(t, basePath+"/Schemas/"+string(core.SchemaEnterpriseUser), schema.Meta.Location)
+	})
+}
+
+// RFC 7643 5 Service Provider Configuration Schema
+func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
+	t.Run("PATCH is declined when Patch.Supported is false", func(t *testing.T) {
+		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Versioning()
+		srv := Server(t, server.New(config, standardOptions(t)...))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
+			}),
+		)
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+	})
+
+	t.Run("filter is declined when Filter.Supported is false", func(t *testing.T) {
+		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+
+		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "bjensen"`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+	})
+
+	t.Run("plain listing still works when Filter.Supported is false", func(t *testing.T) {
+		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusOK, response.StatusCode)
+	})
+
+	t.Run("sortBy is declined when Sort.Supported is false", func(t *testing.T) {
+		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+
+		path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+	})
+
+	t.Run("no ETag header when ETag.Supported is false, and a stale If-Match is ignored", func(t *testing.T) {
+		config := core.NewServiceProviderConfig(basePath).Patching()
+		srv := Server(t, server.New(config, standardOptions(t)...))
+
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		assert.Empty(t, created.Header.Get("ETag"))
+		id := ReadBodyAs[core.User](t, created).ID
+
+		replace := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken), WithContentType(protocol.MediaType),
+			WithHeader("If-Match", `W/"stale"`), WithRequestBody([]byte(`{"userName":"bjensen2"}`))))
+		assert.Equal(t, http.StatusOK, replace.StatusCode)
+
+		patch := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken), WithContentType(protocol.MediaType), WithHeader("If-Match", `W/"stale"`),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "userName", Value: json.RawMessage(`"bjensen3"`)}},
+			})))
+		assert.Equal(t, http.StatusOK, patch.StatusCode)
+
+		del := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
+			WithBearerToken(validToken), WithHeader("If-Match", `W/"stale"`)))
+		assert.Equal(t, http.StatusNoContent, del.StatusCode)
+	})
+
+	t.Run("runs a minimal server with only CRUD end to end", func(t *testing.T) {
+		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		get := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		assert.Equal(t, http.StatusOK, get.StatusCode)
+
+		del := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		assert.Equal(t, http.StatusNoContent, del.StatusCode)
+	})
+}
+
+// RFC 7643 7 Schema Definition
+func TestRFC7643SchemaDefinition(t *testing.T) {
+	srv := newTestServer(t)
+
+	request := Request(t, srv, http.MethodPost, basePath+"/Users",
+		WithBearerToken(validToken),
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, core.User{UserName: "bjensen", Password: "t1meMa$heen"}),
+	)
+	response := Response(t, srv, request)
+
+	require.Equal(t, http.StatusCreated, response.StatusCode)
+	body, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "password")
+}
+
+// RFC 7644 2 Authentication and Authorization
+func TestRFC7644AuthenticationAndAuthorization(t *testing.T) {
+	srv := newTestServer(t)
+
+	request := Request(t, srv, http.MethodPost, basePath+"/Users", WithContentType(protocol.MediaType))
+	response := Response(t, srv, request)
+
+	require.Equal(t, http.StatusUnauthorized, response.StatusCode)
+}
+
+// RFC 7644 3.3 Creating Resources
+func TestRFC7644CreatingResources(t *testing.T) {
+	t.Run("creates a resource and returns 201 with Location and ETag", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithAcceptHeader(protocol.MediaType),
+			WithContentType(protocol.MediaType),
+			WithBearerToken(validToken),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
+		user := ReadBodyAs[*core.User](t, response)
+		assert.Equal(t, basePath+"/Users/"+user.ID, response.Header.Get("Location"))
+		assert.NotEmpty(t, response.Header.Get("ETag"))
+		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, user.Schemas)
+		assert.NotEmpty(t, user.ID)
+		assert.Equal(t, "bjensen", user.UserName)
+		assert.Equal(t, core.ResourceTypeName("User"), user.Meta.ResourceType)
+		assert.NotZero(t, user.Meta.Created)
+		assert.NotZero(t, user.Meta.LastModified)
+		assert.NotEmpty(t, user.Meta.Location)
+		assert.NotEmpty(t, user.Meta.Version)
+	})
+
+	t.Run("rejects a malformed JSON body", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users", WithBearerToken(validToken), WithRequestBody([]byte(`{`)))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		scimErr := ReadBodyAs[scimerrors.Error](t, response)
+		assert.Equal(t, scimerrors.InvalidSyntax, scimErr.ScimType)
+	})
+
+	t.Run("rejects a body that does not match the resource", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users", WithBearerToken(validToken), WithRequestBody([]byte(`{"userName":5}`)))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
 	t.Run("rejects a duplicate value for a unique attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "bjensen"})
@@ -310,12 +600,6 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.NotEqual(t, 2000, created.Meta.Created.Year())
 	})
 
-	t.Run("skips a candidate whose optional unique attribute is unset", func(t *testing.T) {
-		srv := newTestServer(t)
-		createWidget(t, srv, &widget{Name: "a"})
-		createWidget(t, srv, &widget{Name: "b"})
-	})
-
 	t.Run("rejects a JSON null body instead of panicking", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -330,47 +614,6 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
-	t.Run("a case-exact unique attribute treats different casing as distinct", func(t *testing.T) {
-		srv := newTestServer(t)
-		createWidget(t, srv, &widget{Name: "a", Nick: "Al"})
-		createWidget(t, srv, &widget{Name: "b", Nick: "al"})
-
-		request := Request(t, srv, http.MethodPost, basePath+"/Widgets",
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, &widget{Name: "c", Nick: "Al"}),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusConflict, response.StatusCode)
-		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
-	})
-
-	t.Run("treats false as a value and an empty complex or multi-valued attribute as missing", func(t *testing.T) {
-		resource := server.NewResource[*core.User]("User", "/Users", core.SchemaUser,
-			core.NewAttribute("userName", core.TypeString).AsRequired(),
-			core.NewAttribute("active", core.TypeBoolean).AsRequired(),
-			core.NewAttribute("name", core.TypeComplex).AsRequired().With(core.NewAttribute("givenName", core.TypeString)),
-			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().AsRequired().With(core.NewAttribute("value", core.TypeString)),
-		)
-		srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(resource)))
-
-		for _, test := range []struct {
-			name   string
-			body   map[string]any
-			status int
-		}{
-			{"accepts false for a required boolean", map[string]any{"userName": "b", "active": false, "name": map[string]any{"givenName": "B"}, "emails": []any{map[string]any{"value": "a@b.com"}}}, http.StatusCreated},
-			{"rejects an empty complex value", map[string]any{"userName": "b", "active": true, "name": map[string]any{}, "emails": []any{map[string]any{"value": "a@b.com"}}}, http.StatusBadRequest},
-			{"rejects an empty multi-valued value", map[string]any{"userName": "b", "active": true, "name": map[string]any{"givenName": "B"}, "emails": []any{}}, http.StatusBadRequest},
-		} {
-			t.Run(test.name, func(t *testing.T) {
-				request := Request(t, srv, http.MethodPost, basePath+"/Users", WithContentType(protocol.MediaType), WithRequestBodyAs(t, test.body))
-
-				assert.Equal(t, test.status, Response(t, srv, request).StatusCode)
-			})
-		}
-	})
 	t.Run("admits one of many concurrent creates of a unique value", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -464,54 +707,6 @@ func TestRFC7644QueryResources(t *testing.T) {
 		assert.Equal(t, "carol", list.Resources[2].UserName)
 	})
 
-	t.Run("paginates with startIndex and count", func(t *testing.T) {
-		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		create(t, srv, &core.User{UserName: "carol"})
-
-		path := basePath + "/Users?" + url.Values{"startIndex": {"2"}, "count": {"1"}}.Encode()
-		request := Request(t, srv, http.MethodGet, path,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
-		assert.Equal(t, 3, list.TotalResults)
-		assert.Equal(t, 1, list.ItemsPerPage)
-		require.Len(t, list.Resources, 1)
-		assert.Equal(t, "bob", list.Resources[0].UserName)
-	})
-
-	t.Run("pages with a custom default count", func(t *testing.T) {
-		srv := newTestServer(t, server.DefaultCount(1))
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-
-		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken), WithContentType(protocol.MediaType))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[*core.User]](t, response).ItemsPerPage)
-	})
-
-	t.Run("caps the count at a custom maximum", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(2).Patching().Versioning()
-		srv := Server(t, server.New(config, standardOptions(t)...))
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		create(t, srv, &core.User{UserName: "carol"})
-
-		path := basePath + "/Users?" + url.Values{"count": {"50"}}.Encode()
-		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, 2, ReadBodyAs[protocol.ListResponse[*core.User]](t, response).ItemsPerPage)
-	})
-
 	t.Run("returns an empty list when there are no resources", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -525,17 +720,6 @@ func TestRFC7644QueryResources(t *testing.T) {
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		assert.Equal(t, 0, list.TotalResults)
 		assert.Empty(t, list.Resources)
-	})
-
-	t.Run("rejects a query with a non-integer startIndex", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		path := basePath + "/Users?" + url.Values{"startIndex": {"bogus"}}.Encode()
-		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusBadRequest, response.StatusCode)
-		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 }
 
@@ -1235,6 +1419,68 @@ func TestRFC7644Sorting(t *testing.T) {
 	})
 }
 
+// RFC 7644 3.4.2.4 Pagination
+func TestRFC7644Pagination(t *testing.T) {
+	t.Run("paginates with startIndex and count", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "carol"})
+
+		path := basePath + "/Users?" + url.Values{"startIndex": {"2"}, "count": {"1"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		assert.Equal(t, 3, list.TotalResults)
+		assert.Equal(t, 1, list.ItemsPerPage)
+		require.Len(t, list.Resources, 1)
+		assert.Equal(t, "bob", list.Resources[0].UserName)
+	})
+
+	t.Run("pages with a custom default count", func(t *testing.T) {
+		srv := newTestServer(t, server.DefaultCount(1))
+		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "bob"})
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[*core.User]](t, response).ItemsPerPage)
+	})
+
+	t.Run("caps the count at a custom maximum", func(t *testing.T) {
+		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(2).Patching().Versioning()
+		srv := Server(t, server.New(config, standardOptions(t)...))
+		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "carol"})
+
+		path := basePath + "/Users?" + url.Values{"count": {"50"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, 2, ReadBodyAs[protocol.ListResponse[*core.User]](t, response).ItemsPerPage)
+	})
+
+	t.Run("rejects a query with a non-integer startIndex", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		path := basePath + "/Users?" + url.Values{"startIndex": {"bogus"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+}
+
 // RFC 7644 3.4.2.5 Attributes
 func TestRFC7644Attributes(t *testing.T) {
 	srv := newTestServer(t)
@@ -1534,16 +1780,6 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.True(t, *patched.Active)
 	})
 
-	// RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
-	t.Run("merges the sub-attributes of a replaced complex attribute", func(t *testing.T) {
-		srv := newTestServer(t)
-		id, _ := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "Barbara", FamilyName: "Jensen"}})
-
-		patched := patchUser(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "name", Value: json.RawMessage(`{"givenName":"Babs"}`)})
-
-		assert.Equal(t, core.Name{GivenName: "Babs", FamilyName: "Jensen"}, patched.Name)
-	})
-
 	// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute.
 	t.Run("rejects a patch that targets a readOnly attribute", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -1726,56 +1962,6 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 	})
 
-	t.Run("adds a value with an add operation", func(t *testing.T) {
-		srv := newTestServer(t)
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-
-		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{
-					{
-						Op:    patch.OpAdd,
-						Path:  "name.givenName",
-						Value: json.RawMessage(`"Barbara"`),
-					},
-				},
-			}),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		patched := ReadBodyAs[core.User](t, response)
-		assert.Equal(t, "Barbara", patched.Name.GivenName)
-	})
-
-	t.Run("removes a value with a remove operation", func(t *testing.T) {
-		srv := newTestServer(t)
-		active := true
-		id, _ := create(t, srv, &core.User{UserName: "bjensen", Active: &active})
-
-		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{
-					{
-						Op:   patch.OpRemove,
-						Path: "active",
-					},
-				},
-			}),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		patched := ReadBodyAs[core.User](t, response)
-		assert.Nil(t, patched.Active)
-	})
-
 	t.Run("rejects changing an immutable value but allows adding and removing members", func(t *testing.T) {
 		emails := core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
 			core.NewAttribute("type", core.TypeString).AsImmutable(),
@@ -1808,6 +1994,75 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 				assert.Equal(t, test.status, Response(t, srv, request).StatusCode)
 			})
 		}
+	})
+}
+
+// RFC 7644 3.5.2.1 Add Operation
+func TestRFC7644AddOperation(t *testing.T) {
+	t.Run("adds a value with an add operation", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{
+					{
+						Op:    patch.OpAdd,
+						Path:  "name.givenName",
+						Value: json.RawMessage(`"Barbara"`),
+					},
+				},
+			}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		patched := ReadBodyAs[core.User](t, response)
+		assert.Equal(t, "Barbara", patched.Name.GivenName)
+	})
+}
+
+// RFC 7644 3.5.2.2 Remove Operation
+func TestRFC7644RemoveOperation(t *testing.T) {
+	t.Run("removes a value with a remove operation", func(t *testing.T) {
+		srv := newTestServer(t)
+		active := true
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Active: &active})
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{
+					{
+						Op:   patch.OpRemove,
+						Path: "active",
+					},
+				},
+			}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		patched := ReadBodyAs[core.User](t, response)
+		assert.Nil(t, patched.Active)
+	})
+}
+
+// RFC 7644 3.5.2.3 Replace Operation
+func TestRFC7644ReplaceOperation(t *testing.T) {
+	// RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
+	t.Run("merges the sub-attributes of a replaced complex attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "Barbara", FamilyName: "Jensen"}})
+
+		patched := patchUser(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "name", Value: json.RawMessage(`{"givenName":"Babs"}`)})
+
+		assert.Equal(t, core.Name{GivenName: "Babs", FamilyName: "Jensen"}, patched.Name)
 	})
 }
 
@@ -1969,20 +2224,6 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, response.StatusCode)
 	})
 
-	t.Run("advertises etag support in ServiceProviderConfig", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		config := ReadBodyAs[core.ServiceProviderConfig](t, response)
-		assert.True(t, config.ETag.Supported)
-	})
-
 	t.Run("serves concurrent reads and writes without losing a resource", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2086,94 +2327,19 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.False(t, advertised.Sort.Supported)
 		assert.True(t, advertised.Patch.Supported)
 	})
-}
 
-// RFC 7643 5 Service Provider Configuration Schema
-func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
-	t.Run("PATCH is declined when Patch.Supported is false", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Versioning()
-		srv := Server(t, server.New(config, standardOptions(t)...))
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+	t.Run("advertises etag support in ServiceProviderConfig", func(t *testing.T) {
+		srv := newTestServer(t)
 
-		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig",
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
-			}),
 		)
 		response := Response(t, srv, request)
 
-		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
-	})
-
-	t.Run("filter is declined when Filter.Supported is false", func(t *testing.T) {
-		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
-
-		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "bjensen"`}}.Encode()
-		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
-	})
-
-	t.Run("plain listing still works when Filter.Supported is false", func(t *testing.T) {
-		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
-
-		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusOK, response.StatusCode)
-	})
-
-	t.Run("sortBy is declined when Sort.Supported is false", func(t *testing.T) {
-		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
-
-		path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}}.Encode()
-		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
-		response := Response(t, srv, request)
-
-		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
-	})
-
-	t.Run("no ETag header when ETag.Supported is false, and a stale If-Match is ignored", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Patching()
-		srv := Server(t, server.New(config, standardOptions(t)...))
-
-		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
-			WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
-		require.Equal(t, http.StatusCreated, created.StatusCode)
-		assert.Empty(t, created.Header.Get("ETag"))
-		id := ReadBodyAs[core.User](t, created).ID
-
-		replace := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
-			WithBearerToken(validToken), WithContentType(protocol.MediaType),
-			WithHeader("If-Match", `W/"stale"`), WithRequestBody([]byte(`{"userName":"bjensen2"}`))))
-		assert.Equal(t, http.StatusOK, replace.StatusCode)
-
-		patch := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-			WithBearerToken(validToken), WithContentType(protocol.MediaType), WithHeader("If-Match", `W/"stale"`),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "userName", Value: json.RawMessage(`"bjensen3"`)}},
-			})))
-		assert.Equal(t, http.StatusOK, patch.StatusCode)
-
-		del := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
-			WithBearerToken(validToken), WithHeader("If-Match", `W/"stale"`)))
-		assert.Equal(t, http.StatusNoContent, del.StatusCode)
-	})
-
-	t.Run("runs a minimal server with only CRUD end to end", func(t *testing.T) {
-		srv := Server(t, server.New(core.NewServiceProviderConfig(basePath), standardOptions(t)...))
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-
-		get := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
-		assert.Equal(t, http.StatusOK, get.StatusCode)
-
-		del := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+id, WithBearerToken(validToken)))
-		assert.Equal(t, http.StatusNoContent, del.StatusCode)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		config := ReadBodyAs[core.ServiceProviderConfig](t, response)
+		assert.True(t, config.ETag.Supported)
 	})
 }
 
@@ -2310,148 +2476,6 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 
 		assert.Equal(t, http.StatusForbidden, response.StatusCode)
 	})
-}
-
-// RFC 7643 4.3 Enterprise User Schema Extension
-func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
-	srv := newTestServer(t)
-
-	id, _ := create(t, srv, &core.User{
-		UserName: "bjensen",
-		EnterpriseUser: &core.EnterpriseUser{
-			EmployeeNumber: "1234",
-			Department:     "Tour Operations",
-		},
-	})
-
-	request := Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-	)
-	response := Response(t, srv, request)
-
-	require.Equal(t, http.StatusOK, response.StatusCode)
-	user := ReadBodyAs[core.User](t, response)
-	require.NotNil(t, user.EnterpriseUser)
-	assert.Equal(t, "1234", user.EnterpriseUser.EmployeeNumber)
-	assert.Equal(t, "Tour Operations", user.EnterpriseUser.Department)
-
-	// RFC 7643 Section 6: "schemas" lists every schema, including extensions, used by the resource.
-	t.Run("lists the extension in the resource's own schemas array", func(t *testing.T) {
-		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, user.Schemas)
-	})
-
-	// RFC 7644 Section 3.4.2.2: a URI-qualified attribute name reaches into a schema extension.
-	t.Run("filters by a URI-qualified extension attribute", func(t *testing.T) {
-		filterQuery := string(core.SchemaEnterpriseUser) + `:employeeNumber eq "1234"`
-		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
-		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
-		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, id, list.Resources[0].ID)
-	})
-
-	// RFC 7644 Section 3.4.2.3: sortBy also reaches into a schema extension.
-	t.Run("sorts by a URI-qualified extension attribute", func(t *testing.T) {
-		create(t, srv, &core.User{UserName: "amorris", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "0001"}})
-
-		sortBy := string(core.SchemaEnterpriseUser) + ":employeeNumber"
-		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
-		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
-		require.GreaterOrEqual(t, len(list.Resources), 2)
-		assert.Equal(t, "amorris", list.Resources[0].UserName)
-	})
-
-	// RFC 7644 Section 3.10: every facet of an attribute path, including the URN, is case insensitive.
-	t.Run("filters by an extension attribute with an upper-case URN", func(t *testing.T) {
-		filterQuery := strings.ToUpper(string(core.SchemaEnterpriseUser)) + `:employeeNumber eq "1234"`
-		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
-		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
-		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, id, list.Resources[0].ID)
-	})
-
-	t.Run("sorts by an extension attribute with an upper-case URN", func(t *testing.T) {
-		sortBy := strings.ToUpper(string(core.SchemaEnterpriseUser)) + ":employeeNumber"
-		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
-		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-	})
-
-	// RFC 7644 Section 3.5.2: a PATCH path may be qualified with the schema extension URN.
-	t.Run("patches an extension attribute by its URN-qualified path", func(t *testing.T) {
-		patchID, _ := create(t, srv, &core.User{UserName: "patched", EnterpriseUser: &core.EnterpriseUser{Department: "eng"}})
-
-		patched := patchUser(t, srv, patchID, patch.Operation{
-			Op:    patch.OpReplace,
-			Path:  string(core.SchemaEnterpriseUser) + ":department",
-			Value: json.RawMessage(`"sales"`),
-		})
-
-		require.NotNil(t, patched.EnterpriseUser)
-		assert.Equal(t, "sales", patched.EnterpriseUser.Department)
-	})
-
-	t.Run("patches an extension object when the path is omitted", func(t *testing.T) {
-		patchID, _ := create(t, srv, &core.User{UserName: "merged", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "9"}})
-
-		patched := patchUser(t, srv, patchID, patch.Operation{
-			Op:    patch.OpReplace,
-			Value: json.RawMessage(`{"` + string(core.SchemaEnterpriseUser) + `":{"department":"ops"}}`),
-		})
-
-		require.NotNil(t, patched.EnterpriseUser)
-		assert.Equal(t, "ops", patched.EnterpriseUser.Department)
-		assert.Equal(t, "9", patched.EnterpriseUser.EmployeeNumber)
-	})
-
-	// RFC 7643 Section 6: a resource type lists the schema extensions it accepts.
-	t.Run("advertises the extension on the resource type", func(t *testing.T) {
-		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User", WithBearerToken(validToken))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		resourceType := ReadBodyAs[core.ResourceType](t, response)
-		assert.Equal(t, []core.SchemaExtension{{Schema: core.SchemaEnterpriseUser}}, resourceType.SchemaExtensions)
-	})
-
-	t.Run("publishes the extension schema", func(t *testing.T) {
-		request := Request(t, srv, http.MethodGet, basePath+"/Schemas/"+string(core.SchemaEnterpriseUser), WithBearerToken(validToken))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		schema := ReadBodyAs[core.Schema](t, response)
-		assert.NotNil(t, schema.Attributes.Lookup("employeeNumber"))
-		assert.Equal(t, basePath+"/Schemas/"+string(core.SchemaEnterpriseUser), schema.Meta.Location)
-	})
-}
-
-// RFC 7643 7 Schema Definition
-func TestRFC7643SchemaDefinition(t *testing.T) {
-	srv := newTestServer(t)
-
-	request := Request(t, srv, http.MethodPost, basePath+"/Users",
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, core.User{UserName: "bjensen", Password: "t1meMa$heen"}),
-	)
-	response := Response(t, srv, request)
-
-	require.Equal(t, http.StatusCreated, response.StatusCode)
-	body, err := io.ReadAll(response.Body)
-	require.NoError(t, err)
-	assert.NotContains(t, string(body), "password")
 }
 
 func patchUser(t *testing.T, srv *httptest.Server, id string, operations ...patch.Operation) core.User {
