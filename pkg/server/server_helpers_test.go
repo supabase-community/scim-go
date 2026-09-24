@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -159,7 +158,7 @@ func standardOptions(t *testing.T) []server.Option[*server.Server] {
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if candidate != validToken {
-					return ctx, errors.New("invalid token")
+					return ctx, server.ErrInvalidToken
 				}
 				return ctx, nil
 			},

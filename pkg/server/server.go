@@ -81,7 +81,7 @@ func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.handler.ServeHTTP(w, r)
+	s.handler.ServeHTTP(w, withReporter(r, s.errorHandler))
 }
 
 func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {

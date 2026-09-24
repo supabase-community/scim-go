@@ -42,7 +42,7 @@ func main() {
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {
-					return ctx, fmt.Errorf("invalid token")
+					return ctx, server.ErrInvalidToken
 				}
 				return ctx, nil
 			},

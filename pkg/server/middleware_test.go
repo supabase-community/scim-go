@@ -3,12 +3,15 @@ package server_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
@@ -16,8 +19,14 @@ type tenantKey struct{}
 
 func TestRequireBearerToken(t *testing.T) {
 	validate := func(ctx context.Context, token string) (context.Context, error) {
-		if token != "good-token" {
-			return ctx, errors.New("invalid token")
+		switch token {
+		case "good-token":
+		case "expired-token":
+			return ctx, fmt.Errorf("%w: expired at noon", server.ErrInvalidToken)
+		case "db-down":
+			return ctx, errors.New("dial tcp 10.0.0.1:5432: connection refused")
+		default:
+			return ctx, server.ErrInvalidToken
 		}
 		return context.WithValue(ctx, tenantKey{}, "acme"), nil
 	}
@@ -90,6 +99,76 @@ func TestRequireBearerToken(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 		assert.False(t, called)
 		assert.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
+	})
+
+	t.Run("rejects a wrapped invalid token with a fixed description", func(t *testing.T) {
+		var called bool
+		var tenant string
+		handler := newHandler(&called, &tenant)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer expired-token")
+		handler.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.False(t, called)
+		assert.Equal(t, `Bearer error="invalid_token", error_description="The access token is invalid"`, w.Header().Get("WWW-Authenticate"))
+		assert.NotContains(t, w.Body.String(), "noon")
+	})
+
+	t.Run("answers a validator failure with 500 and no challenge", func(t *testing.T) {
+		var called bool
+		var tenant string
+		handler := newHandler(&called, &tenant)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, "/", nil)
+		r.Header.Set("Authorization", "Bearer db-down")
+		handler.ServeHTTP(w, r)
+
+		body, _ := io.ReadAll(w.Body)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.False(t, called)
+		assert.Empty(t, w.Header().Get("WWW-Authenticate"))
+		assert.NotContains(t, string(body), "10.0.0.1")
+	})
+
+	t.Run("passes a validator failure to the ErrorHandler", func(t *testing.T) {
+		cause := errors.New("connection refused")
+		var reported error
+		srv := server.New(fullServiceProviderConfig(),
+			server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
+			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+				func(ctx context.Context, _ string) (context.Context, error) { return ctx, cause },
+			)),
+		)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, basePath+"/ServiceProviderConfig", nil)
+		r.Header.Set("Authorization", "Bearer anything")
+		srv.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.ErrorIs(t, reported, cause)
+	})
+
+	t.Run("does not report an invalid token to the ErrorHandler", func(t *testing.T) {
+		var reported error
+		srv := server.New(fullServiceProviderConfig(),
+			server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
+			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+				func(ctx context.Context, _ string) (context.Context, error) { return ctx, server.ErrInvalidToken },
+			)),
+		)
+
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodGet, basePath+"/ServiceProviderConfig", nil)
+		r.Header.Set("Authorization", "Bearer anything")
+		srv.ServeHTTP(w, r)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		assert.NoError(t, reported)
 	})
 
 	t.Run("accepts a valid token and threads the validator's context to the next handler", func(t *testing.T) {
