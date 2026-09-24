@@ -1,11 +1,14 @@
 package peg
 
-import "unicode"
-
+// Space matches 1*SP, per RFC 5234, Appendix B.1.
 func Space() Parser {
 	return func(c *Context) (ASTNode, error) {
-		for c.position < len(c.stream) && unicode.IsSpace(rune(c.stream[c.position])) {
+		start := c.position
+		for c.position < len(c.stream) && c.stream[c.position] == ' ' {
 			c.position++
+		}
+		if c.position == start {
+			return nil, ErrNoMatch
 		}
 		return nil, nil
 	}

@@ -56,7 +56,7 @@ func newGrammar(maxInputBytes int) *grammar {
 
 // Parse reads a SCIM filter (RFC 7644 3.4.2.2) and returns its AST
 func (g *grammar) Parse(text string) (*Node, error) {
-	raw, err := g.run(text, trailingSpace(g.filter))
+	raw, err := g.run(text, g.filter)
 	if err != nil {
 		return nil, err
 	}
@@ -79,17 +79,6 @@ func (g *grammar) run(text string, p peg.Parser) (peg.ASTNode, error) {
 	return raw, nil
 }
 
-func trailingSpace(p peg.Parser) peg.Parser {
-	return func(c *peg.Context) (peg.ASTNode, error) {
-		raw, err := p(c)
-		if err != nil {
-			return nil, err
-		}
-		_, _ = peg.Space()(c)
-		return raw, nil
-	}
-}
-
 func (g *grammar) exceedsMax(text string) bool {
 	return g.maxInputBytes > 0 && len(text) > g.maxInputBytes
 }
@@ -108,7 +97,7 @@ func (g *grammar) and(atom, self peg.Parser) peg.Parser {
 func (g *grammar) parenGroup(sub peg.Parser) peg.Parser {
 	return func(c *peg.Context) (peg.ASTNode, error) {
 		start := c.Position()
-		_, err := peg.Sequence(peg.Fold("not"), peg.Space())(c)
+		_, err := peg.Sequence(peg.Fold("not"), peg.Optional(peg.Space()))(c)
 		negated := err == nil
 		if _, err := peg.Str("(")(c); err != nil {
 			c.Seek(start)
@@ -244,12 +233,10 @@ func binaryExpression(left, op peg.Parser, name string, right peg.Parser) peg.Pa
 			return nil, err
 		}
 		start := c.Position()
-		_, _ = peg.Space()(c)
-		if _, err := op(c); err != nil {
+		if _, err := peg.Sequence(peg.Space(), op, peg.Space())(c); err != nil {
 			c.Seek(start)
 			return l, nil
 		}
-		_, _ = peg.Space()(c)
 		r, err := right(c)
 		if err != nil {
 			c.Seek(start)

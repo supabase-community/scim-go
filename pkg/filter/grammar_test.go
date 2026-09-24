@@ -192,6 +192,13 @@ func TestGrammarParensAndNot(t *testing.T) {
 		assert.Equal(t, "c", node.Right().Attribute())
 	})
 
+	t.Run("not directly before the paren", func(t *testing.T) {
+		node, err := g.Parse(`not(userName pr)`)
+
+		require.NoError(t, err)
+		assert.True(t, node.Not())
+	})
+
 	t.Run("not without parens is rejected", func(t *testing.T) {
 		_, err := g.Parse(`not userName pr`)
 
@@ -275,15 +282,7 @@ func TestParseErrorReportsPosition(t *testing.T) {
 	var perr *filter.ParseError
 	require.ErrorAs(t, err, &perr)
 	assert.Equal(t, input, perr.Input)
-	assert.Equal(t, len("userName eq \"bjensen\" "), perr.Position)
-}
-
-func TestGrammarTrailingWhitespaceIsTolerated(t *testing.T) {
-	g := filter.New(0)
-	node, err := g.Parse(`userName eq "bjensen"   `)
-
-	require.NoError(t, err)
-	assert.Equal(t, "userName", node.Attribute())
+	assert.Equal(t, len(`userName eq "bjensen"`), perr.Position)
 }
 
 func TestGrammarDeepNestingIsLinear(t *testing.T) {
@@ -370,6 +369,13 @@ func TestGrammarRejectsMalformed(t *testing.T) {
 		{"invalid string escape", `userName eq "\x"`},
 		{"unclosed paren", `not (userName eq "a"`},
 		{"unopened paren", `userName eq "a")`},
+		{"trailing space", `userName eq "a" `},
+		{"leading space", ` userName eq "a"`},
+		{"tab separator", "userName\teq\t\"a\""},
+		{"no space before value", `userName eq"a"`},
+		{"no space before and", `userName eq "a"and title pr`},
+		{"no space after or", `userName pr or(title pr)`},
+		{"juxtaposed expressions", `userName pr oregon pr`},
 	}
 	g := filter.New(0)
 	for _, tc := range tt {

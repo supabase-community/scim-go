@@ -15,14 +15,15 @@ func TestSpace(t *testing.T) {
 	tt := []struct {
 		stream   string
 		position int
+		err      error
 	}{
 		{stream: "   abcd ", position: 3},
 		{stream: "   abcd", position: 3},
 		{stream: " ", position: 1},
-		{stream: "", position: 0},
-		{stream: "A", position: 0},
-		{stream: "ABCD", position: 0},
-		{stream: "abcd", position: 0},
+		{stream: "", position: 0, err: peg.ErrNoMatch},
+		{stream: "A", position: 0, err: peg.ErrNoMatch},
+		{stream: "\tA", position: 0, err: peg.ErrNoMatch},
+		{stream: "\nA", position: 0, err: peg.ErrNoMatch},
 	}
 	for _, expected := range tt {
 		t.Run(fmt.Sprintf("%s %d", expected.stream, expected.position), func(t *testing.T) {
@@ -31,7 +32,7 @@ func TestSpace(t *testing.T) {
 
 			require.Nil(t, item)
 			assert.Equal(t, expected.position, ctx.Position())
-			require.NoError(t, err)
+			require.ErrorIs(t, err, expected.err)
 		})
 	}
 }
