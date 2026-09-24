@@ -1,5 +1,5 @@
 package core
 
 type Resource interface {
-	ResourceID() string
+	Common() *Base
 }

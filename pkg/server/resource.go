@@ -2,7 +2,7 @@ package server
 
 import "github.com/supabase-community/scim-go/pkg/core"
 
-type Resource[T Entity] struct {
+type Resource[T core.Resource] struct {
 	name        string
 	endpoint    string
 	id          core.SchemaURI
@@ -12,7 +12,7 @@ type Resource[T Entity] struct {
 	repository  Repository[T]
 }
 
-func NewResource[T Entity](name, endpoint string, id core.SchemaURI, attributes ...*core.Attribute) *Resource[T] {
+func NewResource[T core.Resource](name, endpoint string, id core.SchemaURI, attributes ...*core.Attribute) *Resource[T] {
 	return &Resource[T]{
 		name:       name,
 		endpoint:   endpoint,

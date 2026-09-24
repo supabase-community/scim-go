@@ -13,7 +13,7 @@ import (
 )
 
 // characteristics enforces the attribute characteristics of RFC 7643, Section 2.2, except uniqueness, which the Repository enforces atomically with the write.
-func characteristics[T Entity](schemas core.Schemas, repo Repository[T]) Validator[T] {
+func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) Validator[T] {
 	readers := readersOf(schemas)
 	return func(ctx context.Context, candidate T) error {
 		after, err := core.NewObject(candidate)
@@ -98,11 +98,12 @@ func valuesOf(raw any) []any {
 	return []any{raw}
 }
 
-func previous[T Entity](ctx context.Context, repo Repository[T], candidate T) (core.Object, error) {
-	if candidate.ResourceID() == "" {
+func previous[T core.Resource](ctx context.Context, repo Repository[T], candidate T) (core.Object, error) {
+	id := candidate.Common().ID
+	if id == "" {
 		return core.Object{}, nil
 	}
-	existing, err := repo.Get(ctx, candidate.ResourceID())
+	existing, err := repo.Get(ctx, id)
 	if errors.Is(err, scimerrors.ErrNotFound("")) {
 		return core.Object{}, nil
 	}

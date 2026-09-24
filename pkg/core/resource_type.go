@@ -22,7 +22,3 @@ func (r *ResourceType) Extend(extensions ...SchemaExtension) *ResourceType {
 	r.SchemaExtensions = append(r.SchemaExtensions, extensions...)
 	return r
 }
-
-func (r *ResourceType) ResourceID() string {
-	return string(r.ID)
-}

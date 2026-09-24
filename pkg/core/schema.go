@@ -40,10 +40,6 @@ func (s *Schema) With(attributes ...*Attribute) *Schema {
 	return s
 }
 
-func (s *Schema) ResourceID() string {
-	return string(s.ID)
-}
-
 func (s *Schema) Resolve(name string) (*Attribute, bool) {
 	attribute := commonAttributes.Lookup(name)
 	if attribute == nil && s != nil {

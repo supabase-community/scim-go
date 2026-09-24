@@ -14,7 +14,7 @@ import (
 )
 
 // Repository stores resources, per RFC 7643 3.1 / RFC 7644 3.14 / RFC 7643 7: Create/Replace stamp id+meta and atomically return scimerrors.ErrUniqueness on a value collision; Replace/Delete honour a non-empty expected version.
-type Repository[T Entity] interface {
+type Repository[T core.Resource] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
@@ -22,7 +22,7 @@ type Repository[T Entity] interface {
 	Delete(ctx context.Context, id, version string) error
 }
 
-type repository[T Entity] struct {
+type repository[T core.Resource] struct {
 	mu       sync.Mutex
 	endpoint string
 	schemas  core.Schemas
@@ -32,7 +32,7 @@ type repository[T Entity] struct {
 }
 
 // NewRepository stores resources in memory, for tests and reference servers.
-func NewRepository[T Entity](endpoint string, schemas core.Schemas) Repository[T] {
+func NewRepository[T core.Resource](endpoint string, schemas core.Schemas) Repository[T] {
 	readers := readersOf(schemas)
 	return &repository[T]{
 		endpoint:  endpoint,
@@ -77,16 +77,16 @@ func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) (
 
 func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 	now := time.Now().UTC()
-	id := uuid.NewV7().String()
-	item.SetID(id)
-	item.SetSchemas(schemaURIs(r.schemas))
-	item.SetMeta(core.Meta{
+	common := item.Common()
+	common.ID = uuid.NewV7().String()
+	common.Schemas = schemaURIs(r.schemas)
+	common.Meta = core.Meta{
 		ResourceType: r.schemas[0].Name,
 		Created:      now,
 		LastModified: now,
-		Location:     r.endpoint + "/" + id,
+		Location:     r.endpoint + "/" + common.ID,
 		Version:      weakETag(now),
-	})
+	}
 
 	err := r.withLock(func() error {
 		created, err := r.rowOf(item)
@@ -105,16 +105,16 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 
 func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 	err := r.withLock(func() error {
-		i, err := r.locate(item.ResourceID(), item.GetMeta().Version)
+		common := item.Common()
+		i, err := r.locate(common.ID, common.Meta.Version)
 		if err != nil {
 			return err
 		}
-		meta := r.rows[i].item.GetMeta()
 		now := time.Now().UTC()
-		meta.LastModified = now
-		meta.Version = weakETag(now)
-		item.SetMeta(meta)
-		item.SetSchemas(schemaURIs(r.schemas))
+		common.Meta = r.rows[i].item.Common().Meta
+		common.Meta.LastModified = now
+		common.Meta.Version = weakETag(now)
+		common.Schemas = schemaURIs(r.schemas)
 		replaced, err := r.rowOf(item)
 		if err != nil {
 			return err
@@ -148,11 +148,11 @@ func (r *repository[T]) withLock(fn func() error) error {
 
 // RFC 7644 Section 3.14: a non-empty version must match the stored one.
 func (r *repository[T]) locate(id, version string) (int, error) {
-	i := slices.IndexFunc(r.rows, func(row row[T]) bool { return row.item.ResourceID() == id })
+	i := slices.IndexFunc(r.rows, func(row row[T]) bool { return row.item.Common().ID == id })
 	switch {
 	case i < 0:
 		return i, scimerrors.ErrNotFound("Not found")
-	case version != "" && r.rows[i].item.GetMeta().Version != version:
+	case version != "" && r.rows[i].item.Common().Meta.Version != version:
 		return i, scimerrors.ErrPreconditionFailed("resource has changed on the server")
 	}
 	return i, nil
@@ -164,7 +164,7 @@ func (r *repository[T]) rowOf(item T) (row[T], error) {
 	if err != nil {
 		return row[T]{}, err
 	}
-	if attribute := r.conflictingAttribute(item.ResourceID(), candidate); attribute != nil {
+	if attribute := r.conflictingAttribute(item.Common().ID, candidate); attribute != nil {
 		return row[T]{}, scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
 	}
 	return row[T]{item: item, object: candidate}, nil
@@ -172,7 +172,7 @@ func (r *repository[T]) rowOf(item T) (row[T], error) {
 
 func (r *repository[T]) conflictingAttribute(id string, candidate core.Object) *core.Attribute {
 	for _, other := range r.rows {
-		if other.item.ResourceID() == id {
+		if other.item.Common().ID == id {
 			continue
 		}
 		for attribute, read := range r.all() {
@@ -246,7 +246,7 @@ func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (reader, bool
 	}, true
 }
 
-type row[T Entity] struct {
+type row[T core.Resource] struct {
 	item   T
 	object core.Object
 }
