@@ -142,6 +142,22 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 	})
 }
 
+// RFC 7643 2.1 Attributes
+func TestRFC7643Attributes(t *testing.T) {
+	t.Run("reads attribute names in a request body case-insensitively", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"USERNAME":"bjensen"}`)),
+		))
+
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
+	})
+}
+
 // RFC 7643 2.2 Attribute Characteristics
 func TestRFC7643AttributeCharacteristics(t *testing.T) {
 	t.Run("rejects a resource missing a required attribute", func(t *testing.T) {
@@ -302,6 +318,60 @@ func TestRFC7643UnassignedAndNullValues(t *testing.T) {
 				assert.Equal(t, test.status, Response(t, srv, request).StatusCode)
 			})
 		}
+	})
+
+	t.Run("clears an attribute a replace leaves out", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", UserType: "employee"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Empty(t, ReadBodyAs[core.User](t, response).UserType)
+	})
+}
+
+// RFC 7643 3.1 Common Attributes
+func TestRFC7643CommonAttributes(t *testing.T) {
+	t.Run("sets lastModified to created on create and keeps externalId", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{ExternalID: "hr-42", UserName: "bjensen"}),
+		))
+
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		created := ReadBodyAs[core.User](t, response)
+		assert.Equal(t, created.Meta.Created, created.Meta.LastModified)
+		assert.Equal(t, "hr-42", created.ExternalID)
+	})
+}
+
+// RFC 7643 4.2 "Group" Resource Schema
+func TestRFC7643GroupResourceSchema(t *testing.T) {
+	t.Run("creates, fetches, and requires displayName for a group", func(t *testing.T) {
+		srv := newTestServer(t)
+		post := func(group core.Group) *http.Response {
+			return Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, group),
+			))
+		}
+
+		created := post(core.Group{DisplayName: "Tour Guides"})
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id := ReadBodyAs[core.Group](t, created).ID
+		fetched := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Groups/"+id, WithBearerToken(validToken)))
+		require.Equal(t, http.StatusOK, fetched.StatusCode)
+		assert.Equal(t, "Tour Guides", ReadBodyAs[core.Group](t, fetched).DisplayName)
+		assert.Equal(t, http.StatusBadRequest, post(core.Group{}).StatusCode)
 	})
 }
 
@@ -768,6 +838,15 @@ func TestRFC7644QueryResources(t *testing.T) {
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		assert.Equal(t, 0, list.TotalResults)
 		assert.Empty(t, list.Resources)
+	})
+
+	t.Run("identifies the response with the ListResponse schema and ignores unknown parameters", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?unknown=1", WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []core.SchemaURI{protocol.SchemaListResponse}, ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).Schemas)
 	})
 }
 
@@ -1246,6 +1325,17 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, 1, matches("/Users", `active eq true`))
 		assert.Equal(t, 1, matches("/Users", string(core.SchemaEnterpriseUser)+`:department eq "tour"`))
 	})
+
+	t.Run("treats attribute names and operators as case insensitive", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "bjensen"})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`USERNAME EQ "bjensen"`}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).TotalResults)
+	})
 }
 
 // RFC 7644 3.4.2.3 Sorting
@@ -1470,6 +1560,15 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "zed", list.Resources[1].UserName)
 		assert.Equal(t, "nobody", list.Resources[2].UserName)
 	})
+
+	t.Run("rejects a sortOrder that is not ascending or descending", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?sortBy=userName&sortOrder=sideways", WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
 }
 
 // RFC 7644 3.4.2.4 Pagination
@@ -1531,6 +1630,23 @@ func TestRFC7644Pagination(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("reads a startIndex below 1 as 1 and a negative count as 0", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
+		list := func(query string) protocol.ListResponse[map[string]any] {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?"+query, WithBearerToken(validToken)))
+			require.Equal(t, http.StatusOK, response.StatusCode, query)
+			return ReadBodyAs[protocol.ListResponse[map[string]any]](t, response)
+		}
+
+		assert.Equal(t, 1, list("startIndex=0&count=1").StartIndex)
+		assert.Empty(t, list("count=-1").Resources)
+		zero := list("count=0")
+		assert.Empty(t, zero.Resources)
+		assert.Equal(t, 2, zero.TotalResults)
 	})
 }
 
@@ -1615,6 +1731,23 @@ func TestRFC7644Attributes(t *testing.T) {
 		body := ReadBodyAs[map[string]any](t, response)
 		assert.Equal(t, "employee", body["userType"])
 		assert.NotContains(t, body, "emails")
+	})
+
+	t.Run("never excludes an attribute that is always returned", func(t *testing.T) {
+		status, body := get(t, "/Users/"+id+"?excludedAttributes=id")
+
+		require.Equal(t, http.StatusOK, status)
+		assert.Equal(t, id, body["id"])
+	})
+
+	t.Run("shapes the resource returned by a replace", func(t *testing.T) {
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id+"?attributes=userName",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen", Emails: []core.Email{{Value: "bjensen@example.com"}}}),
+		))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(ReadBodyAs[map[string]any](t, response)))
 	})
 }
 
@@ -1800,6 +1933,38 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, original.Meta.Created, ReadBodyAs[core.User](t, response).Meta.Created)
+	})
+
+	t.Run("rejects a replace missing a required attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{}`)),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("advances meta.lastModified", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		)))
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+created.ID,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.True(t, ReadBodyAs[core.User](t, response).Meta.LastModified.After(created.Meta.LastModified))
 	})
 }
 
@@ -2088,6 +2253,15 @@ func TestRFC7644AddOperation(t *testing.T) {
 		patched := ReadBodyAs[core.User](t, response)
 		assert.Equal(t, "Barbara", patched.Name.GivenName)
 	})
+
+	t.Run("adds the attributes of the value when the path is omitted", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		patched := patchUser(t, srv, id, patch.Operation{Op: patch.OpAdd, Value: json.RawMessage(`{"userType":"employee"}`)})
+
+		assert.Equal(t, "employee", patched.UserType)
+	})
 }
 
 // RFC 7644 3.5.2.2 Remove Operation
@@ -2116,6 +2290,20 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 		patched := ReadBodyAs[core.User](t, response)
 		assert.Nil(t, patched.Active)
 	})
+
+	t.Run("rejects a remove without a path with noTarget", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{{Op: patch.OpRemove}}}),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.NoTarget, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
 }
 
 // RFC 7644 3.5.2.3 Replace Operation
@@ -2128,6 +2316,22 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		patched := patchUser(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "name", Value: json.RawMessage(`{"givenName":"Babs"}`)})
 
 		assert.Equal(t, core.Name{GivenName: "Babs", FamilyName: "Jensen"}, patched.Name)
+	})
+
+	t.Run("rejects a value path that matches nothing with noTarget", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com", Type: "work"}}})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
+				{Op: patch.OpReplace, Path: `emails[type eq "home"].value`, Value: json.RawMessage(`"b@example.com"`)},
+			}}),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.NoTarget, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 }
 
@@ -2208,6 +2412,23 @@ func TestRFC7644DeletingResources(t *testing.T) {
 // RFC 7644 3.7 Bulk Operations
 func TestRFC7644BulkOperations(t *testing.T) {
 	t.Skip("OPTIONAL: bulk operations are not supported")
+}
+
+// RFC 7644 3.8 Data Input/Output Formats
+func TestRFC7644DataInputOutputFormats(t *testing.T) {
+	t.Run("accepts application/json and answers with application/scim+json", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType("application/json"),
+			WithAcceptHeader("application/json"),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		))
+
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
+	})
 }
 
 // RFC 7644 3.11 "/Me" Authenticated Subject Alias
