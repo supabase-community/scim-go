@@ -53,6 +53,16 @@ func TestRFC6750AuthorizationRequestHeaderField(t *testing.T) {
 	})
 }
 
+// RFC 6750 2.2 Form-Encoded Body Parameter
+func TestRFC6750FormEncodedBodyParameter(t *testing.T) {
+	t.Skip("MAY: SCIM request bodies are JSON, so a form-encoded access_token is not supported")
+}
+
+// RFC 6750 2.3 URI Query Parameter
+func TestRFC6750URIQueryParameter(t *testing.T) {
+	t.Skip("MAY: an access_token query parameter is not supported")
+}
+
 // RFC 6750 3 The WWW-Authenticate Response Header Field
 func TestRFC6750TheWWWAuthenticateResponseHeaderField(t *testing.T) {
 	t.Run("omits error info when no Authorization header is present", func(t *testing.T) {
@@ -116,6 +126,10 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
 		assert.Empty(t, response.Header.Get("WWW-Authenticate"))
 		assert.NotContains(t, ReadBodyAs[scimerrors.Error](t, response).Detail, "10.0.0.1")
+	})
+
+	t.Run("rejects a token without the required scope with insufficient_scope", func(t *testing.T) {
+		t.Skip("SHOULD: there is no scope model, so insufficient_scope (403) is never issued")
 	})
 }
 
@@ -504,6 +518,11 @@ func TestRFC7644AuthenticationAndAuthorization(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, response.StatusCode)
 }
 
+// RFC 7644 2.2 Anonymous Requests
+func TestRFC7644AnonymousRequests(t *testing.T) {
+	t.Skip("MAY: anonymous requests are not supported; every request needs a bearer token")
+}
+
 // RFC 7644 3.3 Creating Resources
 func TestRFC7644CreatingResources(t *testing.T) {
 	t.Run("creates a resource and returns 201 with Location and ETag", func(t *testing.T) {
@@ -721,6 +740,11 @@ func TestRFC7644QueryResources(t *testing.T) {
 		assert.Equal(t, 0, list.TotalResults)
 		assert.Empty(t, list.Resources)
 	})
+}
+
+// RFC 7644 3.4.2.1 Query Endpoints
+func TestRFC7644QueryEndpoints(t *testing.T) {
+	t.Skip("MAY: queries against the server root are not supported, so tooMany is never returned")
 }
 
 // RFC 7644 3.4.2.2 Filtering
@@ -1567,7 +1591,7 @@ func TestRFC7644Attributes(t *testing.T) {
 
 // RFC 7644 3.4.3 Querying Resources Using HTTP POST
 func TestRFC7644QueryingResourcesUsingHTTPPOST(t *testing.T) {
-	t.Skip("POST /.search is not registered by server.New; falls through to the generic unknown-path 404")
+	t.Skip("MAY: querying with POST /.search is not supported")
 }
 
 // RFC 7644 3.5.1 Replacing with PUT
@@ -2142,7 +2166,7 @@ func TestRFC7644DeletingResources(t *testing.T) {
 
 // RFC 7644 3.7 Bulk Operations
 func TestRFC7644BulkOperations(t *testing.T) {
-	t.Skip("Bulk is not registered by server.New; falls through to the generic unknown-path 404")
+	t.Skip("OPTIONAL: bulk operations are not supported")
 }
 
 // RFC 7644 3.11 "/Me" Authenticated Subject Alias
@@ -2266,6 +2290,10 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, srv, request))
 		assert.Equal(t, 9, list.TotalResults)
+	})
+
+	t.Run("retrieves a resource only if it changed with If-None-Match", func(t *testing.T) {
+		t.Skip("MAY: conditional retrieval with If-None-Match is not supported")
 	})
 }
 
@@ -2476,6 +2504,11 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 
 		assert.Equal(t, http.StatusForbidden, response.StatusCode)
 	})
+}
+
+// RFC 7644 7.5.2 Disclosure of Sensitive Information in URIs
+func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
+	t.Skip("SHOULD: a GET filter with sensitive data is not rejected with 403 sensitive")
 }
 
 func patchUser(t *testing.T, srv *httptest.Server, id string, operations ...patch.Operation) core.User {
