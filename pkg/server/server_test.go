@@ -30,6 +30,7 @@ const (
 	validToken = "s3cr3t"
 )
 
+// RFC 6750 Bearer Token Usage
 func TestRFC6750(t *testing.T) {
 	t.Run("2.1 Authorization Request Header Field", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -51,7 +52,6 @@ func TestRFC6750(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 	})
 
-	// Also RFC 7644 2 Authentication and Authorization (WWW-Authenticate SHALL, per RFC 7235 4.1)
 	t.Run("3 The WWW-Authenticate Response Header Field", func(t *testing.T) {
 		t.Run("omits error info when no Authorization header is present", func(t *testing.T) {
 			srv := newTestServer(t)
@@ -115,8 +115,8 @@ func TestRFC6750(t *testing.T) {
 	})
 }
 
-// 2.2 Anonymous Requests
-func TestRFC7644AnonymousRequests(t *testing.T) {
+// RFC 7644 2 Authentication and Authorization
+func TestRFC7644AuthenticationAndAuthorization(t *testing.T) {
 	srv := newTestServer(t)
 
 	request := Request(t, srv, http.MethodPost, basePath+"/Users", WithContentType(protocol.MediaType))
@@ -125,8 +125,7 @@ func TestRFC7644AnonymousRequests(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, response.StatusCode)
 }
 
-// 3.3 Creating Resources
-// Also RFC 7643 2.2 Attribute Characteristics (required, uniqueness, canonical values) and 3.1 Common Attributes (id, meta)
+// RFC 7644 3.3 Creating Resources
 func TestRFC7644CreatingResources(t *testing.T) {
 	t.Run("creates a resource and returns 201 with Location and ETag", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -404,8 +403,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 	})
 }
 
-// 3.4.1 Retrieving a Known Resource
-// Also RFC 7643 3.1 Common Attributes
+// RFC 7644 3.4.1 Retrieving a Known Resource
 func TestRFC7644RetrievingAKnownResource(t *testing.T) {
 	t.Run("gets a created resource by id", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -442,8 +440,7 @@ func TestRFC7644RetrievingAKnownResource(t *testing.T) {
 	})
 }
 
-// 3.4.2 Query Resources
-// Also RFC 7644 3.9 Additional Operation Response Parameters (totalResults, itemsPerPage)
+// RFC 7644 3.4.2 Query Resources
 func TestRFC7644QueryResources(t *testing.T) {
 	t.Run("lists all created resources", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -542,7 +539,7 @@ func TestRFC7644QueryResources(t *testing.T) {
 	})
 }
 
-// 3.4.2.2 Filtering
+// RFC 7644 3.4.2.2 Filtering
 func TestRFC7644Filtering(t *testing.T) {
 	t.Run("filters resources by an exact match on userName", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -961,7 +958,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
-	// Also RFC 7643 2.4 Multi-Valued Attributes
+	// RFC 7643 2.4 Multi-Valued Attributes
 	t.Run("filters a multi-valued simple attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "tagged", Tags: []any{"red", "blue"}})
@@ -1014,8 +1011,7 @@ func TestRFC7644Filtering(t *testing.T) {
 	})
 }
 
-// 3.4.2.3 Sorting
-// Also RFC 7644 3.10 Attribute Notation (dot notation for sub-attributes)
+// RFC 7644 3.4.2.3 Sorting
 func TestRFC7644Sorting(t *testing.T) {
 	t.Run("sorts ascending by default when only sortBy is given", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -1239,8 +1235,7 @@ func TestRFC7644Sorting(t *testing.T) {
 	})
 }
 
-// 3.4.2.5 Attributes
-// RFC 7644 Sections 3.4.2.5 and 3.9: attributes and excludedAttributes shape every returned resource.
+// RFC 7644 3.4.2.5 Attributes
 func TestRFC7644Attributes(t *testing.T) {
 	srv := newTestServer(t)
 	id, _ := create(t, srv, &core.User{
@@ -1324,13 +1319,12 @@ func TestRFC7644Attributes(t *testing.T) {
 	})
 }
 
-// 3.4.3 Alternative Query with POST /.search
-func TestRFC7644AlternativeQueryWithPOSTSearch(t *testing.T) {
+// RFC 7644 3.4.3 Querying Resources Using HTTP POST
+func TestRFC7644QueryingResourcesUsingHTTPPOST(t *testing.T) {
 	t.Skip("POST /.search is not registered by server.New; falls through to the generic unknown-path 404")
 }
 
-// 3.5.1 Replacing with PUT
-// Also RFC 7643 2.2 Attribute Characteristics (mutability)
+// RFC 7644 3.5.1 Replacing with PUT
 func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	t.Run("replaces a resource and returns a new ETag when If-Match matches", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -1510,8 +1504,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	})
 }
 
-// 3.5.2 Modifying with PATCH
-// Also RFC 7643 2.2 Attribute Characteristics (mutability)
+// RFC 7644 3.5.2 Modifying with PATCH
 func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	t.Run("patches a resource and returns the updated field with an ETag", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -1818,7 +1811,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	})
 }
 
-// 3.6 Deleting Resources
+// RFC 7644 3.6 Deleting Resources
 func TestRFC7644DeletingResources(t *testing.T) {
 	t.Run("deletes a resource and it is subsequently gone", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -1892,18 +1885,18 @@ func TestRFC7644DeletingResources(t *testing.T) {
 	})
 }
 
-// 3.7 Bulk Operations
+// RFC 7644 3.7 Bulk Operations
 func TestRFC7644BulkOperations(t *testing.T) {
 	t.Skip("Bulk is not registered by server.New; falls through to the generic unknown-path 404")
 }
 
-// 3.11 Singular Resource /Me
-func TestRFC7644SingularResourceMe(t *testing.T) {
+// RFC 7644 3.11 "/Me" Authenticated Subject Alias
+func TestRFC7644MeAuthenticatedSubjectAlias(t *testing.T) {
 	t.Skip("/Me is not implemented by server.New; requests to it 404 through the generic unknown-path behavior")
 }
 
-// 3.12 HTTP Status and Error Response Handling
-func TestRFC7644SCIMErrors(t *testing.T) {
+// RFC 7644 3.12 HTTP Status and Error Response Handling
+func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
 	srv := newTestServer(t)
 
 	request := Request(t, srv, http.MethodGet, basePath+"/Users/does-not-exist",
@@ -1922,8 +1915,8 @@ func TestRFC7644SCIMErrors(t *testing.T) {
 	assert.NotEmpty(t, scimErr.Detail)
 }
 
-// 3.14 Versioning Resources
-func TestRFC7644ETags(t *testing.T) {
+// RFC 7644 3.14 Versioning Resources
+func TestRFC7644VersioningResources(t *testing.T) {
 	t.Run("issues a weak ETag", func(t *testing.T) {
 		srv := newTestServer(t)
 		_, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2035,8 +2028,7 @@ func TestRFC7644ETags(t *testing.T) {
 	})
 }
 
-// 4. Service Provider Configuration Endpoints (/ServiceProviderConfig)
-// Also RFC 7643 5 Service Provider Configuration Schema
+// RFC 7644 4 Service Provider Configuration Endpoints (/ServiceProviderConfig)
 func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 	t.Run("advertises capabilities and authentication schemes", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -2096,8 +2088,8 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 	})
 }
 
-// The endpoints and behavior a provider exposes follow the ServiceProviderConfig it advertises, per RFC 7643, Section 5.
-func TestRFC7644CapabilitiesFollowServiceProviderConfig(t *testing.T) {
+// RFC 7643 5 Service Provider Configuration Schema
+func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	t.Run("PATCH is declined when Patch.Supported is false", func(t *testing.T) {
 		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Versioning()
 		srv := Server(t, server.New(config, standardOptions(t)...))
@@ -2185,8 +2177,7 @@ func TestRFC7644CapabilitiesFollowServiceProviderConfig(t *testing.T) {
 	})
 }
 
-// 4. Service Provider Configuration Endpoints (/Schemas)
-// Also RFC 7643 7 Schema Definition
+// RFC 7644 4 Service Provider Configuration Endpoints (/Schemas)
 func TestRFC7644Schemas(t *testing.T) {
 	t.Run("lists the registered schemas", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -2256,8 +2247,7 @@ func TestRFC7644Schemas(t *testing.T) {
 	})
 }
 
-// 4. Service Provider Configuration Endpoints (/ResourceTypes)
-// Also RFC 7643 6 ResourceType Schema
+// RFC 7644 4 Service Provider Configuration Endpoints (/ResourceTypes)
 func TestRFC7644ResourceTypes(t *testing.T) {
 	t.Run("lists the registered resource types", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -2323,7 +2313,7 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 }
 
 // RFC 7643 4.3 Enterprise User Schema Extension
-func TestRFC7643EnterpriseUserExtension(t *testing.T) {
+func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 	srv := newTestServer(t)
 
 	id, _ := create(t, srv, &core.User{
@@ -2447,8 +2437,8 @@ func TestRFC7643EnterpriseUserExtension(t *testing.T) {
 	})
 }
 
-// RFC 7643 7 Schema Definition (writeOnly mutability)
-func TestRFC7643WriteOnlyAttributes(t *testing.T) {
+// RFC 7643 7 Schema Definition
+func TestRFC7643SchemaDefinition(t *testing.T) {
 	srv := newTestServer(t)
 
 	request := Request(t, srv, http.MethodPost, basePath+"/Users",
