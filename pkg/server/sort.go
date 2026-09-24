@@ -2,55 +2,9 @@ package server
 
 import (
 	"cmp"
-	"slices"
 	"strings"
 	"time"
-
-	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/protocol"
-	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
-
-func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]row[T], error) {
-	matching, err := r.filterBy(query)
-	if err != nil {
-		return nil, err
-	}
-	if query.SortBy == "" {
-		return matching, nil
-	}
-
-	parent, attribute, err := query.SortAttribute(r.schemas)
-	if err != nil {
-		return nil, err
-	}
-
-	key, ok := r.sortKey(parent, attribute)
-	if !ok {
-		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
-	}
-	slices.SortStableFunc(matching, func(a, b row[T]) int {
-		return compareSortKeys(key(a.object), key(b.object), attribute.CaseExact, query.Descending())
-	})
-
-	return matching, nil
-}
-
-// RFC 7644 Section 3.4.2.3: a multi-valued attribute sorts by its primary value, or else its first value.
-func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (reader, bool) {
-	elements, multiValued := r.elements[parent]
-	if !multiValued {
-		read, ok := r.values[attribute]
-		return read, ok
-	}
-	return func(d core.Object) any {
-		element, ok := primaryOrFirst(elements(d))
-		if !ok {
-			return nil
-		}
-		return coerce(attribute, asObject(element).Get(attribute.Name))
-	}, true
-}
 
 func primaryOrFirst(elements []any) (any, bool) {
 	for _, element := range elements {

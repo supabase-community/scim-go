@@ -31,11 +31,6 @@ type repository[T Entity] struct {
 	evaluator protocol.Evaluator[predicate]
 }
 
-type row[T Entity] struct {
-	item   T
-	object core.Object
-}
-
 // NewRepository stores resources in memory, for tests and reference servers.
 func NewRepository[T Entity](endpoint string, schemas core.Schemas) Repository[T] {
 	readers := readersOf(schemas)
@@ -46,14 +41,6 @@ func NewRepository[T Entity](endpoint string, schemas core.Schemas) Repository[T
 		readers:   readers,
 		evaluator: newVisitor(readers),
 	}
-}
-
-func schemaURIs(schemas core.Schemas) []core.SchemaURI {
-	ids := make([]core.SchemaURI, len(schemas))
-	for i, schema := range schemas {
-		ids[i] = schema.ID
-	}
-	return ids
 }
 
 func (r *repository[T]) Get(_ context.Context, id string) (item T, err error) {
@@ -159,6 +146,18 @@ func (r *repository[T]) withLock(fn func() error) error {
 	return fn()
 }
 
+// RFC 7644 Section 3.14: a non-empty version must match the stored one.
+func (r *repository[T]) locate(id, version string) (int, error) {
+	i := slices.IndexFunc(r.rows, func(row row[T]) bool { return row.item.ResourceID() == id })
+	switch {
+	case i < 0:
+		return i, scimerrors.ErrNotFound("Not found")
+	case version != "" && r.rows[i].item.GetMeta().Version != version:
+		return i, scimerrors.ErrPreconditionFailed("resource has changed on the server")
+	}
+	return i, nil
+}
+
 // rowOf pairs item with its object and rejects a value collision, per RFC 7643, Section 7.
 func (r *repository[T]) rowOf(item T) (row[T], error) {
 	candidate, err := core.NewObject(item)
@@ -188,33 +187,6 @@ func (r *repository[T]) conflictingAttribute(id string, candidate core.Object) *
 	return nil
 }
 
-// sharesValue reports whether a and b hold a common value, per RFC 7644 Section 3.4.2.2 (multi-valued "any match").
-func sharesValue(a, b any, caseExact bool) bool {
-	for _, x := range valuesOf(a) {
-		if core.IsUnassigned(x) {
-			continue
-		}
-		for _, y := range valuesOf(b) {
-			if sameValue(x, y, caseExact) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// RFC 7644 Section 3.14: a non-empty version must match the stored one.
-func (r *repository[T]) locate(id, version string) (int, error) {
-	i := slices.IndexFunc(r.rows, func(row row[T]) bool { return row.item.ResourceID() == id })
-	switch {
-	case i < 0:
-		return i, scimerrors.ErrNotFound("Not found")
-	case version != "" && r.rows[i].item.GetMeta().Version != version:
-		return i, scimerrors.ErrPreconditionFailed("resource has changed on the server")
-	}
-	return i, nil
-}
-
 func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]row[T], error) {
 	if query.Filter == "" {
 		return slices.Clone(r.rows), nil
@@ -231,6 +203,75 @@ func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]row[T], error
 		}
 	}
 	return matching, nil
+}
+
+func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]row[T], error) {
+	matching, err := r.filterBy(query)
+	if err != nil {
+		return nil, err
+	}
+	if query.SortBy == "" {
+		return matching, nil
+	}
+
+	parent, attribute, err := query.SortAttribute(r.schemas)
+	if err != nil {
+		return nil, err
+	}
+
+	key, ok := r.sortKey(parent, attribute)
+	if !ok {
+		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
+	}
+	slices.SortStableFunc(matching, func(a, b row[T]) int {
+		return compareSortKeys(key(a.object), key(b.object), attribute.CaseExact, query.Descending())
+	})
+
+	return matching, nil
+}
+
+// RFC 7644 Section 3.4.2.3: a multi-valued attribute sorts by its primary value, or else its first value.
+func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (reader, bool) {
+	elements, multiValued := r.elements[parent]
+	if !multiValued {
+		read, ok := r.values[attribute]
+		return read, ok
+	}
+	return func(d core.Object) any {
+		element, ok := primaryOrFirst(elements(d))
+		if !ok {
+			return nil
+		}
+		return coerce(attribute, asObject(element).Get(attribute.Name))
+	}, true
+}
+
+type row[T Entity] struct {
+	item   T
+	object core.Object
+}
+
+func schemaURIs(schemas core.Schemas) []core.SchemaURI {
+	ids := make([]core.SchemaURI, len(schemas))
+	for i, schema := range schemas {
+		ids[i] = schema.ID
+	}
+	return ids
+}
+
+// sharesValue reports whether a and b hold a common value, per RFC 7644 Section 3.4.2.2 (multi-valued "any match").
+func sharesValue(a, b any, caseExact bool) bool {
+	for _, x := range valuesOf(a) {
+		if core.IsUnassigned(x) {
+			continue
+		}
+		for _, y := range valuesOf(b) {
+			if sameValue(x, y, caseExact) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func weakETag(t time.Time) string {

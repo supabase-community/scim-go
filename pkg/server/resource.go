@@ -26,20 +26,15 @@ func (c *Resource[T]) WithDescription(description string) *Resource[T] {
 	return c
 }
 
-// WithRepository sets the datastore of the resource type; the server validates every write before it.
-func (c *Resource[T]) WithRepository(repository Repository[T]) *Resource[T] {
-	c.repository = repository
-	return c
-}
-
-type extension struct {
-	id         core.SchemaURI
-	attributes core.Attributes
-}
-
 // WithExtension adds a schema extension to the resource type, per RFC 7643, Section 6.
 func (c *Resource[T]) WithExtension(id core.SchemaURI, attributes ...*core.Attribute) *Resource[T] {
 	c.extensions = append(c.extensions, extension{id: id, attributes: attributes})
+	return c
+}
+
+// WithRepository sets the datastore of the resource type; the server validates every write before it.
+func (c *Resource[T]) WithRepository(repository Repository[T]) *Resource[T] {
+	c.repository = repository
 	return c
 }
 
@@ -91,4 +86,9 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	s.mux.HandleFunc("PUT "+path+"/{id}", s.handle(controller.Replace))
 	s.mux.HandleFunc("PATCH "+path+"/{id}", s.handle(controller.Patch))
 	s.mux.HandleFunc("DELETE "+path+"/{id}", s.handle(controller.Delete))
+}
+
+type extension struct {
+	id         core.SchemaURI
+	attributes core.Attributes
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+const DefaultMaxBodySize = 1 << 20
+
 type Server struct {
 	mux           *http.ServeMux
 	handler       http.Handler
@@ -19,37 +21,6 @@ type Server struct {
 	maxBodySize   int64
 	registrations []Registration
 	errorHandler  func(*http.Request, error)
-}
-
-const DefaultMaxBodySize = 1 << 20
-
-type Option[T any] func(T)
-
-// ErrorHandler receives the request and the error the server hit while handling it.
-func ErrorHandler(fn func(*http.Request, error)) Option[*Server] {
-	return func(s *Server) { s.errorHandler = fn }
-}
-
-// DefaultCount sets the page size used when a client omits "count", per RFC 7644, Section 3.4.2.4.
-func DefaultCount(n int) Option[*Server] {
-	return func(s *Server) { s.limits.DefaultCount = n }
-}
-
-// MaxBodySize caps the request body; larger bodies get 413, per RFC 7644, Section 3.12.
-func MaxBodySize(n int64) Option[*Server] {
-	return func(s *Server) { s.maxBodySize = n }
-}
-
-func WithResource(resource Registration) Option[*Server] {
-	return func(s *Server) { s.registrations = append(s.registrations, resource) }
-}
-
-// WithAuthentication advertises and enforces scheme, per RFC 7643, Section 5.
-func WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.Handler) http.Handler) Option[*Server] {
-	return func(s *Server) {
-		s.config.Authentication(scheme)
-		s.handler = middleware(s.handler)
-	}
 }
 
 func New(config *core.ServiceProviderConfig, options ...Option[*Server]) *Server {
@@ -80,15 +51,6 @@ func New(config *core.ServiceProviderConfig, options ...Option[*Server]) *Server
 	return s
 }
 
-// limitsFrom derives the page-size cap from the advertised filter.maxResults, per RFC 7643, Section 5.
-func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
-	limits := protocol.DefaultLimits
-	if config.Filter.MaxResults > 0 {
-		limits.MaxCount = config.Filter.MaxResults
-	}
-	return limits
-}
-
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r = withReporter(r, s.errorHandler)
 	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodySize)
@@ -103,50 +65,11 @@ func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.
 	}
 }
 
-func (s *Server) listResourceTypes(w http.ResponseWriter, r *http.Request) error {
-	if err := rejectFilter(r); err != nil {
-		return protocol.SendError(w, err)
-	}
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.resourceTypes), s.resourceTypes))
-}
-
-type unmatched struct {
-	header http.Header
-	status int
-}
-
-func (u *unmatched) Header() http.Header { return u.header }
-
-func (u *unmatched) Write(b []byte) (int, error) { return len(b), nil }
-
-func (u *unmatched) WriteHeader(status int) { u.status = status }
-
-// me declines the "/Me" alias, per RFC 7644, Section 3.11.
-func me(w http.ResponseWriter, _ *http.Request) error {
-	return protocol.SendError(w, scimerrors.ErrNotImplemented(`"/Me" is not supported`))
-}
-
-func (s *Server) listSchemas(w http.ResponseWriter, r *http.Request) error {
-	if err := rejectFilter(r); err != nil {
-		return protocol.SendError(w, err)
-	}
-	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.schemas), s.schemas))
-}
-
 func (s *Server) mount(resource Registration) {
 	schemas := resource.schemas(s.basePath)
 	s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
 	s.schemas = append(s.schemas, schemas...)
 	resource.mount(s, schemas)
-}
-
-func (s *Server) resourceTypeByID(w http.ResponseWriter, r *http.Request) error {
-	for _, resourceType := range s.resourceTypes {
-		if r.PathValue("id") == string(resourceType.ID) {
-			return protocol.Send(w, http.StatusOK, resourceType)
-		}
-	}
-	return protocol.SendError(w, scimerrors.ErrNotFound("resource type not found"))
 }
 
 // route answers a request no endpoint matches with a SCIM error, per RFC 7644, Section 3.12.
@@ -163,6 +86,33 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 	report(r, protocol.SendError(w, scimerrors.NewError(unmatched.status, "", http.StatusText(unmatched.status))))
 }
 
+func (s *Server) serviceProviderConfig(w http.ResponseWriter, _ *http.Request) error {
+	return protocol.Send(w, http.StatusOK, s.config)
+}
+
+func (s *Server) listResourceTypes(w http.ResponseWriter, r *http.Request) error {
+	if err := rejectFilter(r); err != nil {
+		return protocol.SendError(w, err)
+	}
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.resourceTypes), s.resourceTypes))
+}
+
+func (s *Server) resourceTypeByID(w http.ResponseWriter, r *http.Request) error {
+	for _, resourceType := range s.resourceTypes {
+		if r.PathValue("id") == string(resourceType.ID) {
+			return protocol.Send(w, http.StatusOK, resourceType)
+		}
+	}
+	return protocol.SendError(w, scimerrors.ErrNotFound("resource type not found"))
+}
+
+func (s *Server) listSchemas(w http.ResponseWriter, r *http.Request) error {
+	if err := rejectFilter(r); err != nil {
+		return protocol.SendError(w, err)
+	}
+	return protocol.Send(w, http.StatusOK, protocol.NewListResponse(1, len(s.schemas), s.schemas))
+}
+
 func (s *Server) schemaByID(w http.ResponseWriter, r *http.Request) error {
 	for _, schema := range s.schemas {
 		if r.PathValue("id") == string(schema.ID) {
@@ -172,8 +122,58 @@ func (s *Server) schemaByID(w http.ResponseWriter, r *http.Request) error {
 	return protocol.SendError(w, scimerrors.ErrNotFound("schema not found"))
 }
 
-func (s *Server) serviceProviderConfig(w http.ResponseWriter, _ *http.Request) error {
-	return protocol.Send(w, http.StatusOK, s.config)
+type Option[T any] func(T)
+
+// ErrorHandler receives the request and the error the server hit while handling it.
+func ErrorHandler(fn func(*http.Request, error)) Option[*Server] {
+	return func(s *Server) { s.errorHandler = fn }
+}
+
+// DefaultCount sets the page size used when a client omits "count", per RFC 7644, Section 3.4.2.4.
+func DefaultCount(n int) Option[*Server] {
+	return func(s *Server) { s.limits.DefaultCount = n }
+}
+
+// MaxBodySize caps the request body; larger bodies get 413, per RFC 7644, Section 3.12.
+func MaxBodySize(n int64) Option[*Server] {
+	return func(s *Server) { s.maxBodySize = n }
+}
+
+func WithResource(resource Registration) Option[*Server] {
+	return func(s *Server) { s.registrations = append(s.registrations, resource) }
+}
+
+// WithAuthentication advertises and enforces scheme, per RFC 7643, Section 5.
+func WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.Handler) http.Handler) Option[*Server] {
+	return func(s *Server) {
+		s.config.Authentication(scheme)
+		s.handler = middleware(s.handler)
+	}
+}
+
+type unmatched struct {
+	header http.Header
+	status int
+}
+
+func (u *unmatched) Header() http.Header { return u.header }
+
+func (u *unmatched) Write(b []byte) (int, error) { return len(b), nil }
+
+func (u *unmatched) WriteHeader(status int) { u.status = status }
+
+// limitsFrom derives the page-size cap from the advertised filter.maxResults, per RFC 7643, Section 5.
+func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
+	limits := protocol.DefaultLimits
+	if config.Filter.MaxResults > 0 {
+		limits.MaxCount = config.Filter.MaxResults
+	}
+	return limits
+}
+
+// me declines the "/Me" alias, per RFC 7644, Section 3.11.
+func me(w http.ResponseWriter, _ *http.Request) error {
+	return protocol.SendError(w, scimerrors.ErrNotImplemented(`"/Me" is not supported`))
 }
 
 // rejectFilter forbids "filter" on /ResourceTypes and /Schemas, per RFC 7644, Section 4.
