@@ -56,13 +56,13 @@ func New(config *core.ServiceProviderConfig, options ...Option[*Server]) *Server
 	mux := http.NewServeMux()
 	s := &Server{
 		mux:          mux,
-		handler:      mux,
 		basePath:     config.BasePath(),
 		config:       config,
 		limits:       limitsFrom(config),
 		maxBodySize:  DefaultMaxBodySize,
 		errorHandler: func(*http.Request, error) {},
 	}
+	s.handler = http.HandlerFunc(s.route)
 	for _, option := range options {
 		option(s)
 	}
@@ -100,6 +100,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodySize)
 	s.handler.ServeHTTP(w, r)
 }
+
+// route answers a request no endpoint matches with a SCIM error, per RFC 7644, Section 3.12.
+func (s *Server) route(w http.ResponseWriter, r *http.Request) {
+	if _, pattern := s.mux.Handler(r); pattern != "" {
+		s.mux.ServeHTTP(w, r)
+		return
+	}
+	unmatched := &unmatched{header: http.Header{}}
+	s.mux.ServeHTTP(unmatched, r)
+	if allow := unmatched.header.Get("Allow"); allow != "" {
+		w.Header().Set("Allow", allow)
+	}
+	report(r, protocol.SendError(w, scimerrors.NewError(unmatched.status, "", http.StatusText(unmatched.status))))
+}
+
+type unmatched struct {
+	header http.Header
+	status int
+}
+
+func (u *unmatched) Header() http.Header { return u.header }
+
+func (u *unmatched) Write(b []byte) (int, error) { return len(b), nil }
+
+func (u *unmatched) WriteHeader(status int) { u.status = status }
 
 func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

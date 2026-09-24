@@ -2176,22 +2176,45 @@ func TestRFC7644MeAuthenticatedSubjectAlias(t *testing.T) {
 
 // RFC 7644 3.12 HTTP Status and Error Response Handling
 func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
-	srv := newTestServer(t)
+	t.Run("returns a SCIM error for an unknown resource id", func(t *testing.T) {
+		srv := newTestServer(t)
 
-	request := Request(t, srv, http.MethodGet, basePath+"/Users/does-not-exist",
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-	)
-	response := Response(t, srv, request)
+		request := Request(t, srv, http.MethodGet, basePath+"/Users/does-not-exist",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+		)
+		response := Response(t, srv, request)
 
-	require.Equal(t, http.StatusNotFound, response.StatusCode)
-	assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
+		require.Equal(t, http.StatusNotFound, response.StatusCode)
+		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
 
-	scimErr := ReadBodyAs[scimerrors.Error](t, response)
-	assert.Equal(t, []core.SchemaURI{scimerrors.SchemaError}, scimErr.Schemas)
-	assert.Equal(t, "404", scimErr.Status)
-	assert.Empty(t, scimErr.ScimType)
-	assert.NotEmpty(t, scimErr.Detail)
+		scimErr := ReadBodyAs[scimerrors.Error](t, response)
+		assert.Equal(t, []core.SchemaURI{scimerrors.SchemaError}, scimErr.Schemas)
+		assert.Equal(t, "404", scimErr.Status)
+		assert.Empty(t, scimErr.ScimType)
+		assert.NotEmpty(t, scimErr.Detail)
+	})
+
+	t.Run("returns a SCIM error for an unknown endpoint", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Unknown", WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusNotFound, response.StatusCode)
+		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
+		assert.Equal(t, "404", ReadBodyAs[scimerrors.Error](t, response).Status)
+	})
+
+	t.Run("returns a SCIM error and the allowed methods for an unsupported method", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/ServiceProviderConfig", WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusMethodNotAllowed, response.StatusCode)
+		assert.Contains(t, response.Header.Get("Allow"), http.MethodGet)
+		assert.Equal(t, protocol.MediaType, response.Header.Get("Content-Type"))
+		assert.Equal(t, "405", ReadBodyAs[scimerrors.Error](t, response).Status)
+	})
 }
 
 // RFC 7644 3.14 Versioning Resources
