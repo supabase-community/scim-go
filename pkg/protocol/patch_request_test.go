@@ -13,27 +13,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-func TestPatchRequestApplyDelegates(t *testing.T) {
-	item := map[string]any{"userName": "old"}
-	request := &protocol.PatchRequest{
-		Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
-		Operations: []patch.Operation{
-			{
-				Op:    patch.OpReplace,
-				Path:  "userName",
-				Value: json.RawMessage(`"new"`),
-			},
-		},
-	}
-
-	patched, err := request.Apply(item, nil)
-	require.NoError(t, err)
-
-	assert.Equal(t, "new", patched["userName"])
-	assert.Equal(t, "old", item["userName"])
-}
-
-func TestPatchRequestApplyReturnsProtocolError(t *testing.T) {
+func TestPatchRequestPatchReturnsProtocolError(t *testing.T) {
 	request := &protocol.PatchRequest{
 		Operations: []patch.Operation{
 			{
@@ -44,8 +24,8 @@ func TestPatchRequestApplyReturnsProtocolError(t *testing.T) {
 	}
 
 	var err *scimerrors.Error
-	_, applyErr := request.Apply(map[string]any{}, nil)
-	require.ErrorAs(t, applyErr, &err)
+	_, patchErr := request.Patch(map[string]any{}, nil)
+	require.ErrorAs(t, patchErr, &err)
 
 	assert.Equal(t, scimerrors.InvalidValue, err.ScimType)
 }

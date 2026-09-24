@@ -42,11 +42,6 @@ func isPatchOp(uri core.SchemaURI) bool {
 	return strings.EqualFold(string(uri), string(SchemaPatchOp))
 }
 
-// Apply returns a copy of resource with the operations applied atomically, per RFC 7644, Section 3.5.2.
-func (r *PatchRequest) Apply(resource core.Object, schemas core.Schemas) (core.Object, error) {
-	return patch.Apply(resource, r.Operations, schemas)
-}
-
 // Patch returns a new resource; resource is left unchanged, per RFC 7644 Section 3.5.2.
 func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error) {
 	var zero T
@@ -54,7 +49,7 @@ func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error)
 	if err != nil {
 		return zero, err
 	}
-	patched, err := r.Apply(existing, schemas)
+	patched, err := patch.Apply(existing, r.Operations, schemas)
 	if err != nil {
 		return zero, err
 	}
