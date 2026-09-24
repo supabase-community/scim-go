@@ -191,7 +191,7 @@ func (r *repository[T]) conflictingAttribute(id string, candidate core.Object) *
 // sharesValue reports whether a and b hold a common value, per RFC 7644 Section 3.4.2.2 (multi-valued "any match").
 func sharesValue(a, b any, caseExact bool) bool {
 	for _, x := range valuesOf(a) {
-		if isEmpty(x) {
+		if core.IsUnassigned(x) {
 			continue
 		}
 		for _, y := range valuesOf(b) {

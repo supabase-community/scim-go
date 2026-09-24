@@ -49,9 +49,9 @@ func required(readers readers, candidate core.Object) error {
 
 func isMissing(attribute *core.Attribute, value any) bool {
 	if attribute.MultiValued {
-		return isEmpty(value)
+		return core.IsUnassigned(value)
 	}
-	return slices.ContainsFunc(valuesOf(value), isEmpty)
+	return slices.ContainsFunc(valuesOf(value), core.IsUnassigned)
 }
 
 // canonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.
@@ -117,26 +117,12 @@ func immutable(readers readers, before, after core.Object) error {
 	for _, attribute := range readers.immutable {
 		read := readers.values[attribute]
 		assigned := read(before)
-		if isEmpty(assigned) || reflect.DeepEqual(assigned, read(after)) {
+		if core.IsUnassigned(assigned) || reflect.DeepEqual(assigned, read(after)) {
 			continue
 		}
 		return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
 	}
 	return nil
-}
-
-func isEmpty(value any) bool {
-	switch v := value.(type) {
-	case nil:
-		return true
-	case string:
-		return v == ""
-	case []any:
-		return len(v) == 0
-	case map[string]any:
-		return len(v) == 0
-	}
-	return false
 }
 
 func containsValue(values []string, value string, caseExact bool) bool {

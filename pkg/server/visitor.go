@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -51,7 +52,7 @@ func (e *evaluator) Present(attribute *protocol.Attribute) (predicate, error) {
 		return nil, err
 	}
 	return func(row any) bool {
-		return anyMatch(read(row), hasValue)
+		return anyMatch(read(row), func(v any) bool { return !core.IsUnassigned(v) })
 	}, nil
 }
 
@@ -87,20 +88,6 @@ func anyMatch(raw any, pred func(any) bool) bool {
 		return pred(raw)
 	}
 	return slices.ContainsFunc(list, pred)
-}
-
-// RFC 7644 3.4.2.2 - pr matches only a non-empty, non-null value or a non-empty complex node.
-func hasValue(raw any) bool {
-	switch v := raw.(type) {
-	case nil:
-		return false
-	case string:
-		return v != ""
-	case map[string]any:
-		return len(v) > 0
-	default:
-		return true
-	}
 }
 
 func compareValue(op filter.Operator, got, want any, caseExact bool) bool {

@@ -33,6 +33,15 @@ func TestNewObject(t *testing.T) {
 	})
 }
 
+func TestIsUnassigned(t *testing.T) {
+	for _, value := range []any{nil, "", []any{}, map[string]any{}} {
+		assert.True(t, core.IsUnassigned(value), "%#v", value)
+	}
+	for _, value := range []any{"a", false, json.Number("0"), []any{nil}, map[string]any{"a": nil}} {
+		assert.False(t, core.IsUnassigned(value), "%#v", value)
+	}
+}
+
 func TestObject(t *testing.T) {
 	t.Run("gets a value by a case-insensitive name", func(t *testing.T) {
 		object := core.Object{"userName": "bjensen"}

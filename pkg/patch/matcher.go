@@ -159,7 +159,7 @@ func (m matcher) leaf(attr filter.AttrPath, op filter.Operator, want any) predic
 	return func(member map[string]any) bool {
 		got := core.Object(member).Get(key)
 		if op == opPresent {
-			return hasValue(got)
+			return !core.IsUnassigned(got)
 		}
 		if got == nil {
 			return false
@@ -183,20 +183,4 @@ func (m matcher) toFloat(value any) (float64, bool) {
 		return float64(v.Uint()), true
 	}
 	return 0, false
-}
-
-// RFC 7644 3.4.2.2 - pr matches only a non-empty, non-null value.
-func hasValue(value any) bool {
-	switch v := value.(type) {
-	case nil:
-		return false
-	case string:
-		return v != ""
-	case []any:
-		return len(v) > 0
-	case map[string]any:
-		return len(v) > 0
-	default:
-		return true
-	}
 }
