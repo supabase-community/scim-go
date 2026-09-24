@@ -14,7 +14,10 @@ import (
 // ErrInvalidToken rejects a bearer token, per RFC 6750, Section 3.1.
 var ErrInvalidToken = errors.New("invalid token")
 
-const invalidTokenDescription = "The access token is invalid"
+const (
+	invalidTokenDescription = "The access token is invalid"
+	schemeWithRealm         = `Bearer realm="scim"`
+)
 
 // TokenValidator resolves an RFC 6750 bearer token into a context to continue with, or an error.
 type TokenValidator func(ctx context.Context, token string) (context.Context, error)
@@ -26,7 +29,7 @@ func RequireBearerToken(validate TokenValidator) func(http.Handler) http.Handler
 			scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
 
 			if !strings.EqualFold(scheme, "Bearer") {
-				w.Header().Set("WWW-Authenticate", "Bearer")
+				w.Header().Set("WWW-Authenticate", schemeWithRealm)
 				_ = protocol.SendError(w, scimerrors.ErrUnauthorized("authentication required"))
 				return
 			}
@@ -53,9 +56,9 @@ func RequireBearerToken(validate TokenValidator) func(http.Handler) http.Handler
 	}
 }
 
-// challenge sets the WWW-Authenticate header per RFC 6750, Section 3.
+// challenge sets the WWW-Authenticate header, whose scheme MUST carry an auth-param, per RFC 6750, Section 3.
 func challenge(w http.ResponseWriter, errorCode, description string) {
-	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error=%q, error_description=%q`, errorCode, description))
+	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`%s, error=%q, error_description=%q`, schemeWithRealm, errorCode, description))
 }
 
 type reporterKey struct{}

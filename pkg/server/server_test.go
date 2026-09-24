@@ -72,7 +72,7 @@ func TestRFC6750TheWWWAuthenticateResponseHeaderField(t *testing.T) {
 		response := Response(t, srv, request)
 
 		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
-		assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
+		assert.Equal(t, `Bearer realm="scim"`, response.Header.Get("WWW-Authenticate"))
 	})
 
 	t.Run("omits error info for a non-Bearer scheme", func(t *testing.T) {
@@ -85,7 +85,7 @@ func TestRFC6750TheWWWAuthenticateResponseHeaderField(t *testing.T) {
 		response := Response(t, srv, request)
 
 		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
-		assert.Equal(t, "Bearer", response.Header.Get("WWW-Authenticate"))
+		assert.Equal(t, `Bearer realm="scim"`, response.Header.Get("WWW-Authenticate"))
 	})
 }
 
@@ -121,7 +121,7 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("expired")))
 
 		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
-		assert.Equal(t, `Bearer error="invalid_token", error_description="The access token is invalid"`, response.Header.Get("WWW-Authenticate"))
+		assert.Equal(t, `Bearer realm="scim", error="invalid_token", error_description="The access token is invalid"`, response.Header.Get("WWW-Authenticate"))
 		assert.NotContains(t, ReadBodyAs[scimerrors.Error](t, response).Detail, "noon")
 	})
 
