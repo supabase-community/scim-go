@@ -78,12 +78,12 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		s.mux.ServeHTTP(w, r)
 		return
 	}
-	unmatched := &unmatched{header: http.Header{}}
-	s.mux.ServeHTTP(unmatched, r)
-	if allow := unmatched.header.Get("Allow"); allow != "" {
+	status := &muxStatus{header: http.Header{}}
+	s.mux.ServeHTTP(status, r)
+	if allow := status.header.Get("Allow"); allow != "" {
 		w.Header().Set("Allow", allow)
 	}
-	report(r, protocol.SendError(w, scimerrors.NewError(unmatched.status, "", http.StatusText(unmatched.status))))
+	report(r, protocol.SendError(w, scimerrors.NewError(status.code, "", http.StatusText(status.code))))
 }
 
 func (s *Server) serviceProviderConfig(w http.ResponseWriter, _ *http.Request) error {
@@ -151,16 +151,16 @@ func WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.
 	}
 }
 
-type unmatched struct {
+type muxStatus struct {
 	header http.Header
-	status int
+	code   int
 }
 
-func (u *unmatched) Header() http.Header { return u.header }
+func (m *muxStatus) Header() http.Header { return m.header }
 
-func (u *unmatched) Write(b []byte) (int, error) { return len(b), nil }
+func (m *muxStatus) Write(b []byte) (int, error) { return len(b), nil }
 
-func (u *unmatched) WriteHeader(status int) { u.status = status }
+func (m *muxStatus) WriteHeader(code int) { m.code = code }
 
 // limitsFrom derives the page-size cap from the advertised filter.maxResults, per RFC 7643, Section 5.
 func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
