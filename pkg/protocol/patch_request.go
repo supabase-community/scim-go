@@ -3,6 +3,9 @@ package protocol
 import (
 	"encoding/json"
 	"io"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
@@ -24,7 +27,17 @@ func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	if req == nil {
 		return nil, scimerrors.ErrInvalidSyntax("request body is not valid JSON")
 	}
+	if !slices.ContainsFunc(req.Schemas, isPatchOp) {
+		return nil, scimerrors.ErrInvalidSyntax(`"schemas" must contain ` + strconv.Quote(string(SchemaPatchOp)))
+	}
+	if len(req.Operations) == 0 {
+		return nil, scimerrors.ErrInvalidSyntax(`"Operations" must contain at least one operation`)
+	}
 	return req, nil
+}
+
+func isPatchOp(uri core.SchemaURI) bool {
+	return strings.EqualFold(string(uri), string(SchemaPatchOp))
 }
 
 // Apply applies the operations to resource atomically, per RFC 7644, Section 3.5.2.

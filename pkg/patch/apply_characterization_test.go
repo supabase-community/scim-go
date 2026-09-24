@@ -126,17 +126,17 @@ func TestApplyNonPointerResourceRejected(t *testing.T) {
 	assert.Equal(t, "500", scimErr.Status)
 }
 
-func TestApplyNoPathMergeSkipsReadOnly(t *testing.T) {
+// RFC 7644 Section 3.5.2: an operation incompatible with an attribute's mutability SHALL return an error.
+func TestApplyNoPathMergeRejectsReadOnly(t *testing.T) {
 	item := map[string]any{}
 
-	require.NoError(t, apply(item, userSchemas(), patch.Operation{
+	var scimErr *scimerrors.Error
+	require.ErrorAs(t, apply(item, userSchemas(), patch.Operation{
 		Op:    patch.OpReplace,
 		Value: json.RawMessage(`{"displayName":"Babs","groups":[{"value":"g1"}]}`),
-	}))
-
-	assert.Equal(t, "Babs", item["displayName"])
-	_, present := item["groups"]
-	assert.False(t, present)
+	}), &scimErr)
+	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
+	assert.Empty(t, item)
 }
 
 func TestApplyNoPathMergeRejectsImmutableWhenPresent(t *testing.T) {
@@ -189,7 +189,7 @@ func TestApplyImmutableAddThenReplaceInSameBatchRejected(t *testing.T) {
 	assert.False(t, present)
 }
 
-func TestApplyValuePathReadOnlySubAttributeIsNoOpNotNoTarget(t *testing.T) {
+func TestApplyValuePathReadOnlySubAttributeRejected(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
 			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
@@ -200,11 +200,12 @@ func TestApplyValuePathReadOnlySubAttributeIsNoOpNotNoTarget(t *testing.T) {
 	}
 	item := map[string]any{"emails": []any{map[string]any{"value": "a@b.com"}}}
 
-	require.NoError(t, apply(item, schemas, operation(patch.OpReplace, `emails[value eq "a@b.com"].primary`, `true`)))
+	var scimErr *scimerrors.Error
+	require.ErrorAs(t, apply(item, schemas, operation(patch.OpReplace, `emails[value eq "a@b.com"].primary`, `true`)), &scimErr)
+	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
 
 	member := item["emails"].([]any)[0].(map[string]any)
-	_, present := member["primary"]
-	assert.False(t, present)
+	assert.NotContains(t, member, "primary")
 }
 
 func comparisonSchemas() []*core.Schema {

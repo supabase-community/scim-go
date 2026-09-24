@@ -59,6 +59,29 @@ func TestDecodePatchRequest(t *testing.T) {
 		assert.Equal(t, "userName", req.Operations[0].Path)
 	})
 
+	// RFC 7644 Section 3.5.2: the body MUST contain "schemas" with the PatchOp URI.
+	t.Run("rejects a request without the PatchOp schema", func(t *testing.T) {
+		_, err := protocol.DecodePatchRequest(strings.NewReader(`{"Operations": [{"op": "replace", "path": "userName", "value": "new"}]}`))
+
+		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
+	})
+
+	t.Run("matches the PatchOp schema case-insensitively", func(t *testing.T) {
+		_, err := protocol.DecodePatchRequest(strings.NewReader(`{
+			"schemas": ["URN:IETF:PARAMS:SCIM:API:MESSAGES:2.0:PATCHOP"],
+			"Operations": [{"op": "replace", "path": "userName", "value": "new"}]
+		}`))
+
+		require.NoError(t, err)
+	})
+
+	// RFC 7644 Section 3.5.2: "Operations" is an array of one or more PATCH operations.
+	t.Run("rejects a request without operations", func(t *testing.T) {
+		_, err := protocol.DecodePatchRequest(strings.NewReader(`{"schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"], "Operations": []}`))
+
+		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
+	})
+
 	t.Run("rejects a null body", func(t *testing.T) {
 		_, err := protocol.DecodePatchRequest(strings.NewReader("null"))
 

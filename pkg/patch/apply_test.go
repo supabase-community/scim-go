@@ -151,22 +151,27 @@ func TestApplyValuePathNoMatchIsNoTarget(t *testing.T) {
 	assert.Equal(t, scimerrors.NoTarget, err.ScimType)
 }
 
-func TestReadOnlyIsSkipped(t *testing.T) {
+// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute; the operation SHALL fail.
+func TestReadOnlyIsRejected(t *testing.T) {
 	item := map[string]any{"groups": []any{}}
 
-	require.NoError(t, apply(item, userSchemas(),
-		operation(patch.OpReplace, "groups", `[{"value":"g1"}]`),
+	var err *scimerrors.Error
+	require.ErrorAs(t, apply(item, userSchemas(),
 		operation(patch.OpReplace, "userName", `"bjensen"`),
-	))
+		operation(patch.OpReplace, "groups", `[{"value":"g1"}]`),
+	), &err)
 
+	assert.Equal(t, scimerrors.Mutability, err.ScimType)
 	assert.Empty(t, item["groups"])
-	assert.Equal(t, "bjensen", item["userName"])
+	assert.NotContains(t, item, "userName")
 }
 
 func TestIdIsProtected(t *testing.T) {
 	item := map[string]any{"id": "keep"}
 
-	require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, "id", `"hacked"`)))
+	var err *scimerrors.Error
+	require.ErrorAs(t, apply(item, userSchemas(), operation(patch.OpReplace, "id", `"hacked"`)), &err)
+	assert.Equal(t, scimerrors.Mutability, err.ScimType)
 	assert.Equal(t, "keep", item["id"])
 }
 
@@ -374,31 +379,31 @@ func TestApplyValuePathReplaceRespectsSubAttributeMutability(t *testing.T) {
 	assert.Equal(t, scimerrors.Mutability, err.ScimType)
 }
 
-// RFC 7643 7 - a value-path merge into a readOnly complex attribute must be skipped.
+// RFC 7644 Section 3.5.2: a value-path merge into a readOnly complex attribute SHALL fail.
 func TestApplyValuePathMergeRespectsParentMutability(t *testing.T) {
 	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
 
-	require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, `groups[value eq "g1"]`, `{"value":"g2"}`)))
+	requireMutability(t, apply(item, userSchemas(), operation(patch.OpReplace, `groups[value eq "g1"]`, `{"value":"g2"}`)))
 
 	groups := item["groups"].([]any)
 	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
 }
 
-// RFC 7643 7 - a value-path write to a sub-attribute of a readOnly attribute must be skipped.
+// RFC 7644 Section 3.5.2: a value-path write to a sub-attribute of a readOnly attribute SHALL fail.
 func TestApplyValuePathWriteRespectsParentMutability(t *testing.T) {
 	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
 
-	require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, `groups[value eq "g1"].value`, `"g2"`)))
+	requireMutability(t, apply(item, userSchemas(), operation(patch.OpReplace, `groups[value eq "g1"].value`, `"g2"`)))
 
 	groups := item["groups"].([]any)
 	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
 }
 
-// RFC 7643 7 - a value-path remove of a sub-attribute of a readOnly attribute must be skipped.
+// RFC 7644 Section 3.5.2: a value-path remove of a sub-attribute of a readOnly attribute SHALL fail.
 func TestApplyValuePathRemoveRespectsParentMutability(t *testing.T) {
 	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
 
-	require.NoError(t, apply(item, userSchemas(), operation(patch.OpRemove, `groups[value eq "g1"].value`, "")))
+	requireMutability(t, apply(item, userSchemas(), operation(patch.OpRemove, `groups[value eq "g1"].value`, "")))
 
 	groups := item["groups"].([]any)
 	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
@@ -597,5 +602,78 @@ func TestApplyExtensionPath(t *testing.T) {
 
 		assert.Equal(t, "bjensen", item["userName"])
 		assert.Equal(t, map[string]any{"department": "hr"}, extension(item))
+	})
+}
+
+func requireMutability(t *testing.T, err error) {
+	t.Helper()
+
+	var scimErr *scimerrors.Error
+	require.ErrorAs(t, err, &scimErr)
+	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
+}
+
+func TestApplyRemoveReadOnlyRejected(t *testing.T) {
+	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
+
+	requireMutability(t, apply(item, userSchemas(), operation(patch.OpRemove, "groups", "")))
+	assert.Len(t, item["groups"], 1)
+}
+
+// RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
+func TestApplyComplexMerge(t *testing.T) {
+	schemas := func() []*core.Schema {
+		return []*core.Schema{
+			(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+				core.NewAttribute("name", core.TypeComplex).With(
+					core.NewAttribute("givenName", core.TypeString),
+					core.NewAttribute("familyName", core.TypeString),
+					core.NewAttribute("formatted", core.TypeString).AsImmutable(),
+				),
+			),
+		}
+	}
+	existing := func() map[string]any {
+		return map[string]any{"name": map[string]any{"givenName": "Barbara", "familyName": "Jensen"}}
+	}
+
+	for _, kind := range []patch.Op{patch.OpReplace, patch.OpAdd} {
+		t.Run(string(kind)+" with a path merges sub-attributes", func(t *testing.T) {
+			item := existing()
+
+			require.NoError(t, apply(item, schemas(), operation(kind, "name", `{"givenName":"Babs"}`)))
+
+			assert.Equal(t, map[string]any{"givenName": "Babs", "familyName": "Jensen"}, item["name"])
+		})
+
+		t.Run(string(kind)+" without a path merges sub-attributes", func(t *testing.T) {
+			item := existing()
+
+			require.NoError(t, apply(item, schemas(), patch.Operation{Op: kind, Value: json.RawMessage(`{"name":{"givenName":"Babs"}}`)}))
+
+			assert.Equal(t, map[string]any{"givenName": "Babs", "familyName": "Jensen"}, item["name"])
+		})
+	}
+
+	t.Run("creates the complex attribute when it is absent", func(t *testing.T) {
+		item := map[string]any{}
+
+		require.NoError(t, apply(item, schemas(), operation(patch.OpReplace, "name", `{"givenName":"Babs"}`)))
+
+		assert.Equal(t, map[string]any{"givenName": "Babs"}, item["name"])
+	})
+
+	t.Run("enforces the mutability of each merged sub-attribute", func(t *testing.T) {
+		item := map[string]any{"name": map[string]any{"formatted": "Ms. Barbara J Jensen"}}
+
+		requireMutability(t, apply(item, schemas(), operation(patch.OpReplace, "name", `{"formatted":"Babs"}`)))
+	})
+
+	t.Run("replaces a multi-valued attribute as a whole", func(t *testing.T) {
+		item := map[string]any{"emails": []any{map[string]any{"value": "a@b.com"}}}
+
+		require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, "emails", `[{"value":"c@d.com"}]`)))
+
+		assert.Equal(t, []any{map[string]any{"value": "c@d.com"}}, item["emails"])
 	})
 }

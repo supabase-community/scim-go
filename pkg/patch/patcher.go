@@ -1,7 +1,6 @@
 package patch
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 
@@ -10,10 +9,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-var (
-	permissiveAttr = &core.Attribute{}
-	errSkip        = errors.New("scim: skip readOnly attribute")
-)
+var permissiveAttr = &core.Attribute{}
 
 type patcher struct {
 	schemas core.Schemas
@@ -65,7 +61,7 @@ func (p *patcher) write(root object, op Operation, appendMode bool) error {
 	if path.ValueFilter != nil {
 		return p.valueWrite(root, path, m)
 	}
-	return skip(p.writeAt(root, path, m))
+	return p.writeAt(root, path, m)
 }
 
 func (p *patcher) writeAt(root object, path filter.Path, m mutation) error {
@@ -84,8 +80,20 @@ func (p *patcher) writeAt(root object, path filter.Path, m mutation) error {
 	if err != nil {
 		return err
 	}
+	if values, ok := m.value.(map[string]any); ok && attr.Type == core.TypeComplex && !attr.MultiValued {
+		return p.merge(target, key, attr, mutation{value: values, appendMode: m.appendMode})
+	}
 	p.store(target, key, attr, m)
 	return nil
+}
+
+// RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
+func (p *patcher) merge(target object, key string, attr *core.Attribute, m mutation) error {
+	nested, err := target.child(key)
+	if err != nil {
+		return err
+	}
+	return p.mergeMember(nested, m.value.(map[string]any), attr, m.appendMode)
 }
 
 func (p *patcher) remove(root object, op Operation) error {
@@ -105,7 +113,7 @@ func (p *patcher) remove(root object, op Operation) error {
 	}
 	container := p.within(root, path)
 	if err := gate(attr, present(container, path)); err != nil {
-		return skip(err)
+		return err
 	}
 	if path.SubAttribute == "" {
 		container.remove(path.Name)
@@ -138,7 +146,7 @@ func (p *patcher) valueWrite(root object, path filter.Path, m mutation) error {
 		return err
 	}
 	if err := gate(parent, present(p.within(root, path), base(path))); err != nil {
-		return skip(err)
+		return err
 	}
 	pred, err := compile(parent, path.ValueFilter)
 	if err != nil {
@@ -192,7 +200,7 @@ func (p *patcher) valueRemove(root object, path filter.Path) error {
 	}
 	container := p.within(root, path)
 	if err := gate(parent, present(container, base(path))); err != nil {
-		return skip(err)
+		return err
 	}
 	pred, err := compile(parent, path.ValueFilter)
 	if err != nil {
@@ -212,7 +220,7 @@ func (p *patcher) clearSub(container object, path filter.Path, elements []any, p
 		return err
 	}
 	if err := gate(attr, present(container, path)); err != nil {
-		return skip(err)
+		return err
 	}
 	matched, _ := eachMatch(elements, pred, func(member object) error {
 		member.remove(path.SubAttribute)
@@ -250,7 +258,7 @@ func (p *patcher) mergeRoot(root object, values map[string]any, appendMode bool)
 			}
 			continue
 		}
-		if err := skip(p.writeAt(root, p.keyPath(key), mutation{value: value, appendMode: appendMode})); err != nil {
+		if err := p.writeAt(root, p.keyPath(key), mutation{value: value, appendMode: appendMode}); err != nil {
 			return err
 		}
 	}
@@ -264,7 +272,7 @@ func (p *patcher) mergeSchema(root object, schema *core.Schema, value any, appen
 	}
 	for name, item := range values {
 		path := filter.Path{URI: string(schema.ID), Name: name}
-		if err := skip(p.writeAt(root, path, mutation{value: item, appendMode: appendMode})); err != nil {
+		if err := p.writeAt(root, path, mutation{value: item, appendMode: appendMode}); err != nil {
 			return err
 		}
 	}
@@ -284,9 +292,6 @@ func (p *patcher) mergeMember(target object, values map[string]any, parent *core
 	for key, value := range values {
 		attr := subAttr(parent, key)
 		if err := gate(attr, target.has(key)); err != nil {
-			if errors.Is(err, errSkip) {
-				continue
-			}
 			return err
 		}
 		p.store(target, key, attr, mutation{value: value, appendMode: appendMode})
@@ -375,20 +380,13 @@ func present(root object, path filter.Path) bool {
 func gate(attr *core.Attribute, present bool) error {
 	switch attr.Mutability {
 	case core.MutabilityReadOnly:
-		return errSkip
+		return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is readOnly")
 	case core.MutabilityImmutable:
 		if present {
 			return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is immutable")
 		}
 	}
 	return nil
-}
-
-func skip(err error) error {
-	if errors.Is(err, errSkip) {
-		return nil
-	}
-	return err
 }
 
 func eachMatch(elements []any, pred predicate, fn func(object) error) (int, error) {
@@ -400,9 +398,6 @@ func eachMatch(elements []any, pred predicate, fn func(object) error) (int, erro
 		}
 		matched++
 		if err := fn(object(member)); err != nil {
-			if errors.Is(err, errSkip) {
-				continue
-			}
 			return matched, err
 		}
 	}
