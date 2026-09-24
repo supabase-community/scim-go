@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -17,6 +18,8 @@ type Controller[T Entity] interface {
 	Patch(http.ResponseWriter, *http.Request) error
 	Delete(http.ResponseWriter, *http.Request) error
 }
+
+const patchAttempts = 3
 
 type controller[T Entity] struct {
 	schemas core.Schemas
@@ -130,17 +133,39 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	patched, err := req.Patch(existing, c.schemas)
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
-	patched.SetMeta(core.Meta{Version: c.ifMatch(r)})
-	replaced, err := c.service.Replace(r.Context(), patched)
+	replaced, err := c.patch(r, req, existing)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
 	c.setVersion(w, replaced)
 	return c.send(w, http.StatusOK, replaced, projection)
+}
+
+// patch retries a lost compare-and-swap the client did not ask to see, per RFC 7644, Section 3.14.
+func (c *controller[T]) patch(r *http.Request, req *protocol.PatchRequest, existing T) (T, error) {
+	for attempt := 1; ; attempt++ {
+		replaced, err := c.apply(r, req, existing)
+		if attempt == patchAttempts || !c.retryable(r, err) {
+			return replaced, err
+		}
+		if existing, err = c.service.Get(r.Context(), existing.ResourceID()); err != nil {
+			return existing, err
+		}
+	}
+}
+
+func (c *controller[T]) apply(r *http.Request, req *protocol.PatchRequest, existing T) (T, error) {
+	patched, err := req.Patch(existing, c.schemas)
+	if err != nil {
+		return patched, err
+	}
+	patched.SetMeta(core.Meta{Version: existing.GetMeta().Version})
+	return c.service.Replace(r.Context(), patched)
+}
+
+func (c *controller[T]) retryable(r *http.Request, err error) bool {
+	scimErr, ok := errors.AsType[*scimerrors.Error](err)
+	return ok && scimErr.StatusCode() == http.StatusPreconditionFailed && c.ifMatch(r) == ""
 }
 
 func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
