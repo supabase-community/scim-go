@@ -1,9 +1,11 @@
 package patch
 
 import (
+	"bytes"
 	"strconv"
 	"strings"
 
+	"github.com/supabase-community/scim-go/internal/decode"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -39,7 +41,7 @@ func (p *patcher) apply(root core.Object, op Operation) error {
 
 func (p *patcher) write(root core.Object, op Operation, appendMode bool) error {
 	if op.Path == "" {
-		values, err := decode[map[string]any](op.Value)
+		values, err := decode.JSON[map[string]any](bytes.NewReader(op.Value))
 		if err != nil || values == nil {
 			return scimerrors.ErrInvalidValue(`"value" must be an object when "path" is omitted`)
 		}
@@ -53,7 +55,7 @@ func (p *patcher) write(root core.Object, op Operation, appendMode bool) error {
 	if len(op.Value) == 0 {
 		return scimerrors.ErrInvalidValue(`"value" is required for "add" and "replace"`)
 	}
-	value, err := decode[any](op.Value)
+	value, err := decode.JSON[any](bytes.NewReader(op.Value))
 	if err != nil {
 		return scimerrors.ErrInvalidValue(`"value" is not valid JSON`)
 	}

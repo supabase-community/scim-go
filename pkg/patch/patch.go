@@ -1,9 +1,6 @@
 package patch
 
 import (
-	"bytes"
-	"encoding/json"
-
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
@@ -14,14 +11,6 @@ func Apply(resource core.Object, ops []Operation, schemas core.Schemas) (core.Ob
 		return nil, err
 	}
 	return working, nil
-}
-
-func decode[T any](raw []byte) (T, error) {
-	var out T
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	err := decoder.Decode(&out)
-	return out, err
 }
 
 func clone(value any) any {

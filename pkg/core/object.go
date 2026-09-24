@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+
+	"github.com/supabase-community/scim-go/internal/decode"
 )
 
 // Object is a JSON object whose attribute names are case insensitive, per RFC 7643, Section 2.1.
@@ -14,13 +16,7 @@ func NewObject(v any) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	var object Object
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	if err := decoder.Decode(&object); err != nil {
-		return nil, err
-	}
-	return object, nil
+	return decode.JSON[Object](bytes.NewReader(raw))
 }
 
 func (o Object) Get(name string) any {

@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -9,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/supabase-community/scim-go/internal/decode"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -57,10 +57,8 @@ func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error)
 }
 
 func Decode[T any](body io.Reader) (T, error) {
-	var req T
-	decoder := json.NewDecoder(body)
-	decoder.UseNumber()
-	if err := decoder.Decode(&req); err != nil {
+	req, err := decode.JSON[T](body)
+	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return req, scimerrors.ErrTooLarge("request body is too large")
 		}
