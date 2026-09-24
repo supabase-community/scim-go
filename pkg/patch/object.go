@@ -1,70 +1,28 @@
 package patch
 
 import (
-	"strings"
-
+	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// RFC 7643 2.1 - attribute names are case insensitive.
-type object map[string]any
-
-func (o object) key(name string) string {
-	if _, ok := o[name]; ok {
-		return name
-	}
-	canonical := ""
-	for candidate := range o {
-		if !strings.EqualFold(candidate, name) {
-			continue
-		}
-		if canonical == "" || candidate < canonical {
-			canonical = candidate
-		}
-	}
-	if canonical == "" {
-		return name
-	}
-	return canonical
-}
-
-func (o object) get(name string) (any, bool) {
-	value, ok := o[o.key(name)]
-	return value, ok
-}
-
-func (o object) has(name string) bool {
-	_, ok := o[o.key(name)]
-	return ok
-}
-
-func (o object) set(name string, value any, appendMode bool) {
-	key := o.key(name)
-	if before, ok := o[key].([]any); appendMode && ok {
-		if list, ok := value.([]any); ok {
-			o[key] = append(before, list...)
-		} else {
-			o[key] = append(before, value)
-		}
+func set(o core.Object, name string, value any, appendMode bool) {
+	if before, ok := o.Get(name).([]any); appendMode && ok {
+		o.Set(name, append(before, shaped(value, true).([]any)...))
 		return
 	}
-	o[key] = value
+	o.Set(name, value)
 }
 
-func (o object) remove(name string) {
-	delete(o, o.key(name))
-}
-
-func (o object) child(name string) (object, error) {
-	key := o.key(name)
-	if existing := o[key]; existing != nil {
-		nested, ok := existing.(map[string]any)
-		if !ok {
-			return nil, scimerrors.ErrInvalidPath(`"path" targets a non-complex attribute`)
-		}
-		return nested, nil
+func child(o core.Object, name string) (core.Object, error) {
+	existing := o.Get(name)
+	if existing == nil {
+		fresh := map[string]any{}
+		o.Set(name, fresh)
+		return fresh, nil
 	}
-	fresh := map[string]any{}
-	o[key] = fresh
-	return fresh, nil
+	nested, ok := existing.(map[string]any)
+	if !ok {
+		return nil, scimerrors.ErrInvalidPath(`"path" targets a non-complex attribute`)
+	}
+	return nested, nil
 }

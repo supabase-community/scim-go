@@ -3,26 +3,23 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-type document map[string]any
-
-func newDocument(item any) (document, error) {
+func newObject(item any) (core.Object, error) {
 	raw, err := json.Marshal(item)
 	if err != nil {
 		return nil, scimerrors.ErrInternal("could not encode the resource")
 	}
-	return protocol.Decode[document](bytes.NewReader(raw))
+	return protocol.Decode[core.Object](bytes.NewReader(raw))
 }
 
-func asDocument(value any) document {
+func asObject(value any) core.Object {
 	switch v := value.(type) {
-	case document:
+	case core.Object:
 		return v
 	case map[string]any:
 		return v
@@ -30,46 +27,33 @@ func asDocument(value any) document {
 	return nil
 }
 
-// RFC 7643 Section 2.1: attribute names are case insensitive.
-func (d document) get(name string) any {
-	if value, ok := d[name]; ok {
-		return value
-	}
-	for key, value := range d {
-		if strings.EqualFold(key, name) {
-			return value
-		}
-	}
-	return nil
-}
-
-type reader func(document) any
+type reader func(core.Object) any
 
 type readers struct {
 	values   map[*core.Attribute]reader
-	elements map[*core.Attribute]func(document) []any
+	elements map[*core.Attribute]func(core.Object) []any
 }
 
 func readersOf(schemas core.Schemas) readers {
-	r := readers{values: map[*core.Attribute]reader{}, elements: map[*core.Attribute]func(document) []any{}}
-	root := func(d document) document { return d }
+	r := readers{values: map[*core.Attribute]reader{}, elements: map[*core.Attribute]func(core.Object) []any{}}
+	root := func(d core.Object) core.Object { return d }
 	for _, name := range []string{"id", "externalId", "meta"} {
 		attribute, _ := core.CommonAttribute(name)
 		r.add(root, attribute)
 	}
 	r.add(root, schemas.Base().Attributes...)
 	for _, extension := range schemas.Extensions() {
-		r.add(func(d document) document { return asDocument(d.get(string(extension.ID))) }, extension.Attributes...)
+		r.add(func(d core.Object) core.Object { return asObject(d.Get(string(extension.ID))) }, extension.Attributes...)
 	}
 	return r
 }
 
-func (r readers) add(parent func(document) document, attributes ...*core.Attribute) {
+func (r readers) add(parent func(core.Object) core.Object, attributes ...*core.Attribute) {
 	for _, attribute := range attributes {
-		read := func(d document) any { return parent(d).get(attribute.Name) }
-		r.values[attribute] = func(d document) any { return coerce(attribute, read(d)) }
+		read := func(d core.Object) any { return parent(d).Get(attribute.Name) }
+		r.values[attribute] = func(d core.Object) any { return coerce(attribute, read(d)) }
 		if attribute.MultiValued {
-			r.elements[attribute] = func(d document) []any { list, _ := read(d).([]any); return list }
+			r.elements[attribute] = func(d core.Object) []any { list, _ := read(d).([]any); return list }
 		}
 		for _, sub := range attribute.SubAttributes {
 			r.values[sub] = r.sub(attribute, sub, read)
@@ -80,14 +64,14 @@ func (r readers) add(parent func(document) document, attributes ...*core.Attribu
 // RFC 7644 Section 3.4.2.2: outside a value path, a sub-attribute holds the values of every element.
 func (r readers) sub(parent, sub *core.Attribute, read reader) reader {
 	if !parent.MultiValued {
-		return func(d document) any { return coerce(sub, asDocument(read(d)).get(sub.Name)) }
+		return func(d core.Object) any { return coerce(sub, asObject(read(d)).Get(sub.Name)) }
 	}
 	elements := r.elements[parent]
-	return func(d document) any {
+	return func(d core.Object) any {
 		list := elements(d)
 		values := make([]any, len(list))
 		for i, element := range list {
-			values[i] = asDocument(element).get(sub.Name)
+			values[i] = asObject(element).Get(sub.Name)
 		}
 		return coerce(sub, values)
 	}

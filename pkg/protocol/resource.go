@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"io"
-	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 )
@@ -21,7 +20,7 @@ func DecodeResource[T any](body io.Reader, existing any, schemas core.Schemas) (
 	return fromDocument[T](writable(document, prior, schemas))
 }
 
-func writable(document, existing map[string]any, schemas core.Schemas) map[string]any {
+func writable(document, existing core.Object, schemas core.Schemas) core.Object {
 	if len(schemas) == 0 {
 		return document
 	}
@@ -29,12 +28,13 @@ func writable(document, existing map[string]any, schemas core.Schemas) map[strin
 		attribute, _ := schemas.Resolve("", name, "")
 		return attribute
 	}
-	out := writableObject(base, document, existing)
+	out := core.Object(writableObject(base, document, existing))
 	for _, extension := range schemas.Extensions() {
 		uri := string(extension.ID)
-		raw := take(out, uri)
+		raw := out.Get(uri)
+		out.Remove(uri)
 		body, isObject := raw.(map[string]any)
-		previous, _ := lookup(existing, uri).(map[string]any)
+		previous, _ := existing.Get(uri).(map[string]any)
 		if object := writableObject(extension.Attributes.Lookup, body, previous); len(object) > 0 {
 			out[uri] = object
 		} else if raw != nil && !isObject {
@@ -42,26 +42,6 @@ func writable(document, existing map[string]any, schemas core.Schemas) map[strin
 		}
 	}
 	return out
-}
-
-// take removes and returns the value under key; RFC 7644 Section 3.10: schema URNs are case insensitive.
-func take(object map[string]any, key string) any {
-	for name, value := range object {
-		if strings.EqualFold(name, key) {
-			delete(object, name)
-			return value
-		}
-	}
-	return nil
-}
-
-func lookup(object map[string]any, key string) any {
-	for name, value := range object {
-		if strings.EqualFold(name, key) {
-			return value
-		}
-	}
-	return nil
 }
 
 func writableObject(lookup func(string) *core.Attribute, body, existing map[string]any) map[string]any {

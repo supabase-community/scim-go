@@ -32,8 +32,8 @@ type repository[T Entity] struct {
 }
 
 type row[T Entity] struct {
-	item     T
-	document document
+	item   T
+	object core.Object
 }
 
 // NewRepository stores resources in memory, for tests and reference servers.
@@ -159,19 +159,19 @@ func (r *repository[T]) withLock(fn func() error) error {
 	return fn()
 }
 
-// rowOf pairs item with its document and rejects a value collision, per RFC 7643, Section 7.
+// rowOf pairs item with its object and rejects a value collision, per RFC 7643, Section 7.
 func (r *repository[T]) rowOf(item T) (row[T], error) {
-	candidate, err := newDocument(item)
+	candidate, err := newObject(item)
 	if err != nil {
 		return row[T]{}, err
 	}
 	if attribute := r.conflictingAttribute(item.ResourceID(), candidate); attribute != nil {
 		return row[T]{}, scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
 	}
-	return row[T]{item: item, document: candidate}, nil
+	return row[T]{item: item, object: candidate}, nil
 }
 
-func (r *repository[T]) conflictingAttribute(id string, candidate document) *core.Attribute {
+func (r *repository[T]) conflictingAttribute(id string, candidate core.Object) *core.Attribute {
 	for _, other := range r.rows {
 		if other.item.ResourceID() == id {
 			continue
@@ -180,7 +180,7 @@ func (r *repository[T]) conflictingAttribute(id string, candidate document) *cor
 			if attribute.Uniqueness == core.UniquenessNone {
 				continue
 			}
-			if sharesValue(read(other.document), read(candidate), attribute.CaseExact) {
+			if sharesValue(read(other.object), read(candidate), attribute.CaseExact) {
 				return attribute
 			}
 		}
@@ -226,7 +226,7 @@ func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]row[T], error
 	}
 	matching := []row[T]{}
 	for _, row := range r.rows {
-		if predicate(row.document) {
+		if predicate(row.object) {
 			matching = append(matching, row)
 		}
 	}

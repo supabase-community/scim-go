@@ -30,7 +30,7 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]row[T], error) 
 		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
 	slices.SortStableFunc(matching, func(a, b row[T]) int {
-		return compareSortKeys(key(a.document), key(b.document), attribute.CaseExact, query.Descending())
+		return compareSortKeys(key(a.object), key(b.object), attribute.CaseExact, query.Descending())
 	})
 
 	return matching, nil
@@ -43,18 +43,18 @@ func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (reader, bool
 		read, ok := r.values[attribute]
 		return read, ok
 	}
-	return func(d document) any {
+	return func(d core.Object) any {
 		element, ok := primaryOrFirst(elements(d))
 		if !ok {
 			return nil
 		}
-		return coerce(attribute, asDocument(element).get(attribute.Name))
+		return coerce(attribute, asObject(element).Get(attribute.Name))
 	}, true
 }
 
 func primaryOrFirst(elements []any) (any, bool) {
 	for _, element := range elements {
-		if asDocument(element).get("primary") == true {
+		if asObject(element).Get("primary") == true {
 			return element, true
 		}
 	}

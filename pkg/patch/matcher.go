@@ -88,11 +88,11 @@ func (m matcher) leaf(attr filter.AttrPath, op filter.Operator, want any) predic
 		caseExact = sub.CaseExact
 	}
 	return func(member map[string]any) bool {
-		got, ok := object(member).get(key)
+		got := core.Object(member).Get(key)
 		if op == opPresent {
-			return ok && hasValue(got)
+			return hasValue(got)
 		}
-		if !ok || got == nil {
+		if got == nil {
 			return false
 		}
 		return m.compareValues(op, got, want, caseExact)

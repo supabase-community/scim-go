@@ -25,7 +25,7 @@ func validators[T Entity](schemas core.Schemas, repo Repository[T]) []Validator[
 // required rejects a candidate missing a value for an attribute marked "required", per RFC 7643, Section 7.
 func required[T Entity](readers readers) Validator[T] {
 	return func(_ context.Context, candidate T) error {
-		d, err := newDocument(candidate)
+		d, err := newObject(candidate)
 		if err != nil {
 			return err
 		}
@@ -48,7 +48,7 @@ func isMissing(attribute *core.Attribute, value any) bool {
 // canonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.
 func canonicalValues[T Entity](readers readers) Validator[T] {
 	return func(_ context.Context, candidate T) error {
-		d, err := newDocument(candidate)
+		d, err := newObject(candidate)
 		if err != nil {
 			return err
 		}
@@ -97,11 +97,11 @@ func mutability[T Entity](readers readers, repo Repository[T]) Validator[T] {
 }
 
 func changedImmutable(readers readers, existing, candidate any) (*core.Attribute, error) {
-	before, err := newDocument(existing)
+	before, err := newObject(existing)
 	if err != nil {
 		return nil, err
 	}
-	after, err := newDocument(candidate)
+	after, err := newObject(candidate)
 	if err != nil {
 		return nil, err
 	}

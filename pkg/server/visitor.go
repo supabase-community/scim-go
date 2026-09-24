@@ -65,17 +65,17 @@ func (e *evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() 
 		return nil, err
 	}
 	return func(row any) bool {
-		return slices.ContainsFunc(elements(asDocument(row)), inner)
+		return slices.ContainsFunc(elements(asObject(row)), inner)
 	}, nil
 }
 
 func (e *evaluator) reader(attribute *protocol.Attribute) (func(row any) any, error) {
 	definition := attribute.Definition
 	if attribute.Parent != nil {
-		return func(row any) any { return coerce(definition, asDocument(row).get(definition.Name)) }, nil
+		return func(row any) any { return coerce(definition, asObject(row).Get(definition.Name)) }, nil
 	}
 	if read, ok := e.values[definition]; ok {
-		return func(row any) any { return read(asDocument(row)) }, nil
+		return func(row any) any { return read(asObject(row)) }, nil
 	}
 	return nil, scimerrors.ErrInvalidFilter(attribute.Path.Key() + " is not filterable")
 }
