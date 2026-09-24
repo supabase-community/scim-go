@@ -5,8 +5,8 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-func set(o core.Object, name string, value any, appendMode bool) {
-	if before, ok := o.Get(name).([]any); appendMode && ok {
+func set(o core.Object, name string, value any, kind Op) {
+	if before, ok := o.Get(name).([]any); kind == OpAdd && ok {
 		o.Set(name, append(before, shaped(value, true).([]any)...))
 		return
 	}

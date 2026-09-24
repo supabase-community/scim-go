@@ -29,11 +29,9 @@ func (p *patcher) run(root core.Object, ops []Operation) error {
 }
 
 func (p *patcher) apply(root core.Object, op Operation) error {
-	switch Op(strings.ToLower(string(op.Op))) {
-	case OpAdd:
-		return p.write(root, op, true)
-	case OpReplace:
-		return p.write(root, op, false)
+	switch kind := Op(strings.ToLower(string(op.Op))); kind {
+	case OpAdd, OpReplace:
+		return p.write(root, kind, op)
 	case OpRemove:
 		return p.remove(root, op)
 	default:
@@ -41,13 +39,13 @@ func (p *patcher) apply(root core.Object, op Operation) error {
 	}
 }
 
-func (p *patcher) write(root core.Object, op Operation, appendMode bool) error {
+func (p *patcher) write(root core.Object, kind Op, op Operation) error {
 	if op.Path == "" {
 		values, err := decode.JSON[map[string]any](bytes.NewReader(op.Value))
 		if err != nil || values == nil {
 			return scimerrors.ErrInvalidValue(`"value" must be an object when "path" is omitted`)
 		}
-		return p.mergeRoot(root, values, appendMode)
+		return p.mergeRoot(root, values, kind)
 	}
 
 	path, err := filter.NewPath(op.Path)
@@ -61,14 +59,13 @@ func (p *patcher) write(root core.Object, op Operation, appendMode bool) error {
 	if err != nil {
 		return scimerrors.ErrInvalidValue(`"value" is not valid JSON`)
 	}
-	m := mutation{value: value, appendMode: appendMode}
 	if path.ValueFilter != nil {
-		return p.valueWrite(root, path, m)
+		return p.valueWrite(root, path, kind, value)
 	}
-	return p.writeAt(root, path, m)
+	return p.writeAt(root, path, kind, value)
 }
 
-func (p *patcher) writeAt(root core.Object, path filter.Path, m mutation) error {
+func (p *patcher) writeAt(root core.Object, path filter.Path, kind Op, value any) error {
 	attr, err := resolve(p.schemas, path)
 	if err != nil {
 		return err
@@ -84,20 +81,15 @@ func (p *patcher) writeAt(root core.Object, path filter.Path, m mutation) error 
 	if err != nil {
 		return err
 	}
-	if values, ok := m.value.(map[string]any); ok && attr.Type == core.TypeComplex && !attr.MultiValued {
-		return p.merge(target, key, attr, mutation{value: values, appendMode: m.appendMode})
+	if values, ok := value.(map[string]any); ok && attr.Type == core.TypeComplex && !attr.MultiValued {
+		nested, err := child(target, key)
+		if err != nil {
+			return err
+		}
+		return p.mergeMember(nested, values, attr, kind)
 	}
-	p.store(target, key, attr, m)
+	set(target, key, shaped(value, attr.MultiValued), kind)
 	return nil
-}
-
-// RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
-func (p *patcher) merge(target core.Object, key string, attr *core.Attribute, m mutation) error {
-	nested, err := child(target, key)
-	if err != nil {
-		return err
-	}
-	return p.mergeMember(nested, m.value.(map[string]any), attr, m.appendMode)
 }
 
 func (p *patcher) remove(root core.Object, op Operation) error {
@@ -126,7 +118,7 @@ func (p *patcher) remove(root core.Object, op Operation) error {
 	return removeSub(container, path)
 }
 
-func (p *patcher) valueWrite(root core.Object, path filter.Path, m mutation) error {
+func (p *patcher) valueWrite(root core.Object, path filter.Path, kind Op, value any) error {
 	parent, err := resolve(p.schemas, base(path))
 	if err != nil {
 		return err
@@ -138,7 +130,7 @@ func (p *patcher) valueWrite(root core.Object, path filter.Path, m mutation) err
 	if err != nil {
 		return err
 	}
-	writeOne, err := p.memberWriter(path, parent, m)
+	writeOne, err := p.memberWriter(path, parent, kind, value)
 	if err != nil {
 		return err
 	}
@@ -155,14 +147,14 @@ func (p *patcher) valueWrite(root core.Object, path filter.Path, m mutation) err
 	return nil
 }
 
-func (p *patcher) memberWriter(path filter.Path, parent *core.Attribute, m mutation) (func(core.Object) error, error) {
+func (p *patcher) memberWriter(path filter.Path, parent *core.Attribute, kind Op, value any) (func(core.Object) error, error) {
 	if path.SubAttribute == "" {
-		values, ok := m.value.(map[string]any)
+		values, ok := value.(map[string]any)
 		if !ok {
 			return nil, scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
 		}
 		return func(member core.Object) error {
-			return p.mergeMember(member, values, parent, m.appendMode)
+			return p.mergeMember(member, values, parent, kind)
 		}, nil
 	}
 	attr, err := resolve(p.schemas, path)
@@ -173,7 +165,7 @@ func (p *patcher) memberWriter(path filter.Path, parent *core.Attribute, m mutat
 		if err := gate(attr); err != nil {
 			return err
 		}
-		p.store(member, path.SubAttribute, attr, m)
+		set(member, path.SubAttribute, shaped(value, attr.MultiValued), kind)
 		return nil
 	}, nil
 }
@@ -217,29 +209,29 @@ func (p *patcher) clearSub(container core.Object, path filter.Path, elements []a
 }
 
 // RFC 7644 Section 3.5.2: without a "path" the value names attributes, possibly URN-qualified or grouped under an extension URN.
-func (p *patcher) mergeRoot(root core.Object, values map[string]any, appendMode bool) error {
+func (p *patcher) mergeRoot(root core.Object, values map[string]any, kind Op) error {
 	for key, value := range values {
 		if schema := p.schemas.Lookup(core.SchemaURI(key)); schema != nil {
-			if err := p.mergeSchema(root, schema, value, appendMode); err != nil {
+			if err := p.mergeSchema(root, schema, value, kind); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := p.writeAt(root, p.keyPath(key), mutation{value: value, appendMode: appendMode}); err != nil {
+		if err := p.writeAt(root, p.keyPath(key), kind, value); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *patcher) mergeSchema(root core.Object, schema *core.Schema, value any, appendMode bool) error {
+func (p *patcher) mergeSchema(root core.Object, schema *core.Schema, value any, kind Op) error {
 	values, ok := value.(map[string]any)
 	if !ok {
 		return scimerrors.ErrInvalidValue(strconv.Quote(string(schema.ID)) + " must be an object")
 	}
 	for name, item := range values {
 		path := filter.Path{URI: string(schema.ID), Name: name}
-		if err := p.writeAt(root, path, mutation{value: item, appendMode: appendMode}); err != nil {
+		if err := p.writeAt(root, path, kind, item); err != nil {
 			return err
 		}
 	}
@@ -255,19 +247,16 @@ func (p *patcher) keyPath(key string) filter.Path {
 	return filter.Path{Name: key}
 }
 
-func (p *patcher) mergeMember(target core.Object, values map[string]any, parent *core.Attribute, appendMode bool) error {
+// RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
+func (p *patcher) mergeMember(target core.Object, values map[string]any, parent *core.Attribute, kind Op) error {
 	for key, value := range values {
 		attr := subAttr(parent, key)
 		if err := gate(attr); err != nil {
 			return err
 		}
-		p.store(target, key, attr, mutation{value: value, appendMode: appendMode})
+		set(target, key, shaped(value, attr.MultiValued), kind)
 	}
 	return nil
-}
-
-func (p *patcher) store(target core.Object, key string, attr *core.Attribute, m mutation) {
-	set(target, key, shaped(m.value, attr.MultiValued), m.appendMode)
 }
 
 // RFC 7643 Section 3.3: extension attributes live in an object keyed by the extension URN.
