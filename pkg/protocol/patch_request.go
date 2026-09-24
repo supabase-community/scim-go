@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -54,10 +55,7 @@ func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error)
 	if err != nil {
 		return zero, err
 	}
-	document, err := toDocument(resource)
-	if err != nil {
-		return zero, err
-	}
+	document := maps.Clone(existing)
 	if err := r.Apply(document, schemas); err != nil {
 		return zero, err
 	}

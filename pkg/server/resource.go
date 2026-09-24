@@ -82,7 +82,7 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	if repository == nil {
 		repository = NewRepository[T](path, schemas)
 	}
-	service := NewService(repository, validators(schemas, repository)...)
+	service := NewService(repository, characteristics(schemas, repository))
 	controller := NewController(service, schemas, s.limits, s.config)
 
 	s.mux.HandleFunc("GET "+path, s.handle(controller.List))
