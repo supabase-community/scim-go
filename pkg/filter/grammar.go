@@ -62,7 +62,7 @@ func (g *grammar) Parse(text string) (*Node, error) {
 	}
 	node := NewNode(raw)
 	if node == nil {
-		return nil, NewParseError(text, len(text))
+		return nil, newParseError(text, len(text))
 	}
 	return node, nil
 }
@@ -74,7 +74,7 @@ func (g *grammar) run(text string, p peg.Parser) (peg.ASTNode, error) {
 	ctx := peg.NewContext(text)
 	raw, err := p(ctx)
 	if err != nil || ctx.Position() != len(text) {
-		return nil, NewParseError(text, ctx.Position())
+		return nil, newParseError(text, ctx.Position())
 	}
 	return raw, nil
 }

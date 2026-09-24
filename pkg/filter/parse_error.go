@@ -12,7 +12,7 @@ type ParseError struct {
 	Position int
 }
 
-func NewParseError(input string, position int) *ParseError {
+func newParseError(input string, position int) *ParseError {
 	return &ParseError{
 		Input:    input,
 		Position: position,

@@ -22,7 +22,7 @@ func NewPath(text string) (Path, error) {
 		return Path{}, err
 	}
 	if !node.HasPath() {
-		return Path{}, NewParseError(text, 0)
+		return Path{}, newParseError(text, 0)
 	}
 	path := Path{
 		AttrPath:    newAttrPath(node.Path()),
