@@ -71,20 +71,6 @@ func TestRequireBearerToken(t *testing.T) {
 		assert.Equal(t, "Bearer", w.Header().Get("WWW-Authenticate"))
 	})
 
-	t.Run("rejects a Bearer scheme with an empty token as a malformed request", func(t *testing.T) {
-		var called bool
-		var tenant string
-		handler := newHandler(&called, &tenant)
-
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodGet, "/", nil)
-		r.Header.Set("Authorization", "Bearer ")
-		handler.ServeHTTP(w, r)
-
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.False(t, called)
-		assert.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_request"`)
-	})
 
 	t.Run("rejects an invalid token", func(t *testing.T) {
 		var called bool

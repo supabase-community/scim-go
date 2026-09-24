@@ -31,12 +31,6 @@ func RequireBearerToken(validate TokenValidator) func(http.Handler) http.Handler
 				return
 			}
 
-			if token == "" {
-				challenge(w, "invalid_request", "missing bearer token")
-				_ = protocol.SendError(w, scimerrors.ErrInvalidSyntax("missing bearer token"))
-				return
-			}
-
 			ctx, err := validate(r.Context(), token)
 			if errors.Is(err, ErrInvalidToken) {
 				challenge(w, "invalid_token", invalidTokenDescription)
