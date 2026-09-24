@@ -1,7 +1,10 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -36,6 +39,14 @@ func TestRFC6750(t *testing.T) {
 			WithHeader("Authorization", "Bearer "+validToken),
 		)
 		response := Response(t, srv, request)
+
+		assert.Equal(t, http.StatusOK, response.StatusCode)
+	})
+
+	t.Run("matches the Bearer scheme case-insensitively", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithHeader("Authorization", "bearer "+validToken)))
 
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 	})
@@ -77,6 +88,30 @@ func TestRFC6750(t *testing.T) {
 
 		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
 		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_token"`)
+	})
+
+	t.Run("3.1 Error Codes (a fixed description hides why the token is invalid)", func(t *testing.T) {
+		srv := bearerServer(t, func(ctx context.Context, _ string) (context.Context, error) {
+			return ctx, fmt.Errorf("%w: expired at noon", server.ErrInvalidToken)
+		})
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("expired")))
+
+		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+		assert.Equal(t, `Bearer error="invalid_token", error_description="The access token is invalid"`, response.Header.Get("WWW-Authenticate"))
+		assert.NotContains(t, ReadBodyAs[scimerrors.Error](t, response).Detail, "noon")
+	})
+
+	t.Run("answers a validator failure with 500, no challenge and no internal detail", func(t *testing.T) {
+		srv := bearerServer(t, func(ctx context.Context, _ string) (context.Context, error) {
+			return ctx, errors.New("dial tcp 10.0.0.1:5432: connection refused")
+		})
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("anything")))
+
+		assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
+		assert.Empty(t, response.Header.Get("WWW-Authenticate"))
+		assert.NotContains(t, ReadBodyAs[scimerrors.Error](t, response).Detail, "10.0.0.1")
 	})
 }
 

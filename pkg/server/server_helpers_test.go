@@ -133,6 +133,15 @@ func newTestServer(t *testing.T, options ...server.Option[*server.Server]) *http
 	return Server(t, srv)
 }
 
+func bearerServer(t *testing.T, validate server.TokenValidator, options ...server.Option[*server.Server]) *httptest.Server {
+	t.Helper()
+
+	return Server(t, server.New(fullServiceProviderConfig(), append(options,
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
+		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
+	)...))
+}
+
 func enterpriseAttributes() core.Attributes {
 	return core.Attributes{
 		core.NewAttribute("employeeNumber", core.TypeString),

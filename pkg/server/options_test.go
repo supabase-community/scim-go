@@ -118,3 +118,63 @@ func TestWithRepository(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.StatusCode)
 	assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
 }
+
+type tenantKey struct{}
+
+type tenantRepository struct {
+	server.Repository[*core.User]
+	tenant *string
+}
+
+func (r tenantRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
+	*r.tenant, _ = ctx.Value(tenantKey{}).(string)
+	return r.Repository.List(ctx, query)
+}
+
+func TestWithAuthentication(t *testing.T) {
+	t.Run("reports a validator failure to the ErrorHandler", func(t *testing.T) {
+		cause := errors.New("connection refused")
+		var reported error
+		srv := bearerServer(t,
+			func(ctx context.Context, _ string) (context.Context, error) { return ctx, cause },
+			server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
+		)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("anything")))
+
+		assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
+		assert.ErrorIs(t, reported, cause)
+	})
+
+	t.Run("does not report an invalid token to the ErrorHandler", func(t *testing.T) {
+		var reported error
+		srv := bearerServer(t,
+			func(ctx context.Context, _ string) (context.Context, error) { return ctx, server.ErrInvalidToken },
+			server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
+		)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("anything")))
+
+		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
+		assert.NoError(t, reported)
+	})
+
+	t.Run("passes the validator's context to the repository", func(t *testing.T) {
+		var tenant string
+		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
+		repository := tenantRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), tenant: &tenant}
+		srv := Server(t, server.New(fullServiceProviderConfig(),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
+			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+				func(ctx context.Context, _ string) (context.Context, error) {
+					return context.WithValue(ctx, tenantKey{}, "acme"), nil
+				},
+			)),
+		))
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("anything")))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, "acme", tenant)
+	})
+}
