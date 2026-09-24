@@ -38,17 +38,6 @@ func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	return req, nil
 }
 
-func Decode[T any](body io.Reader) (T, error) {
-	req, err := decode.JSON[T](body)
-	if err != nil {
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return req, scimerrors.ErrTooLarge("request body is too large")
-		}
-		return req, scimerrors.ErrInvalidSyntax("request body is not valid JSON")
-	}
-	return req, nil
-}
-
 // Patch returns a new resource; resource is left unchanged, per RFC 7644 Section 3.5.2.
 func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error) {
 	var zero T
@@ -61,6 +50,17 @@ func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error)
 		return zero, err
 	}
 	return fromDocument[T](writable(patched, existing, schemas))
+}
+
+func Decode[T any](body io.Reader) (T, error) {
+	req, err := decode.JSON[T](body)
+	if err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return req, scimerrors.ErrTooLarge("request body is too large")
+		}
+		return req, scimerrors.ErrInvalidSyntax("request body is not valid JSON")
+	}
+	return req, nil
 }
 
 func isPatchOp(uri core.SchemaURI) bool {
