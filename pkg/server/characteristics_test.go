@@ -45,3 +45,29 @@ func TestPatchImmutable(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateRequired(t *testing.T) {
+	resource := server.NewResource[*core.User]("User", "/Users", core.SchemaUser,
+		core.NewAttribute("userName", core.TypeString).AsRequired(),
+		core.NewAttribute("active", core.TypeBoolean).AsRequired(),
+		core.NewAttribute("name", core.TypeComplex).AsRequired().With(core.NewAttribute("givenName", core.TypeString)),
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().AsRequired().With(core.NewAttribute("value", core.TypeString)),
+	)
+	srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(resource)))
+
+	for _, test := range []struct {
+		name   string
+		body   map[string]any
+		status int
+	}{
+		{"accepts false for a required boolean", map[string]any{"userName": "b", "active": false, "name": map[string]any{"givenName": "B"}, "emails": []any{map[string]any{"value": "a@b.com"}}}, http.StatusCreated},
+		{"rejects an empty complex value", map[string]any{"userName": "b", "active": true, "name": map[string]any{}, "emails": []any{map[string]any{"value": "a@b.com"}}}, http.StatusBadRequest},
+		{"rejects an empty multi-valued value", map[string]any{"userName": "b", "active": true, "name": map[string]any{"givenName": "B"}, "emails": []any{}}, http.StatusBadRequest},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := Request(t, srv, http.MethodPost, basePath+"/Users", WithContentType(protocol.MediaType), WithRequestBodyAs(t, test.body))
+
+			assert.Equal(t, test.status, Response(t, srv, request).StatusCode)
+		})
+	}
+}

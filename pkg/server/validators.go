@@ -103,17 +103,17 @@ func immutable(readers readers, before, after core.Object) error {
 }
 
 func isEmpty(value any) bool {
-	if value == nil {
+	switch v := value.(type) {
+	case nil:
 		return true
+	case string:
+		return v == ""
+	case []any:
+		return len(v) == 0
+	case map[string]any:
+		return len(v) == 0
 	}
-	switch v := reflect.ValueOf(value); v.Kind() {
-	case reflect.String, reflect.Slice, reflect.Map, reflect.Array:
-		return v.Len() == 0
-	case reflect.Pointer, reflect.Interface:
-		return v.IsNil()
-	default:
-		return false
-	}
+	return false
 }
 
 func containsValue(values []string, value string, caseExact bool) bool {

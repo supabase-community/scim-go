@@ -42,20 +42,27 @@ func readersOf(schemas core.Schemas) readers {
 func (r *readers) add(parent func(core.Object) core.Object, attributes ...*core.Attribute) {
 	for _, attribute := range attributes {
 		read := func(d core.Object) any { return parent(d).Get(attribute.Name) }
-		r.set(attribute, func(d core.Object) any { return coerce(attribute, read(d)) }, true)
+		r.set(attribute, func(d core.Object) any { return coerce(attribute, read(d)) })
+		r.track(attribute)
 		if attribute.MultiValued {
 			r.elements[attribute] = func(d core.Object) []any { list, _ := read(d).([]any); return list }
 		}
 		for _, sub := range attribute.SubAttributes {
-			r.set(sub, r.sub(attribute, sub, read), !attribute.MultiValued)
+			r.set(sub, r.sub(attribute, sub, read))
+			if !attribute.MultiValued {
+				r.track(sub)
+			}
 		}
 	}
 }
 
-func (r *readers) set(attribute *core.Attribute, read reader, singular bool) {
+func (r *readers) set(attribute *core.Attribute, read reader) {
 	r.values[attribute] = read
 	r.order = append(r.order, attribute)
-	if singular && attribute.Mutability == core.MutabilityImmutable {
+}
+
+func (r *readers) track(attribute *core.Attribute) {
+	if attribute.Mutability == core.MutabilityImmutable {
 		r.immutable = append(r.immutable, attribute)
 	}
 }
