@@ -11,7 +11,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// ErrInvalidToken is returned by a TokenValidator for a token that is expired, revoked, malformed or unknown, per RFC 6750, Section 3.1.
+// ErrInvalidToken rejects a bearer token, per RFC 6750, Section 3.1.
 var ErrInvalidToken = errors.New("invalid token")
 
 const invalidTokenDescription = "The access token is invalid"
