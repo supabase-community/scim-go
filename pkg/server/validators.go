@@ -12,28 +12,26 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// characteristics enforces the attribute characteristics of RFC 7643, Section 7, except uniqueness, which the Repository enforces atomically with the write.
+// characteristics enforces the attribute characteristics of RFC 7643, Section 2.2, except uniqueness, which the Repository enforces atomically with the write.
 func characteristics[T Entity](schemas core.Schemas, repo Repository[T]) Validator[T] {
-	return checker[T]{readers: readersOf(schemas), repo: repo}.validate
-}
-
-type checker[T Entity] struct {
-	readers readers
-	repo    Repository[T]
-}
-
-func (c checker[T]) validate(ctx context.Context, candidate T) error {
-	object, err := core.NewObject(candidate)
-	if err != nil {
-		return err
+	readers := readersOf(schemas)
+	return func(ctx context.Context, candidate T) error {
+		after, err := core.NewObject(candidate)
+		if err != nil {
+			return err
+		}
+		if err := required(readers, after); err != nil {
+			return err
+		}
+		if err := canonicalValues(readers, after); err != nil {
+			return err
+		}
+		before, err := previous(ctx, repo, candidate)
+		if err != nil {
+			return err
+		}
+		return immutable(readers, before, after)
 	}
-	if err := required(c.readers, object); err != nil {
-		return err
-	}
-	if err := canonicalValues(c.readers, object); err != nil {
-		return err
-	}
-	return c.mutability(ctx, candidate, object)
 }
 
 // required rejects a candidate missing a value for an attribute marked "required", per RFC 7643, Section 7.
@@ -77,39 +75,31 @@ func valuesOf(raw any) []any {
 	return []any{raw}
 }
 
-// mutability rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7643, Section 7.
-func (c checker[T]) mutability(ctx context.Context, candidate T, after core.Object) error {
+func previous[T Entity](ctx context.Context, repo Repository[T], candidate T) (core.Object, error) {
 	if candidate.ResourceID() == "" {
-		return nil
+		return core.Object{}, nil
 	}
-	existing, err := c.repo.Get(ctx, candidate.ResourceID())
-	if err != nil {
-		if errors.Is(err, scimerrors.ErrNotFound("")) {
-			return nil
-		}
-		return err
+	existing, err := repo.Get(ctx, candidate.ResourceID())
+	if errors.Is(err, scimerrors.ErrNotFound("")) {
+		return core.Object{}, nil
 	}
-	attribute, err := changedImmutable(c.readers, existing, after)
-	if err != nil || attribute == nil {
-		return err
-	}
-	return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
-}
-
-func changedImmutable(readers readers, existing any, after core.Object) (*core.Attribute, error) {
-	before, err := core.NewObject(existing)
 	if err != nil {
 		return nil, err
 	}
+	return core.NewObject(existing)
+}
+
+// immutable rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7643, Section 7.
+func immutable(readers readers, before, after core.Object) error {
 	for _, attribute := range readers.immutable {
 		read := readers.values[attribute]
-		previous := read(before)
-		if isEmpty(previous) || reflect.DeepEqual(previous, read(after)) {
+		assigned := read(before)
+		if isEmpty(assigned) || reflect.DeepEqual(assigned, read(after)) {
 			continue
 		}
-		return attribute, nil
+		return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
 	}
-	return nil, nil
+	return nil
 }
 
 func isEmpty(value any) bool {
