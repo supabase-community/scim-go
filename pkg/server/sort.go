@@ -11,10 +11,10 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
+func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]row[T], error) {
 	matching, err := r.filterBy(query)
 	if err != nil {
-		return []T{}, err
+		return nil, err
 	}
 	if query.SortBy == "" {
 		return matching, nil
@@ -22,44 +22,40 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]T, error) {
 
 	parent, attribute, err := query.SortAttribute(r.schemas)
 	if err != nil {
-		return []T{}, err
+		return nil, err
 	}
 
 	key, ok := r.sortKey(parent, attribute)
 	if !ok {
-		return []T{}, scimerrors.ErrInvalidValue("Unknown sortBy")
+		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
-	slices.SortStableFunc(matching, func(a, b T) int {
-		return compareSortKeys(key(a), key(b), attribute.CaseExact, query.Descending())
+	slices.SortStableFunc(matching, func(a, b row[T]) int {
+		return compareSortKeys(key(a.document), key(b.document), attribute.CaseExact, query.Descending())
 	})
 
 	return matching, nil
 }
 
 // RFC 7644 Section 3.4.2.3: a multi-valued attribute sorts by its primary value, or else its first value.
-func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (Accessor[T], bool) {
+func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (reader, bool) {
 	elements, multiValued := r.elements[parent]
-	read, readable := r.elementAccessors[attribute]
-	if !multiValued || !readable {
-		accessor, ok := r.accessors[attribute]
-		return accessor, ok
+	if !multiValued {
+		read, ok := r.values[attribute]
+		return read, ok
 	}
-	isPrimary := r.elementAccessors[parent.SubAttribute("primary")]
-	return func(item T) any {
-		element, ok := primaryOrFirst(elements(item), isPrimary)
+	return func(d document) any {
+		element, ok := primaryOrFirst(elements(d))
 		if !ok {
 			return nil
 		}
-		return read(element)
+		return coerce(attribute, asDocument(element).get(attribute.Name))
 	}, true
 }
 
-func primaryOrFirst(elements []any, isPrimary func(any) any) (any, bool) {
-	if isPrimary != nil {
-		for _, element := range elements {
-			if isPrimary(element) == true {
-				return element, true
-			}
+func primaryOrFirst(elements []any) (any, bool) {
+	for _, element := range elements {
+		if asDocument(element).get("primary") == true {
+			return element, true
 		}
 	}
 	if len(elements) == 0 {

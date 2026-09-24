@@ -1,27 +1,23 @@
 package server
 
-import (
-	"slices"
-
-	"github.com/supabase-community/scim-go/pkg/core"
-)
+import "github.com/supabase-community/scim-go/pkg/core"
 
 type Resource[T Entity] struct {
 	name        string
 	endpoint    string
 	id          core.SchemaURI
 	description string
-	fields      Fields[T]
-	extensions  []extension[T]
+	attributes  core.Attributes
+	extensions  []extension
 	repository  Repository[T]
 }
 
-func NewResource[T Entity](name, endpoint string, id core.SchemaURI, fields Fields[T]) *Resource[T] {
+func NewResource[T Entity](name, endpoint string, id core.SchemaURI, attributes ...*core.Attribute) *Resource[T] {
 	return &Resource[T]{
-		name:     name,
-		endpoint: endpoint,
-		id:       id,
-		fields:   fields,
+		name:       name,
+		endpoint:   endpoint,
+		id:         id,
+		attributes: attributes,
 	}
 }
 
@@ -36,14 +32,14 @@ func (c *Resource[T]) WithRepository(repository Repository[T]) *Resource[T] {
 	return c
 }
 
-type extension[T Entity] struct {
-	id     core.SchemaURI
-	fields Fields[T]
+type extension struct {
+	id         core.SchemaURI
+	attributes core.Attributes
 }
 
 // WithExtension adds a schema extension to the resource type, per RFC 7643, Section 6.
-func (c *Resource[T]) WithExtension(id core.SchemaURI, fields Fields[T]) *Resource[T] {
-	c.extensions = append(c.extensions, extension[T]{id: id, fields: fields})
+func (c *Resource[T]) WithExtension(id core.SchemaURI, attributes ...*core.Attribute) *Resource[T] {
+	c.extensions = append(c.extensions, extension{id: id, attributes: attributes})
 	return c
 }
 
@@ -52,7 +48,7 @@ func (c *Resource[T]) schema(basePath string) *core.Schema {
 		WithName(core.ResourceTypeName(c.name)).
 		WithDescription(c.description).
 		WithLocation(basePath + "/Schemas/" + string(c.id)).
-		With(c.fields.Attributes()...)
+		With(c.attributes...)
 }
 
 func (c *Resource[T]) resourceType(basePath string) *core.ResourceType {
@@ -75,27 +71,18 @@ func (c *Resource[T]) schemas(basePath string) core.Schemas {
 	for _, extension := range c.extensions {
 		schemas = append(schemas, core.NewSchema(extension.id).
 			WithLocation(basePath+"/Schemas/"+string(extension.id)).
-			With(extension.fields.Attributes()...))
+			With(extension.attributes...))
 	}
 	return schemas
 }
 
-func (c *Resource[T]) allFields() Fields[T] {
-	fields := slices.Clone(c.fields)
-	for _, extension := range c.extensions {
-		fields = append(fields, extension.fields...)
-	}
-	return fields
-}
-
 func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
-	fields := c.allFields()
 	path := s.basePath + c.endpoint
 	repository := c.repository
 	if repository == nil {
-		repository = NewRepository(path, schemas, fields)
+		repository = NewRepository[T](path, schemas)
 	}
-	service := NewService(repository, validators(fields, repository)...)
+	service := NewService(repository, validators(schemas, repository)...)
 	controller := NewController(service, schemas, s.limits, s.config)
 
 	s.mux.HandleFunc("GET "+path, s.handle(controller.List))

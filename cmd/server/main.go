@@ -37,8 +37,8 @@ func main() {
 
 	srv := server.New(config,
 		server.ErrorHandler(errorHandler),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, newUserFields())),
-		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, newGroupFields())),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
+		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupAttributes()...)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {
@@ -80,42 +80,26 @@ func main() {
 	}
 }
 
-func newUserFields() server.Fields[*core.User] {
-	return server.NewFields(
-		server.NewField(
-			core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
-			func(u *core.User) any { return u.UserName },
+func userAttributes() core.Attributes {
+	return core.Attributes{
+		core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
+		core.NewAttribute("name", core.TypeComplex).With(
+			core.NewAttribute("givenName", core.TypeString),
+			core.NewAttribute("familyName", core.TypeString),
 		),
-		server.NewField[*core.User](core.NewAttribute("name", core.TypeComplex), nil).With(
-			server.NewField(core.NewAttribute("givenName", core.TypeString), func(u *core.User) any { return u.Name.GivenName }),
-			server.NewField(core.NewAttribute("familyName", core.TypeString), func(u *core.User) any { return u.Name.FamilyName }),
-		),
-		server.NewField(
-			core.NewAttribute("active", core.TypeBoolean),
-			func(u *core.User) any {
-				if u.Active == nil {
-					return nil
-				}
-				return *u.Active
-			},
-		),
-		server.NewMultiValued("emails", func(u *core.User) []core.Email { return u.Emails }, "work", "home", "other"),
-	)
+		core.NewAttribute("active", core.TypeBoolean),
+		core.NewMultiValuedAttribute("emails", "work", "home", "other"),
+	}
 }
 
-func newGroupFields() server.Fields[*core.Group] {
-	return server.NewFields(
-		server.NewField(
-			core.NewAttribute("displayName", core.TypeString).AsRequired(),
-			func(g *core.Group) any { return g.DisplayName },
+func groupAttributes() core.Attributes {
+	return core.Attributes{
+		core.NewAttribute("displayName", core.TypeString).AsRequired(),
+		core.NewAttribute("members", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString),
+			core.NewAttribute("$ref", core.TypeReference),
+			core.NewAttribute("type", core.TypeString).Suggesting("User", "Group"),
+			core.NewAttribute("display", core.TypeString),
 		),
-		server.NewElements(
-			core.NewMultiValuedAttribute("members", "User", "Group"),
-			func(g *core.Group) []core.Member { return g.Members },
-			server.NewField(core.NewAttribute("value", core.TypeString), func(m core.Member) any { return m.Value }),
-			server.NewField(core.NewAttribute("$ref", core.TypeReference), func(m core.Member) any { return m.Ref }),
-			server.NewField(core.NewAttribute("type", core.TypeString).Suggesting("User", "Group"), func(m core.Member) any { return m.Type }),
-			server.NewField(core.NewAttribute("display", core.TypeString), func(m core.Member) any { return m.Display }),
-		),
-	)
+	}
 }

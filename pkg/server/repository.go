@@ -26,20 +26,25 @@ type repository[T Entity] struct {
 	mu       sync.Mutex
 	endpoint string
 	schemas  core.Schemas
-	items    []T
-	readers[T]
+	rows     []row[T]
+	readers
 	evaluator protocol.Evaluator[predicate]
 }
 
+type row[T Entity] struct {
+	item     T
+	document document
+}
+
 // NewRepository stores resources in memory, for tests and reference servers.
-func NewRepository[T Entity](endpoint string, schemas core.Schemas, fields Fields[T]) Repository[T] {
-	readers := fields.readers()
+func NewRepository[T Entity](endpoint string, schemas core.Schemas) Repository[T] {
+	readers := readersOf(schemas)
 	return &repository[T]{
 		endpoint:  endpoint,
 		schemas:   schemas,
-		items:     []T{},
+		rows:      []row[T]{},
 		readers:   readers,
-		evaluator: newVisitor[T](readers),
+		evaluator: newVisitor(readers),
 	}
 }
 
@@ -57,14 +62,14 @@ func (r *repository[T]) Get(_ context.Context, id string) (item T, err error) {
 		if err != nil {
 			return err
 		}
-		item = r.items[i]
+		item = r.rows[i].item
 		return nil
 	})
 	return item, err
 }
 
 func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
-	var matching []T
+	var matching []row[T]
 	err := r.withLock(func() (err error) {
 		matching, err = r.sortBy(query)
 		return err
@@ -76,7 +81,11 @@ func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) (
 	total := len(matching)
 	start := min(query.Offset(), total)
 	end := min(start+query.Count, total)
-	return matching[start:end], total, nil
+	items := make([]T, 0, end-start)
+	for _, row := range matching[start:end] {
+		items = append(items, row.item)
+	}
+	return items, total, nil
 }
 
 func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
@@ -93,10 +102,11 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 	})
 
 	err := r.withLock(func() error {
-		if attribute := r.conflictingAttribute(item); attribute != nil {
-			return scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
+		created, err := r.rowOf(item)
+		if err != nil {
+			return err
 		}
-		r.items = append(r.items, item)
+		r.rows = append(r.rows, created)
 		return nil
 	})
 	if err != nil {
@@ -112,16 +122,17 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 		if err != nil {
 			return err
 		}
-		if attribute := r.conflictingAttribute(item); attribute != nil {
-			return scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
-		}
-		meta := r.items[i].GetMeta()
+		meta := r.rows[i].item.GetMeta()
 		now := time.Now().UTC()
 		meta.LastModified = now
 		meta.Version = weakETag(now)
 		item.SetMeta(meta)
 		item.SetSchemas(schemaURIs(r.schemas))
-		r.items[i] = item
+		replaced, err := r.rowOf(item)
+		if err != nil {
+			return err
+		}
+		r.rows[i] = replaced
 		return nil
 	})
 	if err != nil {
@@ -137,7 +148,7 @@ func (r *repository[T]) Delete(_ context.Context, id, version string) error {
 		if err != nil {
 			return err
 		}
-		r.items = slices.Delete(r.items, i, i+1)
+		r.rows = slices.Delete(r.rows, i, i+1)
 		return nil
 	})
 }
@@ -148,17 +159,28 @@ func (r *repository[T]) withLock(fn func() error) error {
 	return fn()
 }
 
-// conflictingAttribute finds a unique attribute of candidate already held by another stored item, per RFC 7643, Section 7.
-func (r *repository[T]) conflictingAttribute(candidate T) *core.Attribute {
-	for _, other := range r.items {
-		if other.ResourceID() == candidate.ResourceID() {
+// rowOf pairs item with its document and rejects a value collision, per RFC 7643, Section 7.
+func (r *repository[T]) rowOf(item T) (row[T], error) {
+	candidate, err := newDocument(item)
+	if err != nil {
+		return row[T]{}, err
+	}
+	if attribute := r.conflictingAttribute(item.ResourceID(), candidate); attribute != nil {
+		return row[T]{}, scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
+	}
+	return row[T]{item: item, document: candidate}, nil
+}
+
+func (r *repository[T]) conflictingAttribute(id string, candidate document) *core.Attribute {
+	for _, other := range r.rows {
+		if other.item.ResourceID() == id {
 			continue
 		}
-		for attribute, accessor := range r.accessors {
+		for attribute, read := range r.values {
 			if attribute.Uniqueness == core.UniquenessNone {
 				continue
 			}
-			if sharesValue(accessor(other), accessor(candidate), attribute.CaseExact) {
+			if sharesValue(read(other.document), read(candidate), attribute.CaseExact) {
 				return attribute
 			}
 		}
@@ -183,29 +205,29 @@ func sharesValue(a, b any, caseExact bool) bool {
 
 // RFC 7644 Section 3.14: a non-empty version must match the stored one.
 func (r *repository[T]) locate(id, version string) (int, error) {
-	i := slices.IndexFunc(r.items, func(item T) bool { return item.ResourceID() == id })
+	i := slices.IndexFunc(r.rows, func(row row[T]) bool { return row.item.ResourceID() == id })
 	switch {
 	case i < 0:
 		return i, scimerrors.ErrNotFound("Not found")
-	case version != "" && r.items[i].GetMeta().Version != version:
+	case version != "" && r.rows[i].item.GetMeta().Version != version:
 		return i, scimerrors.ErrPreconditionFailed("resource has changed on the server")
 	}
 	return i, nil
 }
 
-func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]T, error) {
+func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]row[T], error) {
 	if query.Filter == "" {
-		return slices.Clone(r.items), nil
+		return slices.Clone(r.rows), nil
 	}
 
 	predicate, err := protocol.Filter(r.schemas, query.Filter, r.evaluator)
 	if err != nil {
-		return []T{}, err
+		return nil, err
 	}
-	matching := []T{}
-	for _, item := range r.items {
-		if predicate(item) {
-			matching = append(matching, item)
+	matching := []row[T]{}
+	for _, row := range r.rows {
+		if predicate(row.document) {
+			matching = append(matching, row)
 		}
 	}
 	return matching, nil

@@ -167,7 +167,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 	})
 
 	t.Run("rejects a resource missing a required multi-valued attribute", func(t *testing.T) {
-		srv := newTestServer(t, server.WithResource(server.NewResource[*widget]("Kit", "/Kits", kitSchema, kitFields())))
+		srv := newTestServer(t, server.WithResource(server.NewResource[*widget]("Kit", "/Kits", kitSchema, kitAttributes()...)))
 
 		request := Request(t, srv, http.MethodPost, basePath+"/Kits",
 			WithBearerToken(validToken),
@@ -545,15 +545,19 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, 2, list.TotalResults)
 	})
 
-	t.Run("rejects pr on a complex attribute that has no accessor of its own", func(t *testing.T) {
+	t.Run("pr matches a complex attribute with a non-empty node", func(t *testing.T) {
 		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "Barbara"}})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`name pr`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 
-		require.Equal(t, http.StatusBadRequest, response.StatusCode)
-		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
 	t.Run("rejects a value path filter whose inner expression is invalid", func(t *testing.T) {

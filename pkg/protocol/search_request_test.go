@@ -170,6 +170,7 @@ func TestSearchRequest(t *testing.T) {
 		schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
 			core.NewAttribute("userName", core.TypeString),
 			core.NewAttribute("name", core.TypeComplex).With(core.NewAttribute("givenName", core.TypeString)),
+			core.NewMultiValuedAttribute("emails"),
 		)}
 		tt := []struct {
 			request protocol.SearchRequest
@@ -181,6 +182,9 @@ func TestSearchRequest(t *testing.T) {
 			{protocol.SearchRequest{SortBy: "1bad"}, false},
 			{protocol.SearchRequest{SortBy: "nickName"}, false},
 			{protocol.SearchRequest{SortBy: "name.familyName"}, false},
+			{protocol.SearchRequest{SortBy: "name"}, false},
+			{protocol.SearchRequest{SortBy: "emails"}, false},
+			{protocol.SearchRequest{SortBy: "emails.value"}, true},
 		}
 		for _, tc := range tt {
 			err := tc.request.Validate(schemas)

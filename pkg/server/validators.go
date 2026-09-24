@@ -13,26 +13,24 @@ import (
 )
 
 // validators enforces the attribute characteristics of RFC 7643, Section 7, except uniqueness, which the Repository enforces atomically with the write.
-func validators[T Entity](fields Fields[T], repo Repository[T]) []Validator[T] {
+func validators[T Entity](schemas core.Schemas, repo Repository[T]) []Validator[T] {
+	readers := readersOf(schemas)
 	return []Validator[T]{
-		required(fields),
-		canonicalValues(fields),
-		mutability(fields, repo),
+		required[T](readers),
+		canonicalValues[T](readers),
+		mutability(readers, repo),
 	}
 }
 
 // required rejects a candidate missing a value for an attribute marked "required", per RFC 7643, Section 7.
-func required[T Entity](fields Fields[T]) Validator[T] {
-	accessors := fields.accessors()
-	elements := fields.elements()
+func required[T Entity](readers readers) Validator[T] {
 	return func(_ context.Context, candidate T) error {
-		for attribute, accessor := range accessors {
-			if attribute.Required && isMissing(attribute, accessor(candidate)) {
-				return scimerrors.ErrInvalidValue(strconv.Quote(attribute.Name) + " is required")
-			}
+		d, err := newDocument(candidate)
+		if err != nil {
+			return err
 		}
-		for attribute, list := range elements {
-			if attribute.Required && len(list(candidate)) == 0 {
+		for attribute, read := range readers.values {
+			if attribute.Required && isMissing(attribute, read(d)) {
 				return scimerrors.ErrInvalidValue(strconv.Quote(attribute.Name) + " is required")
 			}
 		}
@@ -48,14 +46,17 @@ func isMissing(attribute *core.Attribute, value any) bool {
 }
 
 // canonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.
-func canonicalValues[T Entity](fields Fields[T]) Validator[T] {
-	accessors := fields.accessors()
+func canonicalValues[T Entity](readers readers) Validator[T] {
 	return func(_ context.Context, candidate T) error {
-		for attribute, accessor := range accessors {
+		d, err := newDocument(candidate)
+		if err != nil {
+			return err
+		}
+		for attribute, read := range readers.values {
 			if len(attribute.CanonicalValues) == 0 {
 				continue
 			}
-			for _, raw := range valuesOf(accessor(candidate)) {
+			for _, raw := range valuesOf(read(d)) {
 				value, ok := raw.(string)
 				if !ok || value == "" || containsValue(attribute.CanonicalValues, value, attribute.CaseExact) {
 					continue
@@ -75,8 +76,7 @@ func valuesOf(raw any) []any {
 }
 
 // mutability rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7643, Section 7.
-func mutability[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
-	accessors := fields.accessors()
+func mutability[T Entity](readers readers, repo Repository[T]) Validator[T] {
 	return func(ctx context.Context, candidate T) error {
 		if candidate.ResourceID() == "" {
 			return nil
@@ -88,25 +88,34 @@ func mutability[T Entity](fields Fields[T], repo Repository[T]) Validator[T] {
 			}
 			return err
 		}
-		if attribute := changedImmutable(accessors, existing, candidate); attribute != nil {
-			return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
+		attribute, err := changedImmutable(readers, existing, candidate)
+		if err != nil || attribute == nil {
+			return err
 		}
-		return nil
+		return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
 	}
 }
 
-func changedImmutable[T Entity](accessors accessorSet[T], existing, candidate T) *core.Attribute {
-	for attribute, accessor := range accessors {
+func changedImmutable(readers readers, existing, candidate any) (*core.Attribute, error) {
+	before, err := newDocument(existing)
+	if err != nil {
+		return nil, err
+	}
+	after, err := newDocument(candidate)
+	if err != nil {
+		return nil, err
+	}
+	for attribute, read := range readers.values {
 		if attribute.Mutability != core.MutabilityImmutable {
 			continue
 		}
-		previous := accessor(existing)
-		if isEmpty(previous) || reflect.DeepEqual(previous, accessor(candidate)) {
+		previous := read(before)
+		if isEmpty(previous) || reflect.DeepEqual(previous, read(after)) {
 			continue
 		}
-		return attribute
+		return attribute, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func isEmpty(value any) bool {

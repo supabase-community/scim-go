@@ -29,53 +29,29 @@ type part struct {
 
 func (w *widget) ResourceID() string { return w.ID }
 
-func widgetFields() server.Fields[*widget] {
-	return server.NewFields(
-		server.NewField(
-			core.NewAttribute("name", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
-			func(w *widget) any { return w.Name },
+func widgetAttributes() core.Attributes {
+	return core.Attributes{
+		core.NewAttribute("name", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
+		core.NewAttribute("score", core.TypeInteger),
+		core.NewAttribute("when", core.TypeDateTime),
+		core.NewAttribute("nick", core.TypeString).UniqueOn(core.UniquenessServer).AsCaseExact(),
+		core.NewAttribute("tags", core.TypeString).AsMultiValued(),
+		core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("serial", core.TypeString).AsRequired(),
 		),
-		server.NewField(
-			core.NewAttribute("score", core.TypeInteger),
-			func(w *widget) any { return w.Score },
-		),
-		server.NewField(
-			core.NewAttribute("when", core.TypeDateTime),
-			func(w *widget) any { return w.When },
-		),
-		server.NewField(
-			core.NewAttribute("nick", core.TypeString).UniqueOn(core.UniquenessServer).AsCaseExact(),
-			func(w *widget) any {
-				if w.Nick == "" {
-					return nil
-				}
-				return w.Nick
-			},
-		),
-		server.NewField(
-			core.NewAttribute("tags", core.TypeString).AsMultiValued(),
-			func(w *widget) any { return w.Tags },
-		),
-		server.NewElements(
-			core.NewAttribute("parts", core.TypeComplex).AsMultiValued(),
-			func(w *widget) []part { return w.Parts },
-			server.NewField(core.NewAttribute("serial", core.TypeString).AsRequired(), func(p part) any { return p.Serial }),
-		),
-	)
+	}
 }
 
 const widgetSchema core.SchemaURI = "urn:test:widget"
 
 const kitSchema core.SchemaURI = "urn:test:kit"
 
-func kitFields() server.Fields[*widget] {
-	return server.NewFields(
-		server.NewElements(
-			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().AsRequired(),
-			func(w *widget) []part { return w.Parts },
-			server.NewField(core.NewAttribute("serial", core.TypeString).AsRequired(), func(p part) any { return p.Serial }),
+func kitAttributes() core.Attributes {
+	return core.Attributes{
+		core.NewAttribute("parts", core.TypeComplex).AsMultiValued().AsRequired().With(
+			core.NewAttribute("serial", core.TypeString).AsRequired(),
 		),
-	)
+	}
 }
 
 func createWidget(t *testing.T, srv *httptest.Server, w *widget) map[string]any {
@@ -107,40 +83,23 @@ func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag strin
 	return created.ID, response.Header.Get("ETag")
 }
 
-func userFields() server.Fields[*core.User] {
-	return server.NewFields(
-		server.NewField(
-			core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
-			func(u *core.User) any { return u.UserName },
+func userAttributes() core.Attributes {
+	return core.Attributes{
+		core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
+		core.NewAttribute("name", core.TypeComplex).With(
+			core.NewAttribute("givenName", core.TypeString),
+			core.NewAttribute("familyName", core.TypeString).AsImmutable(),
 		),
-		server.NewField[*core.User](core.NewAttribute("name", core.TypeComplex), nil).With(
-			server.NewField(core.NewAttribute("givenName", core.TypeString), func(u *core.User) any { return u.Name.GivenName }),
-			server.NewField(core.NewAttribute("familyName", core.TypeString).AsImmutable(), func(u *core.User) any { return u.Name.FamilyName }),
-		),
-		server.NewField(
-			core.NewAttribute("userType", core.TypeString).Suggesting("employee", "contractor"),
-			func(u *core.User) any { return u.UserType },
-		),
-		server.NewField(
-			core.NewAttribute("active", core.TypeBoolean),
-			func(u *core.User) any {
-				if u.Active == nil {
-					return nil
-				}
-				return *u.Active
-			},
-		),
-		server.NewMultiValued("emails", func(u *core.User) []core.Email { return u.Emails }, "work", "home", "other"),
-	)
+		core.NewAttribute("userType", core.TypeString).Suggesting("employee", "contractor"),
+		core.NewAttribute("active", core.TypeBoolean),
+		core.NewMultiValuedAttribute("emails", "work", "home", "other"),
+	}
 }
 
-func groupFields() server.Fields[*core.Group] {
-	return server.NewFields(
-		server.NewField(
-			core.NewAttribute("displayName", core.TypeString).AsRequired(),
-			func(g *core.Group) any { return g.DisplayName },
-		),
-	)
+func groupAttributes() core.Attributes {
+	return core.Attributes{
+		core.NewAttribute("displayName", core.TypeString).AsRequired(),
+	}
 }
 
 func fullServiceProviderConfig() *core.ServiceProviderConfig {
@@ -152,9 +111,9 @@ func standardOptions(t *testing.T) []server.Option[*server.Server] {
 
 	return []server.Option[*server.Server]{
 		server.ErrorHandler(func(_ *http.Request, err error) { t.Errorf("%v\n", err) }),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userFields()).WithExtension(core.SchemaEnterpriseUser, enterpriseFields())),
-		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupFields())),
-		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetFields())),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithExtension(core.SchemaEnterpriseUser, enterpriseAttributes()...)),
+		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupAttributes()...)),
+		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetAttributes()...)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if candidate != validToken {
@@ -174,17 +133,9 @@ func newTestServer(t *testing.T, options ...server.Option[*server.Server]) *http
 	return Server(t, srv)
 }
 
-func enterpriseFields() server.Fields[*core.User] {
-	enterprise := func(read func(*core.EnterpriseUser) any) server.Accessor[*core.User] {
-		return func(u *core.User) any {
-			if u.EnterpriseUser == nil {
-				return nil
-			}
-			return read(u.EnterpriseUser)
-		}
+func enterpriseAttributes() core.Attributes {
+	return core.Attributes{
+		core.NewAttribute("employeeNumber", core.TypeString),
+		core.NewAttribute("department", core.TypeString),
 	}
-	return server.NewFields(
-		server.NewField(core.NewAttribute("employeeNumber", core.TypeString), enterprise(func(e *core.EnterpriseUser) any { return e.EmployeeNumber })),
-		server.NewField(core.NewAttribute("department", core.TypeString), enterprise(func(e *core.EnterpriseUser) any { return e.Department })),
-	)
 }

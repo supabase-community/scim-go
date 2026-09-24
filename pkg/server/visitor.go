@@ -13,15 +13,15 @@ import (
 
 type predicate func(row any) bool
 
-type evaluator[T Entity] struct {
-	readers[T]
+type evaluator struct {
+	readers
 }
 
-func newVisitor[T Entity](readers readers[T]) protocol.Evaluator[predicate] {
-	return &evaluator[T]{readers: readers}
+func newVisitor(readers readers) protocol.Evaluator[predicate] {
+	return &evaluator{readers: readers}
 }
 
-func (e *evaluator[T]) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (predicate, error) {
+func (e *evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (predicate, error) {
 	read, err := e.reader(attribute)
 	if err != nil {
 		return nil, err
@@ -33,7 +33,7 @@ func (e *evaluator[T]) Compare(attribute *protocol.Attribute, op filter.Operator
 	}, nil
 }
 
-func (e *evaluator[T]) Present(attribute *protocol.Attribute) (predicate, error) {
+func (e *evaluator) Present(attribute *protocol.Attribute) (predicate, error) {
 	read, err := e.reader(attribute)
 	if err != nil {
 		return nil, err
@@ -43,19 +43,19 @@ func (e *evaluator[T]) Present(attribute *protocol.Attribute) (predicate, error)
 	}, nil
 }
 
-func (e *evaluator[T]) And(left, right predicate) (predicate, error) {
+func (e *evaluator) And(left, right predicate) (predicate, error) {
 	return func(row any) bool { return left(row) && right(row) }, nil
 }
 
-func (e *evaluator[T]) Or(left, right predicate) (predicate, error) {
+func (e *evaluator) Or(left, right predicate) (predicate, error) {
 	return func(row any) bool { return left(row) || right(row) }, nil
 }
 
-func (e *evaluator[T]) Not(operand predicate) (predicate, error) {
+func (e *evaluator) Not(operand predicate) (predicate, error) {
 	return func(row any) bool { return !operand(row) }, nil
 }
 
-func (e *evaluator[T]) ValuePath(attribute *protocol.Attribute, valueFilter func() (predicate, error)) (predicate, error) {
+func (e *evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (predicate, error)) (predicate, error) {
 	elements, ok := e.elements[attribute.Definition]
 	if !ok {
 		return nil, scimerrors.ErrInvalidFilter(attribute.Path.Key() + " is not filterable")
@@ -65,17 +65,17 @@ func (e *evaluator[T]) ValuePath(attribute *protocol.Attribute, valueFilter func
 		return nil, err
 	}
 	return func(row any) bool {
-		return slices.ContainsFunc(elements(row.(T)), inner)
+		return slices.ContainsFunc(elements(asDocument(row)), inner)
 	}, nil
 }
 
-func (e *evaluator[T]) reader(attribute *protocol.Attribute) (func(row any) any, error) {
+func (e *evaluator) reader(attribute *protocol.Attribute) (func(row any) any, error) {
+	definition := attribute.Definition
 	if attribute.Parent != nil {
-		if read, ok := e.elementAccessors[attribute.Definition]; ok {
-			return read, nil
-		}
-	} else if accessor, ok := e.accessors[attribute.Definition]; ok {
-		return func(row any) any { return accessor(row.(T)) }, nil
+		return func(row any) any { return coerce(definition, asDocument(row).get(definition.Name)) }, nil
+	}
+	if read, ok := e.values[definition]; ok {
+		return func(row any) any { return read(asDocument(row)) }, nil
 	}
 	return nil, scimerrors.ErrInvalidFilter(attribute.Path.Key() + " is not filterable")
 }
@@ -89,13 +89,15 @@ func anyMatch(raw any, pred func(any) bool) bool {
 	return slices.ContainsFunc(list, pred)
 }
 
-// RFC 7644 3.4.2.2 - pr matches only a non-empty, non-null value.
+// RFC 7644 3.4.2.2 - pr matches only a non-empty, non-null value or a non-empty complex node.
 func hasValue(raw any) bool {
 	switch v := raw.(type) {
 	case nil:
 		return false
 	case string:
 		return v != ""
+	case map[string]any:
+		return len(v) > 0
 	default:
 		return true
 	}

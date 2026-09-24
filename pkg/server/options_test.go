@@ -22,7 +22,7 @@ func TestErrorHandlerOption(t *testing.T) {
 	var reported []error
 	srv := server.New(fullServiceProviderConfig(),
 		server.ErrorHandler(func(_ *http.Request, err error) { reported = append(reported, err) }),
-		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields())),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
 	)
 
 	srv.ServeHTTP(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, basePath+"/Users/unknown", nil))
@@ -53,7 +53,7 @@ func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T)
 	var reported error
 	srv := Server(t, server.New(fullServiceProviderConfig(),
 		server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
-		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields()).WithRepository(failingRepository{cause: cause})),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(failingRepository{cause: cause})),
 	))
 
 	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users"))
@@ -64,7 +64,7 @@ func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T)
 
 func TestDefaultCountAfterWithResource(t *testing.T) {
 	srv := Server(t, server.New(fullServiceProviderConfig(),
-		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields())),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
 		server.DefaultCount(1),
 	))
 	for _, name := range []string{"bjensen", "jsmith"} {
@@ -81,7 +81,7 @@ func TestDefaultCountAfterWithResource(t *testing.T) {
 func TestMaxBodySize(t *testing.T) {
 	srv := Server(t, server.New(fullServiceProviderConfig(),
 		server.MaxBodySize(16),
-		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields())),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
 	))
 
 	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
@@ -91,7 +91,7 @@ func TestMaxBodySize(t *testing.T) {
 
 func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
 	srv := Server(t, server.New(fullServiceProviderConfig(),
-		server.WithResource(server.NewResource("User", "/Users", core.SchemaUser, userFields()).WithRepository(failingRepository{cause: errors.New("unreachable")})),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(failingRepository{cause: errors.New("unreachable")})),
 	))
 
 	for _, query := range []string{"filter=((garbage", "sortBy=unknown"} {
@@ -104,13 +104,13 @@ func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
 }
 
 func TestWithRepository(t *testing.T) {
-	fields := userFields()
-	repository := server.NewRepository(basePath+"/Users", []*core.Schema{core.NewSchema(core.SchemaUser).With(fields.Attributes()...)}, fields)
+	attributes := userAttributes()
+	repository := server.NewRepository[*core.User](basePath+"/Users", []*core.Schema{core.NewSchema(core.SchemaUser).With(attributes...)})
 	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
 	require.NoError(t, err)
 
 	srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(
-		server.NewResource("User", "/Users", core.SchemaUser, fields).WithRepository(repository),
+		server.NewResource[*core.User]("User", "/Users", core.SchemaUser, attributes...).WithRepository(repository),
 	)))
 
 	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+existing.ID))
