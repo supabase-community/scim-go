@@ -94,6 +94,7 @@ func (v projected) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	v.projection.fillResourceType(document)
 	out := map[string]any{}
 	for key, value := range document {
 		if key == "schemas" {
@@ -102,7 +103,30 @@ func (v projected) MarshalJSON() ([]byte, error) {
 			out[key] = projected
 		}
 	}
+	v.projection.fillSchemas(out)
 	return json.Marshal(out)
+}
+
+func (p Projection) fillResourceType(document map[string]any) {
+	if meta, ok := document["meta"].(map[string]any); ok && p.schemas != nil {
+		if name, _ := meta["resourceType"].(string); name == "" {
+			meta["resourceType"] = p.schemas.Base().Name
+		}
+	}
+}
+
+// RFC 7643 Section 3: "schemas" is required and lists the base schema and each extension present.
+func (p Projection) fillSchemas(out map[string]any) {
+	if list, _ := out["schemas"].([]any); len(list) > 0 || p.schemas == nil {
+		return
+	}
+	uris := []any{string(p.schemas.Base().ID)}
+	for _, extension := range p.schemas.Extensions() {
+		if _, ok := out[string(extension.ID)]; ok {
+			uris = append(uris, string(extension.ID))
+		}
+	}
+	out["schemas"] = uris
 }
 
 // names holds fully qualified, lowercase attribute paths: "<schema uri>:<name>[.<sub-name>]",

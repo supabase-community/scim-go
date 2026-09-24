@@ -154,7 +154,7 @@ func TestSearchRequest(t *testing.T) {
 
 		raw, err := json.Marshal(projection.Of(map[string]any{"userName": "bjensen", "id": "1"}))
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"userName": "bjensen", "id": "1"}`, string(raw))
+		assert.JSONEq(t, `{"schemas": ["`+string(core.SchemaUser)+`"], "userName": "bjensen", "id": "1"}`, string(raw))
 	})
 
 	t.Run("reports an invalid attribute name instead of panicking", func(t *testing.T) {

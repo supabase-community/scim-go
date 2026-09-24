@@ -139,7 +139,7 @@ func TestProjection(t *testing.T) {
 		projection, err := protocol.ParseProjection(url.Values{}, schemas)
 		require.NoError(t, err)
 		out := marshal(t, map[string]any{string(core.SchemaEnterpriseUser): "oops"}, projection)
-		assert.Empty(t, out)
+		assert.Equal(t, map[string]any{"schemas": []any{string(core.SchemaUser)}}, out)
 	})
 
 	t.Run("reports a resource that cannot be encoded", func(t *testing.T) {
@@ -171,6 +171,41 @@ func TestZeroProjection(t *testing.T) {
 	assert.JSONEq(t, `{"id":"2819c223","userName":"bjensen"}`, string(raw))
 }
 
+func TestProjectionFillsSchemasAndResourceType(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString)),
+		(&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(core.NewAttribute("department", core.TypeString)),
+	}
+	projection, err := protocol.ParseProjection(url.Values{}, schemas)
+	require.NoError(t, err)
+
+	for name, test := range map[string]struct {
+		user     *core.User
+		expected string
+	}{
+		"when empty": {
+			&core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{Department: "Tour"}},
+			`["` + string(core.SchemaUser) + `","` + string(core.SchemaEnterpriseUser) + `"]|User`,
+		},
+		"but keeps values that are set": {
+			&core.User{Schemas: []core.SchemaURI{"urn:x"}, Meta: core.Meta{ResourceType: "Person"}},
+			`["urn:x"]|Person`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			raw, err := json.Marshal(projection.Of(test.user))
+			require.NoError(t, err)
+
+			var out struct {
+				Schemas json.RawMessage `json:"schemas"`
+				Meta    core.Meta       `json:"meta"`
+			}
+			require.NoError(t, json.Unmarshal(raw, &out))
+			assert.Equal(t, test.expected, string(out.Schemas)+"|"+string(out.Meta.ResourceType))
+		})
+	}
+}
+
 func TestProjectionAll(t *testing.T) {
 	schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString))}
 	projection, err := protocol.ParseProjection(url.Values{"attributes": {"userName"}}, schemas)
@@ -180,7 +215,8 @@ func TestProjectionAll(t *testing.T) {
 	raw, err := json.Marshal(projection.All(resources))
 
 	require.NoError(t, err)
-	assert.JSONEq(t, `[{"userName": "alice", "id": "1"}, {"userName": "bob", "id": "2"}]`, string(raw))
+	schema := `"schemas": ["` + string(core.SchemaUser) + `"]`
+	assert.JSONEq(t, `[{`+schema+`, "userName": "alice", "id": "1"}, {`+schema+`, "userName": "bob", "id": "2"}]`, string(raw))
 }
 
 func keys(m map[string]any) []string {
