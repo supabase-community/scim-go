@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strconv"
@@ -2824,20 +2823,4 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 // RFC 7644 7.5.2 Disclosure of Sensitive Information in URIs
 func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 	t.Skip("SHOULD: a GET filter with sensitive data is not rejected with 403 sensitive")
-}
-
-func patchUser(t *testing.T, srv *httptest.Server, id string, operations ...patch.Operation) core.User {
-	t.Helper()
-
-	request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, protocol.PatchRequest{
-			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-			Operations: operations,
-		}),
-	)
-	response := Response(t, srv, request)
-	require.Equal(t, http.StatusOK, response.StatusCode)
-	return ReadBodyAs[core.User](t, response)
 }

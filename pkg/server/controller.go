@@ -164,7 +164,6 @@ func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
 	}
 }
 
-// lostRace reports a concurrent change as 409, since 412 answers only a precondition the client sent, per RFC 7232, Section 4.2.
 func (c *controller[T]) lostRace(r *http.Request, err error) error {
 	if c.ifMatch(r) == "" && errors.Is(err, scimerrors.ErrPreconditionFailed("")) {
 		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the patch; retry")

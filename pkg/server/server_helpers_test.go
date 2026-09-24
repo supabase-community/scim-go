@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
@@ -82,6 +83,22 @@ func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag strin
 
 	created := ReadBodyAs[core.User](t, response)
 	return created.ID, response.Header.Get("ETag")
+}
+
+func patchUser(t *testing.T, srv *httptest.Server, id string, operations ...patch.Operation) core.User {
+	t.Helper()
+
+	request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+		WithBearerToken(validToken),
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: operations,
+		}),
+	)
+	response := Response(t, srv, request)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	return ReadBodyAs[core.User](t, response)
 }
 
 func userAttributes() core.Attributes {
