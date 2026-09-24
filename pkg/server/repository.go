@@ -161,7 +161,7 @@ func (r *repository[T]) withLock(fn func() error) error {
 
 // rowOf pairs item with its object and rejects a value collision, per RFC 7643, Section 7.
 func (r *repository[T]) rowOf(item T) (row[T], error) {
-	candidate, err := newObject(item)
+	candidate, err := core.NewObject(item)
 	if err != nil {
 		return row[T]{}, err
 	}

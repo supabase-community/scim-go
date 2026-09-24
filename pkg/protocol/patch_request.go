@@ -51,7 +51,7 @@ func (r *PatchRequest) Apply(resource core.Object, schemas core.Schemas) error {
 // Patch returns a new resource; resource is left unchanged, per RFC 7644 Section 3.5.2.
 func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error) {
 	var zero T
-	existing, err := toDocument(resource)
+	existing, err := core.NewObject(resource)
 	if err != nil {
 		return zero, err
 	}

@@ -1,21 +1,8 @@
 package server
 
 import (
-	"bytes"
-	"encoding/json"
-
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/protocol"
-	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
-
-func newObject(item any) (core.Object, error) {
-	raw, err := json.Marshal(item)
-	if err != nil {
-		return nil, scimerrors.ErrInternal("could not encode the resource")
-	}
-	return protocol.Decode[core.Object](bytes.NewReader(raw))
-}
 
 func asObject(value any) core.Object {
 	switch v := value.(type) {

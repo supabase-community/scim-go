@@ -13,7 +13,7 @@ func DecodeResource[T any](body io.Reader, existing any, schemas core.Schemas) (
 	if err != nil {
 		return item, err
 	}
-	prior, err := toDocument(existing)
+	prior, err := core.NewObject(existing)
 	if err != nil {
 		return item, err
 	}

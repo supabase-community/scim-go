@@ -1,25 +1,11 @@
 package protocol
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 
-	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
-
-func toDocument(resource any) (core.Object, error) {
-	raw, err := json.Marshal(resource)
-	if err != nil {
-		return nil, scimerrors.ErrInternal("could not encode the resource")
-	}
-	document, err := Decode[core.Object](bytes.NewReader(raw))
-	if err != nil {
-		return nil, scimerrors.ErrInternal("could not decode the resource")
-	}
-	return document, nil
-}
 
 // RFC 7644 Section 3.3: the request body MUST be a JSON object.
 func readDocument(r io.Reader) (map[string]any, error) {

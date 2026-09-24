@@ -90,7 +90,7 @@ type projected struct {
 }
 
 func (v projected) MarshalJSON() ([]byte, error) {
-	document, err := toDocument(v.resource)
+	document, err := core.NewObject(v.resource)
 	if err != nil {
 		return nil, err
 	}

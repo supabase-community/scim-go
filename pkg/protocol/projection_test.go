@@ -146,7 +146,7 @@ func TestProjection(t *testing.T) {
 		projection, err := protocol.ParseProjection(url.Values{}, schemas)
 		require.NoError(t, err)
 		_, err = json.Marshal(projection.Of(map[string]any{"id": make(chan int)}))
-		require.ErrorIs(t, err, scimerrors.ErrInternal(""))
+		require.ErrorAs(t, err, new(*json.UnsupportedTypeError))
 	})
 
 	// RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.

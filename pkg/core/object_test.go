@@ -1,11 +1,37 @@
 package core_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 )
+
+func TestNewObject(t *testing.T) {
+	t.Run("converts a resource to its JSON object", func(t *testing.T) {
+		object, err := core.NewObject(core.User{UserName: "bjensen"})
+		require.NoError(t, err)
+		assert.Equal(t, "bjensen", object.Get("userName"))
+	})
+
+	t.Run("keeps numbers as json.Number", func(t *testing.T) {
+		object, err := core.NewObject(map[string]any{"count": 1})
+		require.NoError(t, err)
+		assert.Equal(t, json.Number("1"), object.Get("count"))
+	})
+
+	t.Run("rejects a value that is not a JSON object", func(t *testing.T) {
+		_, err := core.NewObject([]string{"a"})
+		assert.Error(t, err)
+	})
+
+	t.Run("rejects a value that cannot be encoded", func(t *testing.T) {
+		_, err := core.NewObject(make(chan int))
+		assert.Error(t, err)
+	})
+}
 
 func TestObject(t *testing.T) {
 	t.Run("gets a value by a case-insensitive name", func(t *testing.T) {

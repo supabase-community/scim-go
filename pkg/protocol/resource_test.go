@@ -123,7 +123,7 @@ func TestDecodeResource(t *testing.T) {
 
 	t.Run("reports an existing resource that cannot be encoded", func(t *testing.T) {
 		_, err := protocol.DecodeResource[map[string]any](requestBody(body()), map[string]any{"id": make(chan int)}, schemas)
-		require.ErrorIs(t, err, scimerrors.ErrInternal(""))
+		require.ErrorAs(t, err, new(*json.UnsupportedTypeError))
 	})
 
 	t.Run("rejects a body that is not a JSON object", func(t *testing.T) {

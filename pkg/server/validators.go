@@ -23,7 +23,7 @@ type checker[T Entity] struct {
 }
 
 func (c checker[T]) validate(ctx context.Context, candidate T) error {
-	object, err := newObject(candidate)
+	object, err := core.NewObject(candidate)
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func (c checker[T]) mutability(ctx context.Context, candidate T, after core.Obje
 }
 
 func changedImmutable(readers readers, existing any, after core.Object) (*core.Attribute, error) {
-	before, err := newObject(existing)
+	before, err := core.NewObject(existing)
 	if err != nil {
 		return nil, err
 	}
