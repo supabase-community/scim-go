@@ -28,16 +28,32 @@ func (m matcher) VisitAnd(left, right predicate) (predicate, error) {
 	return func(member map[string]any) bool { return left(member) && right(member) }, nil
 }
 
-func (m matcher) VisitContains(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpContains, value), nil
+func (m matcher) VisitOr(left, right predicate) (predicate, error) {
+	return func(member map[string]any) bool { return left(member) || right(member) }, nil
 }
 
-func (m matcher) VisitEndsWith(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpEndsWith, value), nil
+func (m matcher) VisitNot(operand predicate) (predicate, error) {
+	return func(member map[string]any) bool { return !operand(member) }, nil
 }
 
 func (m matcher) VisitEquals(attr filter.AttrPath, value any) (predicate, error) {
 	return m.leaf(attr, filter.OpEquals, value), nil
+}
+
+func (m matcher) VisitNotEquals(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpNotEquals, value), nil
+}
+
+func (m matcher) VisitContains(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpContains, value), nil
+}
+
+func (m matcher) VisitStartsWith(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpStartsWith, value), nil
+}
+
+func (m matcher) VisitEndsWith(attr filter.AttrPath, value any) (predicate, error) {
+	return m.leaf(attr, filter.OpEndsWith, value), nil
 }
 
 func (m matcher) VisitGreaterThan(attr filter.AttrPath, value any) (predicate, error) {
@@ -56,24 +72,8 @@ func (m matcher) VisitLessThanEquals(attr filter.AttrPath, value any) (predicate
 	return m.leaf(attr, filter.OpLessThanEquals, value), nil
 }
 
-func (m matcher) VisitNot(operand predicate) (predicate, error) {
-	return func(member map[string]any) bool { return !operand(member) }, nil
-}
-
-func (m matcher) VisitNotEquals(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpNotEquals, value), nil
-}
-
-func (m matcher) VisitOr(left, right predicate) (predicate, error) {
-	return func(member map[string]any) bool { return left(member) || right(member) }, nil
-}
-
 func (m matcher) VisitPresence(attr filter.AttrPath) (predicate, error) {
 	return m.leaf(attr, opPresent, nil), nil
-}
-
-func (m matcher) VisitStartsWith(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpStartsWith, value), nil
 }
 
 // RFC 7644 3.4.2.2 - a value filter cannot itself contain a value path.
@@ -81,32 +81,36 @@ func (m matcher) VisitValuePath(_ filter.AttrPath, _ string, _ func() (predicate
 	return nil, scimerrors.ErrInvalidPath("value filter cannot contain a nested value path")
 }
 
-func (m matcher) compareBools(op filter.Operator, got, want bool) bool {
-	switch op {
-	case filter.OpEquals:
-		return got == want
-	case filter.OpNotEquals:
-		return got != want
+func (m matcher) leaf(attr filter.AttrPath, op filter.Operator, want any) predicate {
+	key := attr.Name
+	caseExact := false
+	if sub := m.attr.SubAttribute(key); sub != nil {
+		caseExact = sub.CaseExact
 	}
-	return false
+	return func(member map[string]any) bool {
+		got := core.Object(member).Get(key)
+		if op == opPresent {
+			return !core.IsUnassigned(got)
+		}
+		if got == nil {
+			return false
+		}
+		return m.compareValues(op, got, want, caseExact)
+	}
 }
 
-func (m matcher) compareNumbers(op filter.Operator, got, want float64) bool {
-	switch op {
-	case filter.OpEquals:
-		return got == want
-	case filter.OpNotEquals:
-		return got != want
-	case filter.OpGreaterThan:
-		return got > want
-	case filter.OpLessThan:
-		return got < want
-	case filter.OpGreaterThanEquals:
-		return got >= want
-	case filter.OpLessThanEquals:
-		return got <= want
+func (m matcher) compareValues(op filter.Operator, got, want any, caseExact bool) bool {
+	if gs, ok := got.(string); ok {
+		ws, ok := want.(string)
+		return ok && m.compareStrings(op, gs, ws, caseExact)
 	}
-	return false
+	if gb, ok := got.(bool); ok {
+		wb, ok := want.(bool)
+		return ok && m.compareBools(op, gb, wb)
+	}
+	gf, gok := m.toFloat(got)
+	wf, wok := m.toFloat(want)
+	return gok && wok && m.compareNumbers(op, gf, wf)
 }
 
 func (m matcher) compareStrings(op filter.Operator, got, want string, caseExact bool) bool {
@@ -136,36 +140,32 @@ func (m matcher) compareStrings(op filter.Operator, got, want string, caseExact 
 	return false
 }
 
-func (m matcher) compareValues(op filter.Operator, got, want any, caseExact bool) bool {
-	if gs, ok := got.(string); ok {
-		ws, ok := want.(string)
-		return ok && m.compareStrings(op, gs, ws, caseExact)
+func (m matcher) compareBools(op filter.Operator, got, want bool) bool {
+	switch op {
+	case filter.OpEquals:
+		return got == want
+	case filter.OpNotEquals:
+		return got != want
 	}
-	if gb, ok := got.(bool); ok {
-		wb, ok := want.(bool)
-		return ok && m.compareBools(op, gb, wb)
-	}
-	gf, gok := m.toFloat(got)
-	wf, wok := m.toFloat(want)
-	return gok && wok && m.compareNumbers(op, gf, wf)
+	return false
 }
 
-func (m matcher) leaf(attr filter.AttrPath, op filter.Operator, want any) predicate {
-	key := attr.Name
-	caseExact := false
-	if sub := m.attr.SubAttribute(key); sub != nil {
-		caseExact = sub.CaseExact
+func (m matcher) compareNumbers(op filter.Operator, got, want float64) bool {
+	switch op {
+	case filter.OpEquals:
+		return got == want
+	case filter.OpNotEquals:
+		return got != want
+	case filter.OpGreaterThan:
+		return got > want
+	case filter.OpLessThan:
+		return got < want
+	case filter.OpGreaterThanEquals:
+		return got >= want
+	case filter.OpLessThanEquals:
+		return got <= want
 	}
-	return func(member map[string]any) bool {
-		got := core.Object(member).Get(key)
-		if op == opPresent {
-			return !core.IsUnassigned(got)
-		}
-		if got == nil {
-			return false
-		}
-		return m.compareValues(op, got, want, caseExact)
-	}
+	return false
 }
 
 func (m matcher) toFloat(value any) (float64, bool) {
