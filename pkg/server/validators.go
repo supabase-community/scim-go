@@ -26,6 +26,9 @@ func characteristics[T Entity](schemas core.Schemas, repo Repository[T]) Validat
 		if err := canonicalValues(readers, after); err != nil {
 			return err
 		}
+		if err := primary(readers, after); err != nil {
+			return err
+		}
 		before, err := previous(ctx, repo, candidate)
 		if err != nil {
 			return err
@@ -66,6 +69,26 @@ func canonicalValues(readers readers, candidate core.Object) error {
 		}
 	}
 	return nil
+}
+
+// primary rejects more than one value with "primary" set to true, per RFC 7643, Section 2.4.
+func primary(readers readers, candidate core.Object) error {
+	for attribute, read := range readers.all() {
+		if strings.EqualFold(attribute.Name, "primary") && count(valuesOf(read(candidate)), true) > 1 {
+			return scimerrors.ErrInvalidValue(`"primary" may be true for at most one value`)
+		}
+	}
+	return nil
+}
+
+func count(values []any, target any) int {
+	n := 0
+	for _, value := range values {
+		if value == target {
+			n++
+		}
+	}
+	return n
 }
 
 func valuesOf(raw any) []any {

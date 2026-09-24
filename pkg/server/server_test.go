@@ -256,6 +256,26 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 	})
 }
 
+// RFC 7643 2.4 Multi-Valued Attributes
+func TestRFC7643MultiValuedAttributes(t *testing.T) {
+	t.Run("rejects more than one primary value on create and replace", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		primary := true
+		emails := []core.Email{{Value: "a@example.com", Primary: &primary}, {Value: "b@example.com", Primary: &primary}}
+
+		for method, path := range map[string]string{http.MethodPost: "/Users", http.MethodPut: "/Users/" + id} {
+			response := Response(t, srv, Request(t, srv, method, basePath+path,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.User{UserName: "jsmith", Emails: emails}),
+			))
+
+			assert.Equal(t, http.StatusBadRequest, response.StatusCode, method)
+		}
+	})
+}
+
 // RFC 7643 2.5 Unassigned and Null Values
 func TestRFC7643UnassignedAndNullValues(t *testing.T) {
 	t.Run("treats false as a value and an empty complex or multi-valued attribute as missing", func(t *testing.T) {
