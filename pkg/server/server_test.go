@@ -2171,7 +2171,14 @@ func TestRFC7644BulkOperations(t *testing.T) {
 
 // RFC 7644 3.11 "/Me" Authenticated Subject Alias
 func TestRFC7644MeAuthenticatedSubjectAlias(t *testing.T) {
-	t.Skip("/Me is not implemented by server.New; requests to it 404 through the generic unknown-path behavior")
+	srv := newTestServer(t)
+
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		response := Response(t, srv, Request(t, srv, method, basePath+"/Me", WithBearerToken(validToken)))
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode, method)
+		assert.Equal(t, "501", ReadBodyAs[scimerrors.Error](t, response).Status, method)
+	}
 }
 
 // RFC 7644 3.12 HTTP Status and Error Response Handling

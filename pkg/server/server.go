@@ -75,6 +75,7 @@ func New(config *core.ServiceProviderConfig, options ...Option[*Server]) *Server
 	mux.HandleFunc("GET "+s.basePath+"/ResourceTypes/{id}", s.handle(s.resourceTypeByID))
 	mux.HandleFunc("GET "+s.basePath+"/Schemas", s.handle(s.listSchemas))
 	mux.HandleFunc("GET "+s.basePath+"/Schemas/{id}", s.handle(s.schemaByID))
+	mux.HandleFunc(s.basePath+"/Me", s.handle(me))
 
 	return s
 }
@@ -125,6 +126,11 @@ func (u *unmatched) Header() http.Header { return u.header }
 func (u *unmatched) Write(b []byte) (int, error) { return len(b), nil }
 
 func (u *unmatched) WriteHeader(status int) { u.status = status }
+
+// me declines the "/Me" alias, per RFC 7644, Section 3.11.
+func me(w http.ResponseWriter, _ *http.Request) error {
+	return protocol.SendError(w, scimerrors.ErrNotImplemented(`"/Me" is not supported`))
+}
 
 func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
