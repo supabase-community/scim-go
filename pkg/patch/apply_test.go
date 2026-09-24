@@ -24,25 +24,6 @@ func TestApplyTopLevel(t *testing.T) {
 	assert.Equal(t, "Babs", item["displayName"])
 }
 
-func TestApplyTopLevelUser(t *testing.T) {
-	item := &core.User{UserName: "old"}
-
-	require.NoError(t, apply(item, nil,
-		operation(patch.OpReplace, "userName", `"new"`),
-		operation(patch.OpAdd, "displayName", `"Babs"`),
-	))
-
-	assert.Equal(t, "new", item.UserName)
-	assert.Equal(t, "Babs", item.DisplayName)
-}
-
-func TestApplyTopLevelGroup(t *testing.T) {
-	item := &core.Group{DisplayName: "Tour Guides"}
-
-	require.NoError(t, apply(item, nil, operation(patch.OpReplace, "displayName", `"Example"`)))
-	assert.Equal(t, "Example", item.DisplayName)
-}
-
 func TestApplyNoPathMerge(t *testing.T) {
 	item := map[string]any{}
 
@@ -320,37 +301,6 @@ func TestApplyValuePathPresenceFilter(t *testing.T) {
 	assert.Equal(t, "home", emails[0].(map[string]any)["type"])
 }
 
-func TestApplyTypedUserPreservesUntouchedFields(t *testing.T) {
-	user := &core.User{UserName: "old", DisplayName: "keep"}
-
-	require.NoError(t, apply(user, nil, operation(patch.OpReplace, "userName", `"new"`)))
-	assert.Equal(t, "new", user.UserName)
-	assert.Equal(t, "keep", user.DisplayName)
-}
-
-func TestApplyTypedUserValuePath(t *testing.T) {
-	active := true
-	user := &core.User{
-		UserName: "bjensen",
-		Active:   &active,
-		Emails:   []core.Email{{Type: "work", Value: "old@x"}},
-	}
-
-	require.NoError(t, apply(user, nil, operation(patch.OpReplace, `emails[type eq "work"].value`, `"new@x"`)))
-	require.Len(t, user.Emails, 1)
-	assert.Equal(t, "new@x", user.Emails[0].Value)
-	require.NotNil(t, user.Active)
-	assert.True(t, *user.Active)
-}
-
-func TestApplyTypedUserRemoveClearsField(t *testing.T) {
-	user := &core.User{UserName: "bjensen", DisplayName: "Babs"}
-
-	require.NoError(t, apply(user, nil, operation(patch.OpRemove, "displayName", "")))
-	assert.Empty(t, user.DisplayName)
-	assert.Equal(t, "bjensen", user.UserName)
-}
-
 // RFC 7644 3.5.2.1 - adding to an absent multi-valued attribute must produce an array.
 func TestApplyAddToAbsentMultiValuedWrapsInArray(t *testing.T) {
 	item := map[string]any{}
@@ -474,7 +424,7 @@ func TestApplyRemoveSubAttributeMultiValuedNoTarget(t *testing.T) {
 	assert.Equal(t, scimerrors.NoTarget, err.ScimType)
 }
 
-func apply(resource any, schemas []*core.Schema, ops ...patch.Operation) error {
+func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
 	return patch.Apply(resource, ops, schemas)
 }
 

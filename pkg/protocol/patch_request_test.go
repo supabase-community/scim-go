@@ -118,3 +118,29 @@ func TestPatchRequestPatch(t *testing.T) {
 	assert.NotSame(t, resource, patched)
 	assert.Empty(t, resource.UserType)
 }
+
+func TestPatchRequestPatchTypedUser(t *testing.T) {
+	apply := func(t *testing.T, user *core.User, operation patch.Operation) *core.User {
+		t.Helper()
+		patched, err := (&protocol.PatchRequest{Operations: []patch.Operation{operation}}).Patch(user, nil)
+		require.NoError(t, err)
+		return patched
+	}
+
+	t.Run("replaces a value through a value path", func(t *testing.T) {
+		active := true
+		user := &core.User{UserName: "bjensen", Active: &active, Emails: []core.Email{{Type: "work", Value: "old@x"}}}
+
+		patched := apply(t, user, patch.Operation{Op: patch.OpReplace, Path: `emails[type eq "work"].value`, Value: json.RawMessage(`"new@x"`)})
+
+		assert.Equal(t, []core.Email{{Type: "work", Value: "new@x"}}, patched.Emails)
+		assert.Equal(t, &active, patched.Active)
+	})
+
+	t.Run("removes a value", func(t *testing.T) {
+		patched := apply(t, &core.User{UserName: "bjensen", DisplayName: "Babs"}, patch.Operation{Op: patch.OpRemove, Path: "displayName"})
+
+		assert.Empty(t, patched.DisplayName)
+		assert.Equal(t, "bjensen", patched.UserName)
+	})
+}

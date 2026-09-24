@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"io"
 
+	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-func toDocument(resource any) (map[string]any, error) {
+func toDocument(resource any) (core.Object, error) {
 	raw, err := json.Marshal(resource)
 	if err != nil {
 		return nil, scimerrors.ErrInternal("could not encode the resource")
 	}
-	document, err := Decode[map[string]any](bytes.NewReader(raw))
+	document, err := Decode[core.Object](bytes.NewReader(raw))
 	if err != nil {
 		return nil, scimerrors.ErrInternal("could not decode the resource")
 	}

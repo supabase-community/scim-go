@@ -4,57 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"maps"
-	"reflect"
 
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 // Apply applies the operations to resource atomically, per RFC 7644, Section 3.5.2.
-func Apply(resource any, ops []Operation, schemas core.Schemas) error {
-	p := &patcher{schemas: schemas}
-
-	if m, ok := resource.(map[string]any); ok {
-		working := clone(m).(map[string]any)
-		if err := p.run(working, ops); err != nil {
-			return err
-		}
-		clear(m)
-		maps.Copy(m, working)
-		return nil
-	}
-
-	raw, err := json.Marshal(resource)
-	if err != nil {
-		return scimerrors.ErrInvalidSyntax("resource cannot be encoded")
-	}
-	working, err := decode[map[string]any](raw)
-	if err != nil || working == nil {
-		return scimerrors.ErrInvalidSyntax("resource is not a JSON object")
-	}
-	if err := p.run(working, ops); err != nil {
+func Apply(resource core.Object, ops []Operation, schemas core.Schemas) error {
+	working := clone(map[string]any(resource)).(map[string]any)
+	if err := (&patcher{schemas: schemas}).run(working, ops); err != nil {
 		return err
 	}
-	out, err := json.Marshal(working)
-	if err != nil {
-		return scimerrors.ErrInternal("could not encode the patched resource")
-	}
-	return writeBack(resource, out)
-}
-
-func writeBack(resource any, doc []byte) error {
-	value := reflect.ValueOf(resource)
-	if value.Kind() != reflect.Pointer || value.IsNil() {
-		return scimerrors.ErrInternal("resource must be a non-nil pointer")
-	}
-	elem := value.Elem()
-	fresh := reflect.New(elem.Type())
-	if err := json.Unmarshal(doc, fresh.Interface()); err != nil {
-		return scimerrors.ErrInternal("could not decode the patched resource")
-	}
-	if elem.CanSet() {
-		elem.Set(fresh.Elem())
-	}
+	clear(resource)
+	maps.Copy(resource, working)
 	return nil
 }
 

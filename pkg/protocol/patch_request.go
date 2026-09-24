@@ -43,7 +43,7 @@ func isPatchOp(uri core.SchemaURI) bool {
 }
 
 // Apply applies the operations to resource atomically, per RFC 7644, Section 3.5.2.
-func (r *PatchRequest) Apply(resource any, schemas core.Schemas) error {
+func (r *PatchRequest) Apply(resource core.Object, schemas core.Schemas) error {
 	return patch.Apply(resource, r.Operations, schemas)
 }
 

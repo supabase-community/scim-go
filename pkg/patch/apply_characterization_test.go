@@ -120,12 +120,6 @@ func TestApplyResolvesDuplicateFoldingKeysDeterministically(t *testing.T) {
 	assert.Equal(t, "lower", item["username"])
 }
 
-func TestApplyNonPointerResourceRejected(t *testing.T) {
-	var scimErr *scimerrors.Error
-	require.ErrorAs(t, apply(core.User{UserName: "bob"}, nil, operation(patch.OpReplace, "userName", `"new"`)), &scimErr)
-	assert.Equal(t, "500", scimErr.Status)
-}
-
 // RFC 7644 Section 3.5.2: an operation incompatible with an attribute's mutability SHALL return an error.
 func TestApplyNoPathMergeRejectsReadOnly(t *testing.T) {
 	item := map[string]any{}
