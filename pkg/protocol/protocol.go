@@ -5,13 +5,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
+	"github.com/supabase-community/scim-go/internal/decode"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 // MediaType is the SCIM media type registered in RFC 7644, Section 8.1.
 const MediaType = "application/scim+json"
+
+func Decode[T any](body io.Reader) (T, error) {
+	req, err := decode.JSON[T](body)
+	if err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return req, scimerrors.ErrTooLarge("request body is too large")
+		}
+		return req, scimerrors.ErrInvalidSyntax("request body is not valid JSON")
+	}
+	return req, nil
+}
 
 func Send(w http.ResponseWriter, status int, obj any) error {
 	var body []byte
