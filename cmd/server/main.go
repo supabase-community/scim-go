@@ -35,9 +35,13 @@ func main() {
 
 	srv := server.New(basePath, config,
 		server.ErrorHandler(errorHandler),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
-			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...)),
-		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...)),
+		server.WithResource(server.
+			NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
+			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...),
+		),
+		server.WithResource(server.
+			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...),
+		),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {
