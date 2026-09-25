@@ -29,7 +29,9 @@ func (t *target) write(kind Op, value any) error {
 			return err
 		}
 	}
-	demote(t.elements(), written)
+	if promotes(t.key(), value) {
+		demote(t.elements(), written)
+	}
 	return nil
 }
 
