@@ -803,6 +803,28 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.NotEqual(t, 2000, created.Meta.Created.Year())
 	})
 
+	// RFC 7643 Section 2.1: attribute names are case insensitive.
+	t.Run("rejects an attribute name repeated in another case", func(t *testing.T) {
+		srv := newTestServer(t)
+		extension := string(core.SchemaEnterpriseUser)
+
+		for _, body := range []string{
+			`{"userName":"alice","USERNAME":"bob"}`,
+			`{"userName":"alice","` + extension + `":{"department":"ops"},"` + strings.ToLower(extension) + `":{"manager":{"displayName":"forged"}}}`,
+			`{"userName":"alice","` + extension + `":{"manager":{"value":"m-1"},"MANAGER":{"displayName":"forged"}}}`,
+		} {
+			request := Request(t, srv, http.MethodPost, basePath+"/Users",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBody([]byte(body)),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, body)
+			assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		}
+	})
+
 	t.Run("ignores readOnly groups", func(t *testing.T) {
 		srv := newTestServer(t)
 

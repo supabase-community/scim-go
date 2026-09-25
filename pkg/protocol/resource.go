@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"io"
+	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -96,7 +97,32 @@ func readDocument(r io.Reader) (map[string]any, error) {
 	if document == nil {
 		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
 	}
+	if !distinctNames(document) {
+		return nil, scimerrors.ErrInvalidSyntax("request body repeats an attribute name")
+	}
 	return document, nil
+}
+
+// RFC 7643 Section 2.1: attribute names are case insensitive.
+func distinctNames(value any) bool {
+	switch v := value.(type) {
+	case map[string]any:
+		seen := make(map[string]struct{}, len(v))
+		for name, element := range v {
+			folded := strings.ToLower(name)
+			if _, repeated := seen[folded]; repeated || !distinctNames(element) {
+				return false
+			}
+			seen[folded] = struct{}{}
+		}
+	case []any:
+		for _, element := range v {
+			if !distinctNames(element) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func fromDocument[T any](document map[string]any) (T, error) {

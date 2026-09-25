@@ -147,6 +147,10 @@ func enterpriseAttributes() core.Attributes {
 	return core.Attributes{
 		core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
 		core.NewAttribute("department", core.TypeString),
+		core.NewAttribute("manager", core.TypeComplex).With(
+			core.NewAttribute("value", core.TypeString),
+			core.NewAttribute("displayName", core.TypeString).AsReadOnly(),
+		),
 	}
 }
 
