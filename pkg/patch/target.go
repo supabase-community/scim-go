@@ -53,8 +53,20 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 		merge(nested, values, t.attr, kind)
 		return nil
 	}
+	if err := t.overwritable(holder, kind); err != nil {
+		return err
+	}
 	set(holder, t.key(), shaped(value, t.attr.MultiValued), kind)
 	return nil
+}
+
+// RFC 7644 Section 3.5.2.2: a value that becomes unassigned and is read-only SHALL return "mutability".
+func (t *target) overwritable(holder core.Object, kind Op) error {
+	before := holder.Get(t.key())
+	if _, appends := before.([]any); appends && kind == OpAdd {
+		return nil
+	}
+	return eachSub(t.attr, before, gateRemove)
 }
 
 func (t *target) remove() error {

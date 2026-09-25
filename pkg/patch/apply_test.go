@@ -384,6 +384,7 @@ func TestApplyReadOnlySubAttributeIsRejected(t *testing.T) {
 		{"a removed complex attribute", operation(patch.OpRemove, "name", "")},
 		{"a removed multi-valued attribute", operation(patch.OpRemove, "emails", "")},
 		{"a removed element", operation(patch.OpRemove, `emails[value eq "a@b.com"]`, "")},
+		{"a replaced array that drops a readOnly value", operation(patch.OpReplace, "emails", `[{"value":"a@b.com"}]`)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

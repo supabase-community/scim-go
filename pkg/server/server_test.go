@@ -2747,6 +2747,30 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		assert.Equal(t, scimerrors.NoTarget, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.5.2.2: if a read-only attribute is removed or becomes unassigned, the server SHALL return "mutability".
+	t.Run("rejects a replace that unassigns a readOnly sub-attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
+
+		for _, operation := range []patch.Operation{
+			{Op: patch.OpReplace, Path: "parts", Value: json.RawMessage(`[{"serial":"s-1"}]`)},
+			{Op: patch.OpReplace, Value: json.RawMessage(`{"parts":[{"serial":"s-1"}]}`)},
+		} {
+			request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{operation},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, "operation: %s", operation.Value)
+			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType, "operation: %s", operation.Value)
+		}
+	})
+
 	// RFC 7644 Section 3.5.2: a value path filter compares like a search filter, so dateTime values compare as instants.
 	t.Run("matches a value path filter on a dateTime as an instant", func(t *testing.T) {
 		srv := newTestServer(t)
