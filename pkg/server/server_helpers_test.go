@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
@@ -46,12 +48,13 @@ type testOption func(*testServer)
 
 type widget struct {
 	core.Base
-	Name  string
-	Score int64
-	When  time.Time
-	Nick  string
-	Tags  []any
-	Parts []part
+	Name   string
+	Score  int64
+	When   time.Time
+	Nick   string
+	Tags   []any
+	Parts  []part
+	Secret string `json:",omitempty"`
 }
 
 type kit struct {
@@ -157,6 +160,7 @@ func widgetAttributes() core.Attributes {
 			core.NewAttribute("built", core.TypeDateTime),
 			core.NewAttribute("inspector", core.TypeString).AsReadOnly(),
 		),
+		core.NewAttribute("secret", core.TypeString).AsWriteOnly(),
 	}
 }
 
@@ -184,6 +188,16 @@ func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag strin
 
 	created := ReadBodyAs[core.User](t, response)
 	return created.ID, response.Header.Get("ETag")
+}
+
+func assertInvalidFilter(t *testing.T, srv *httptest.Server, resource, filter string) {
+	t.Helper()
+
+	path := basePath + resource + "?" + url.Values{"filter": {filter}}.Encode()
+	response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType)))
+
+	require.Equal(t, http.StatusBadRequest, response.StatusCode, "filter: %s", filter)
+	assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType, "filter: %s", filter)
 }
 
 func createWidget(t *testing.T, srv *httptest.Server, w *widget) map[string]any {

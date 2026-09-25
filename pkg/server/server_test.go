@@ -832,6 +832,20 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		}
 	})
 
+	// RFC 7643 Section 7: a "writeOnly" attribute's values SHALL NOT be returned.
+	t.Run("never returns a writeOnly attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := createWidget(t, srv, &widget{Name: "gear", Secret: "wr1te-0nly"})
+
+		for _, query := range []string{"", "?attributes=secret"} {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Widgets/"+created["id"].(string)+query, WithBearerToken(validToken)))
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			body, err := io.ReadAll(response.Body)
+			require.NoError(t, err)
+			assert.NotContains(t, string(body), "wr1te-0nly", query)
+		}
+	})
+
 	t.Run("rejects a JSON null body instead of panicking", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1146,6 +1160,34 @@ func TestRFC7644Filtering(t *testing.T) {
 			require.Equal(t, 1, list.TotalResults, "filter: %s", filter)
 			assert.Equal(t, "alice", list.Resources[0].UserName, "filter: %s", filter)
 		}
+	})
+
+	t.Run("filters a writeOnly password for equality", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Password: "hunter2"})
+		create(t, srv, &core.User{UserName: "bob", Password: "swordfish"})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`password eq "hunter2"`}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "alice", list.Resources[0].UserName)
+	})
+
+	t.Run("rejects any operator but eq on a writeOnly attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Password: "hunter2"})
+
+		assertInvalidFilter(t, srv, "/Users", `password ne "x"`)
+		assertInvalidFilter(t, srv, "/Users", `password co "nter"`)
+		assertInvalidFilter(t, srv, "/Users", `password sw "hun"`)
+		assertInvalidFilter(t, srv, "/Users", `password ew "r2"`)
+		assertInvalidFilter(t, srv, "/Users", `password gt "a"`)
+		assertInvalidFilter(t, srv, "/Users", `password pr`)
+		assertInvalidFilter(t, srv, "/Users", `not (password pr)`)
+		assertInvalidFilter(t, srv, "/Widgets", `secret sw "s"`)
 	})
 
 	t.Run("combines clauses with and", func(t *testing.T) {
@@ -1580,6 +1622,17 @@ func TestRFC7644Sorting(t *testing.T) {
 		srv := newTestServer(t)
 
 		path := basePath + "/Users?" + url.Values{"sortBy": {"bogus"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("rejects sortBy on a writeOnly attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		path := basePath + "/Users?" + url.Values{"sortBy": {"password"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 

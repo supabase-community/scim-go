@@ -69,6 +69,9 @@ func (s *SearchRequest) SortAttribute(schemas core.Schemas) (parent, attribute *
 	if attribute == nil {
 		return nil, nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
+	if hidden(attribute) {
+		return nil, nil, scimerrors.ErrInvalidValue(`"sortBy" must not name a writeOnly or returned "never" attribute`)
+	}
 	// RFC 7644 Section 3.4.2.3: a complex "sortBy" must be a path to a sub-attribute.
 	if attribute.Type == core.TypeComplex {
 		return nil, nil, scimerrors.ErrInvalidValue(`"sortBy" must name a sub-attribute of a complex attribute`)

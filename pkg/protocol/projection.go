@@ -107,7 +107,7 @@ func (p Projection) extension(schema *core.Schema, value any) (any, bool) {
 // RFC 7643 Section 7: "returned" decides whether an attribute can appear in a response.
 func (p Projection) returns(attribute *core.Attribute, name string) bool {
 	switch {
-	case attribute.Returned == core.ReturnedNever:
+	case hidden(attribute):
 		return false
 	case attribute.Returned == core.ReturnedAlways:
 		return true

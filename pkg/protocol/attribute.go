@@ -18,3 +18,8 @@ func NewAttribute(definition *core.Attribute, path filter.AttrPath, parent *core
 		Parent:     parent,
 	}
 }
+
+// RFC 7643 Section 7: "writeOnly" and "returned" "never" attribute values SHALL NOT be returned.
+func hidden(attribute *core.Attribute) bool {
+	return attribute.Mutability == core.MutabilityWriteOnly || attribute.Returned == core.ReturnedNever
+}
