@@ -19,10 +19,8 @@ import (
 
 func main() {
 	basePath := "/scim/v2"
-	logError := func(err error) { log.Printf("%v\n", err) }
 	errorHandler := func(r *http.Request, err error) {
-		method, path := strconv.Quote(r.Method), strconv.Quote(r.URL.Path)
-		log.Printf("%s %s: %v\n", method, path, err)
+		log.Printf("%s %s: %v\n", strconv.Quote(r.Method), strconv.Quote(r.URL.Path), err)
 	}
 	token := os.Getenv("SCIM_BEARER_TOKEN")
 	if token == "" {
@@ -76,6 +74,6 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		logError(err)
+		log.Printf("%v\n", err)
 	}
 }
