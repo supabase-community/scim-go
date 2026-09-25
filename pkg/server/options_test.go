@@ -20,7 +20,7 @@ func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("broken p
 
 func TestErrorHandlerOption(t *testing.T) {
 	var reported []error
-	srv := server.New(fullServiceProviderConfig(),
+	srv := server.New(basePath, fullServiceProviderConfig(),
 		server.ErrorHandler(func(_ *http.Request, err error) { reported = append(reported, err) }),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
 	)
@@ -51,7 +51,7 @@ func (r failingRepository) Replace(context.Context, *core.User) (*core.User, err
 func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T) {
 	cause := errors.New("pgx: connection pool timeout")
 	var reported error
-	srv := Server(t, server.New(fullServiceProviderConfig(),
+	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 		server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(failingRepository{cause: cause})),
 	))
@@ -63,7 +63,7 @@ func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T)
 }
 
 func TestDefaultCountAfterWithResource(t *testing.T) {
-	srv := Server(t, server.New(fullServiceProviderConfig(),
+	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
 		server.DefaultCount(1),
 	))
@@ -79,7 +79,7 @@ func TestDefaultCountAfterWithResource(t *testing.T) {
 }
 
 func TestMaxBodySize(t *testing.T) {
-	srv := Server(t, server.New(fullServiceProviderConfig(),
+	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 		server.MaxBodySize(16),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
 	))
@@ -90,7 +90,7 @@ func TestMaxBodySize(t *testing.T) {
 }
 
 func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
-	srv := Server(t, server.New(fullServiceProviderConfig(),
+	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(failingRepository{cause: errors.New("unreachable")})),
 	))
 
@@ -109,7 +109,7 @@ func TestWithRepository(t *testing.T) {
 	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
 	require.NoError(t, err)
 
-	srv := Server(t, server.New(fullServiceProviderConfig(), server.WithResource(
+	srv := Server(t, server.New(basePath, fullServiceProviderConfig(), server.WithResource(
 		server.NewResource[*core.User]("User", "/Users", core.SchemaUser, attributes...).WithRepository(repository),
 	)))
 
@@ -156,7 +156,7 @@ func TestWithAuthentication(t *testing.T) {
 		var tenant string
 		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
 		repository := tenantRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), tenant: &tenant}
-		srv := Server(t, server.New(fullServiceProviderConfig(),
+		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
 			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 				func(ctx context.Context, _ string) (context.Context, error) {

@@ -530,7 +530,7 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 // RFC 7643 5 Service Provider Configuration Schema
 func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	t.Run("PATCH is declined when Patch.Supported is false", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Versioning()
+		config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Versioning()
 		srv := newTestServer(t, withConfig(config))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
@@ -548,7 +548,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	})
 
 	t.Run("filter is declined when Filter.Supported is false", func(t *testing.T) {
-		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig(basePath)))
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
 
 		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "bjensen"`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
@@ -558,7 +558,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	})
 
 	t.Run("plain listing still works when Filter.Supported is false", func(t *testing.T) {
-		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig(basePath)))
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
 
 		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
 		response := Response(t, srv, request)
@@ -567,7 +567,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	})
 
 	t.Run("sortBy is declined when Sort.Supported is false", func(t *testing.T) {
-		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig(basePath)))
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
 
 		path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
@@ -577,7 +577,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	})
 
 	t.Run("no ETag header when ETag.Supported is false, and a stale If-Match is ignored", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Patching()
+		config := core.NewServiceProviderConfig().Patching()
 		srv := newTestServer(t, withConfig(config))
 
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
@@ -605,7 +605,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 	})
 
 	t.Run("runs a minimal server with only CRUD end to end", func(t *testing.T) {
-		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig(basePath)))
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		get := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
@@ -1675,7 +1675,7 @@ func TestRFC7644Pagination(t *testing.T) {
 	})
 
 	t.Run("caps the count at a custom maximum", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(2).Patching().Versioning()
+		config := core.NewServiceProviderConfig().Sorting().Filtering(2).Patching().Versioning()
 		srv := newTestServer(t, withConfig(config))
 		create(t, srv, &core.User{UserName: "alice"})
 		create(t, srv, &core.User{UserName: "bob"})
@@ -2796,7 +2796,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 	})
 
 	t.Run("advertises the custom max results configured via Filtering", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Sorting().Filtering(2).Patching().Versioning()
+		config := core.NewServiceProviderConfig().Sorting().Filtering(2).Patching().Versioning()
 		srv := newTestServer(t, withConfig(config))
 
 		request := Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithBearerToken(validToken))
@@ -2808,7 +2808,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 
 	// RFC 7643 Section 5: the config a caller builds is exactly what the server advertises.
 	t.Run("advertises a mutated config directly", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Patching().Filtering(protocol.DefaultLimits.MaxCount)
+		config := core.NewServiceProviderConfig().Patching().Filtering(protocol.DefaultLimits.MaxCount)
 		config.DocumentationURI = "https://example.com/help/scim.html"
 		srv := newTestServer(t, withConfig(config))
 

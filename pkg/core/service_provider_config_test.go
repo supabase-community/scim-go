@@ -9,11 +9,9 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-const basePath = "/scim/v2"
-
 func TestNewServiceProviderConfig(t *testing.T) {
 	t.Run("supports none of the optional protocol features", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath)
+		config := core.NewServiceProviderConfig()
 
 		assert.False(t, config.Patch.Supported)
 		assert.False(t, config.Bulk.Supported)
@@ -27,15 +25,8 @@ func TestNewServiceProviderConfig(t *testing.T) {
 		assert.False(t, config.SupportsVersioning())
 	})
 
-	t.Run("advertises its own base path and location", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath)
-
-		assert.Equal(t, basePath, config.BasePath())
-		assert.Equal(t, basePath+"/ServiceProviderConfig", config.Meta.Location)
-	})
-
 	t.Run("the builders announce the features the provider honours", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Patching().Sorting().Filtering(200).Versioning()
+		config := core.NewServiceProviderConfig().Patching().Sorting().Filtering(200).Versioning()
 
 		assert.True(t, config.Patch.Supported)
 		assert.True(t, config.Sort.Supported)
@@ -49,7 +40,7 @@ func TestNewServiceProviderConfig(t *testing.T) {
 	})
 
 	t.Run("serializes to JSON correctly", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Patching().Filtering(200)
+		config := core.NewServiceProviderConfig().Patching().Filtering(200)
 
 		body, err := json.Marshal(config)
 
@@ -63,12 +54,12 @@ func TestNewServiceProviderConfig(t *testing.T) {
 			"sort": {"supported": false},
 			"etag": {"supported": false},
 			"authenticationSchemes": [],
-			"meta": {"resourceType": "ServiceProviderConfig", "location": "/scim/v2/ServiceProviderConfig"}
+			"meta": {"resourceType": "ServiceProviderConfig"}
 		}`, string(body))
 	})
 
 	t.Run("Authentication appends the given schemes", func(t *testing.T) {
-		config := core.NewServiceProviderConfig(basePath).Authentication(core.NewOAuthBearerToken().AsPrimary())
+		config := core.NewServiceProviderConfig().Authentication(core.NewOAuthBearerToken().AsPrimary())
 
 		require.Len(t, config.AuthenticationSchemes, 1)
 		assert.Equal(t, core.AuthenticationSchemeOAuthBearerToken, config.AuthenticationSchemes[0].Type)

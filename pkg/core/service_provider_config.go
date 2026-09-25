@@ -17,7 +17,6 @@ type FilterFeature struct {
 
 // ServiceProviderConfig is the schema defined in RFC 7643, Section 5.
 type ServiceProviderConfig struct {
-	basePath              string
 	Schemas               []SchemaURI             `json:"schemas"`
 	DocumentationURI      string                  `json:"documentationUri,omitempty"`
 	Patch                 SupportedFeature        `json:"patch"`
@@ -30,20 +29,13 @@ type ServiceProviderConfig struct {
 	Meta                  Meta                    `json:"meta"`
 }
 
-func NewServiceProviderConfig(basePath string) *ServiceProviderConfig {
+func NewServiceProviderConfig() *ServiceProviderConfig {
 	return &ServiceProviderConfig{
-		basePath: basePath,
-		Schemas:  []SchemaURI{SchemaServiceProviderConfig},
-		Meta: Meta{
-			ResourceType: "ServiceProviderConfig",
-			Location:     basePath + "/ServiceProviderConfig",
-		},
+		Schemas:               []SchemaURI{SchemaServiceProviderConfig},
+		Meta:                  Meta{ResourceType: "ServiceProviderConfig"},
 		AuthenticationSchemes: []*AuthenticationScheme{},
 	}
 }
-
-// BasePath is the URL prefix this provider mounts its endpoints under.
-func (c *ServiceProviderConfig) BasePath() string { return c.basePath }
 
 func (c *ServiceProviderConfig) SupportsPatch() bool { return c.Patch.Supported }
 

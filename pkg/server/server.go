@@ -23,11 +23,12 @@ type Server struct {
 	errorHandler  func(*http.Request, error)
 }
 
-func New(config *core.ServiceProviderConfig, options ...Option[*Server]) *Server {
+func New(basePath string, config *core.ServiceProviderConfig, options ...Option[*Server]) *Server {
 	mux := http.NewServeMux()
+	config.Meta.Location = basePath + "/ServiceProviderConfig"
 	s := &Server{
 		mux:          mux,
-		basePath:     config.BasePath(),
+		basePath:     basePath,
 		config:       config,
 		limits:       limitsFrom(config),
 		maxBodySize:  DefaultMaxBodySize,

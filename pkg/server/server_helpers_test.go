@@ -95,7 +95,7 @@ func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 		server.WithResource(server.NewResource[*kit]("Kit", "/Kits", kitSchema, kitAttributes()...)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
 	}
-	return Server(t, server.New(s.config, slices.Concat(standard, s.options)...))
+	return Server(t, server.New(basePath, s.config, slices.Concat(standard, s.options)...))
 }
 
 func withConfig(config *core.ServiceProviderConfig) testOption {
@@ -122,7 +122,7 @@ func validate(ctx context.Context, token string) (context.Context, error) {
 }
 
 func fullServiceProviderConfig() *core.ServiceProviderConfig {
-	return core.NewServiceProviderConfig(basePath).Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning()
+	return core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning()
 }
 
 func userAttributes() core.Attributes {
