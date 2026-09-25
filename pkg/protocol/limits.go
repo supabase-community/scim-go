@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"io"
 	"net/url"
 	"strconv"
 
@@ -8,13 +9,14 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4.
+// Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4, and the most operations one PATCH may carry; zero means no cap.
 type Limits struct {
-	DefaultCount int
-	MaxCount     int
+	DefaultCount  int
+	MaxCount      int
+	MaxOperations int
 }
 
-var DefaultLimits = Limits{DefaultCount: 100, MaxCount: 100}
+var DefaultLimits = Limits{DefaultCount: 100, MaxCount: 100, MaxOperations: 100}
 
 // ParseSearchRequest reads the query parameters of RFC 7644, Section 3.4.2.
 func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {
@@ -48,6 +50,18 @@ func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {
 		StartIndex:         max(startIndex, 1),
 		Count:              min(max(count, 0), l.MaxCount),
 	}, nil
+}
+
+// DecodePatchRequest reads a PATCH request body and refuses one with more than MaxOperations operations.
+func (l Limits) DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
+	req, err := DecodePatchRequest(body)
+	if err != nil {
+		return nil, err
+	}
+	if l.MaxOperations > 0 && len(req.Operations) > l.MaxOperations {
+		return nil, scimerrors.ErrTooLarge(`"Operations" must contain at most ` + strconv.Itoa(l.MaxOperations) + " operations")
+	}
+	return req, nil
 }
 
 func intParam(values url.Values, name string, fallback int) (int, error) {

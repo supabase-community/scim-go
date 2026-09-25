@@ -138,6 +138,11 @@ func DefaultCount(n int) Option[*Server] {
 	return func(s *Server) { s.limits.DefaultCount = n }
 }
 
+// MaxPatchOperations caps the operations of one PATCH request; larger requests get 413, and zero lifts the cap.
+func MaxPatchOperations(n int) Option[*Server] {
+	return func(s *Server) { s.limits.MaxOperations = n }
+}
+
 // MaxBodySize caps the request body; larger bodies get 413, per RFC 7644, Section 3.12.
 func MaxBodySize(n int64) Option[*Server] {
 	return func(s *Server) { s.maxBodySize = n }

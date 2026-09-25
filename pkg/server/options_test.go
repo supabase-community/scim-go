@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
@@ -87,6 +89,43 @@ func TestMaxBodySize(t *testing.T) {
 	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode)
+}
+
+func TestMaxPatchOperations(t *testing.T) {
+	patchWith := func(t *testing.T, option server.Option[*server.Server], operations int) int {
+		t.Helper()
+		options := []server.Option[*server.Server]{server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...))}
+		if option != nil {
+			options = append(options, option)
+		}
+		srv := Server(t, server.New(basePath, fullServiceProviderConfig(), options...))
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		id := ReadBodyAs[core.User](t, response).ID
+
+		request := protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}}
+		for range operations {
+			request.Operations = append(request.Operations, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Babs"`)})
+		}
+		return Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, WithRequestBodyAs(t, request))).StatusCode
+	}
+
+	t.Run("accepts up to the default cap", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, patchWith(t, nil, protocol.DefaultLimits.MaxOperations))
+	})
+
+	t.Run("refuses more than the default cap with 413", func(t *testing.T) {
+		assert.Equal(t, http.StatusRequestEntityTooLarge, patchWith(t, nil, protocol.DefaultLimits.MaxOperations+1))
+	})
+
+	t.Run("honours a configured cap", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, patchWith(t, server.MaxPatchOperations(2), 2))
+		assert.Equal(t, http.StatusRequestEntityTooLarge, patchWith(t, server.MaxPatchOperations(2), 3))
+	})
+
+	t.Run("lifts the cap when set to zero", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, patchWith(t, server.MaxPatchOperations(0), protocol.DefaultLimits.MaxOperations+1))
+	})
 }
 
 func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {

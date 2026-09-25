@@ -78,6 +78,35 @@ func TestDecodePatchRequest(t *testing.T) {
 	})
 }
 
+func TestLimitsDecodePatchRequest(t *testing.T) {
+	body := func(operations int) *strings.Reader {
+		ops := strings.Repeat(`{"op":"remove","path":"nickName"},`, operations)
+		return strings.NewReader(`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[` + strings.TrimSuffix(ops, ",") + `]}`)
+	}
+
+	t.Run("accepts up to MaxOperations", func(t *testing.T) {
+		req, err := protocol.Limits{MaxOperations: 2}.DecodePatchRequest(body(2))
+		require.NoError(t, err)
+		assert.Len(t, req.Operations, 2)
+	})
+
+	t.Run("refuses more than MaxOperations with 413", func(t *testing.T) {
+		_, err := protocol.Limits{MaxOperations: 2}.DecodePatchRequest(body(3))
+		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
+	})
+
+	t.Run("has no cap when MaxOperations is zero", func(t *testing.T) {
+		req, err := protocol.Limits{}.DecodePatchRequest(body(1000))
+		require.NoError(t, err)
+		assert.Len(t, req.Operations, 1000)
+	})
+
+	t.Run("reports a malformed body before counting", func(t *testing.T) {
+		_, err := protocol.Limits{MaxOperations: 1}.DecodePatchRequest(strings.NewReader("not json"))
+		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
+	})
+}
+
 // RFC 7644 Section 3.5.2: a PATCH changes only the attributes it targets, and leaves the original resource untouched.
 func TestPatchRequestPatch(t *testing.T) {
 	schemas := []*core.Schema{

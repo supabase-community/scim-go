@@ -130,7 +130,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if match := c.ifMatch(r); match != "" && existing.Common().Meta.Version != match {
 		return protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
 	}
-	req, err := protocol.DecodePatchRequest(r.Body)
+	req, err := c.limits.DecodePatchRequest(r.Body)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
