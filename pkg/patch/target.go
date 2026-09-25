@@ -23,11 +23,13 @@ func (t *target) write(kind Op, value any) error {
 	if err != nil {
 		return err
 	}
+	written := t.written(t.elements(), kind)
 	for _, holder := range holders {
 		if err := t.put(holder, kind, value); err != nil {
 			return err
 		}
 	}
+	demote(t.elements(), written)
 	return nil
 }
 
@@ -63,7 +65,7 @@ func (t *target) remove() error {
 
 func (t *target) drop() error {
 	container, _ := t.container(false)
-	elements, _ := container.Get(t.path.Name).([]any)
+	elements := t.elements()
 	kept := make([]any, 0, len(elements))
 	for _, element := range elements {
 		if member, ok := element.(map[string]any); !ok || !t.match(member) {
@@ -77,7 +79,6 @@ func (t *target) drop() error {
 	return nil
 }
 
-// holders returns the objects that hold key: the container, the complex value, or the matching elements.
 func (t *target) holders(create bool) ([]core.Object, error) {
 	container, err := t.container(create)
 	if err != nil {
@@ -111,6 +112,27 @@ func (t *target) container(create bool) (core.Object, error) {
 	}
 	nested, _ := t.root.Get(t.extension).(map[string]any)
 	return nested, nil
+}
+
+func (t *target) elements() []any {
+	container, _ := t.container(false)
+	elements, _ := container.Get(t.path.Name).([]any)
+	return elements
+}
+
+func (t *target) written(elements []any, kind Op) func(int) bool {
+	switch {
+	case t.match != nil:
+		matched := make([]bool, len(elements))
+		for i, element := range elements {
+			member, ok := element.(map[string]any)
+			matched[i] = ok && t.match(member)
+		}
+		return func(i int) bool { return i < len(matched) && matched[i] }
+	case kind == OpAdd && t.path.SubAttribute == "":
+		return func(i int) bool { return i >= len(elements) }
+	}
+	return func(int) bool { return true }
 }
 
 func (t *target) key() string {

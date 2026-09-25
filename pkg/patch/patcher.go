@@ -19,11 +19,9 @@ type patcher struct {
 
 func (p *patcher) run(root core.Object, ops []Operation) error {
 	for _, op := range ops {
-		before := primariesOf(root)
 		if err := p.apply(root, op); err != nil {
 			return err
 		}
-		before.demote(root)
 	}
 	return nil
 }
