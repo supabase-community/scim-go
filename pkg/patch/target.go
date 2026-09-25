@@ -14,6 +14,9 @@ type target struct {
 	attr      *core.Attribute
 	path      filter.Path
 	match     predicate
+	clauses   int
+	matched   []bool
+	budget    *budget
 }
 
 func (t *target) write(kind Op, value any) error {
@@ -23,11 +26,11 @@ func (t *target) write(kind Op, value any) error {
 	if err := eachSub(t.owner(), value, gateWrite); err != nil {
 		return err
 	}
-	holders, matched, err := t.holders(true)
+	holders, err := t.holders(true)
 	if err != nil {
 		return err
 	}
-	written := t.written(t.elements(), matched, kind)
+	written := t.written(t.elements(), kind)
 	for _, holder := range holders {
 		if err := t.put(holder, kind, value); err != nil {
 			return err
@@ -73,7 +76,7 @@ func (t *target) remove() error {
 	if t.match != nil && t.path.SubAttribute == "" {
 		return t.drop()
 	}
-	holders, _, err := t.holders(false)
+	holders, err := t.holders(false)
 	if err != nil {
 		return err
 	}
@@ -99,47 +102,65 @@ func (t *target) unassignEmptyExtension() {
 func (t *target) drop() error {
 	container, _ := t.container(false)
 	elements := t.elements()
-	removed, matched, err := matching(elements, t.match)
+	matched, err := t.matches(elements)
 	if err != nil {
 		return err
 	}
-	for _, member := range removed {
-		if err := eachSub(t.attr, map[string]any(member), gateRemove); err != nil {
-			return err
-		}
-	}
-	kept := make([]any, 0, len(elements)-len(removed))
+	kept := make([]any, 0, len(elements))
 	for i, element := range elements {
 		if !matched[i] {
 			kept = append(kept, element)
+			continue
 		}
+		if err := eachSub(t.attr, element, gateRemove); err != nil {
+			return err
+		}
+	}
+	if len(kept) == len(elements) {
+		return scimerrors.ErrNoTarget(`"path" matched no elements`)
 	}
 	container.Set(t.path.Name, kept)
 	return nil
 }
 
-func (t *target) holders(create bool) ([]core.Object, []bool, error) {
+func (t *target) holders(create bool) ([]core.Object, error) {
 	container, err := t.container(create)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	value := container.Get(t.path.Name)
+	elements, _ := value.([]any)
 	switch {
 	case t.match != nil:
-		return matching(value, t.match)
+		if t.matched, err = t.matches(elements); err != nil {
+			return nil, err
+		}
+		return members(elements, t.matched)
 	case t.path.SubAttribute == "":
-		return []core.Object{container}, nil, nil
+		return []core.Object{container}, nil
 	case create:
 		nested, err := child(container, t.path.Name)
-		return []core.Object{nested}, nil, err
+		return []core.Object{nested}, err
 	}
 	switch typed := value.(type) {
 	case map[string]any:
-		return []core.Object{typed}, nil, nil
+		return []core.Object{typed}, nil
 	case []any:
-		return matching(value, func(map[string]any) bool { return true })
+		return members(elements, nil)
 	}
-	return nil, nil, nil
+	return nil, nil
+}
+
+func (t *target) matches(elements []any) ([]bool, error) {
+	if err := t.budget.charge(len(elements) * t.clauses); err != nil {
+		return nil, err
+	}
+	matched := make([]bool, len(elements))
+	for i, element := range elements {
+		member, ok := element.(map[string]any)
+		matched[i] = ok && t.match(member)
+	}
+	return matched, nil
 }
 
 func (t *target) container(create bool) (core.Object, error) {
@@ -159,10 +180,10 @@ func (t *target) elements() []any {
 	return elements
 }
 
-func (t *target) written(elements []any, matched []bool, kind Op) func(int) bool {
+func (t *target) written(elements []any, kind Op) func(int) bool {
 	switch {
 	case t.match != nil:
-		return func(i int) bool { return i < len(matched) && matched[i] }
+		return func(i int) bool { return t.matched[i] }
 	case kind == OpAdd && t.path.SubAttribute == "":
 		return func(i int) bool { return i >= len(elements) }
 	}
@@ -183,21 +204,17 @@ func (t *target) key() string {
 	return t.path.Name
 }
 
-// matching evaluates the value filter once per element and returns the matched members with a mask of their positions.
-func matching(value any, match predicate) ([]core.Object, []bool, error) {
-	elements, _ := value.([]any)
-	members := []core.Object{}
-	matched := make([]bool, len(elements))
+func members(elements []any, matched []bool) ([]core.Object, error) {
+	holders := []core.Object{}
 	for i, element := range elements {
-		if member, ok := element.(map[string]any); ok && match(member) {
-			members = append(members, member)
-			matched[i] = true
+		if member, ok := element.(map[string]any); ok && (matched == nil || matched[i]) {
+			holders = append(holders, member)
 		}
 	}
-	if len(members) == 0 {
-		return nil, nil, scimerrors.ErrNoTarget(`"path" matched no elements`)
+	if len(holders) == 0 {
+		return nil, scimerrors.ErrNoTarget(`"path" matched no elements`)
 	}
-	return members, matched, nil
+	return holders, nil
 }
 
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.

@@ -9,7 +9,7 @@ func Apply(resource core.Object, ops []Operation, schemas core.Schemas) (core.Ob
 	return ApplyWithin(resource, ops, schemas, 0)
 }
 
-// ApplyWithin is Apply that refuses the request once its value filters check more than maxEvaluations clauses; zero lifts the cap.
+// ApplyWithin is Apply that refuses the request before its value filters would check more than maxEvaluations clauses; zero lifts the cap.
 func ApplyWithin(resource core.Object, ops []Operation, schemas core.Schemas, maxEvaluations int) (core.Object, error) {
 	working := core.Object(clone(map[string]any(resource)).(map[string]any))
 	if err := (&patcher{schemas: schemas, budget: &budget{max: maxEvaluations}}).run(working, ops); err != nil {

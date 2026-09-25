@@ -13,17 +13,18 @@ import (
 )
 
 type matcher struct {
-	attr   *core.Attribute
-	budget *budget
+	attr    *core.Attribute
+	clauses *int
 }
 
-func compile(attr *core.Attribute, node *filter.Node, budget *budget) (predicate, error) {
-	pred, err := filter.Visit[predicate](matcher{attr: attr, budget: budget}, node)
+func compile(attr *core.Attribute, node *filter.Node) (predicate, int, error) {
+	m := matcher{attr: attr, clauses: new(int)}
+	pred, err := filter.Visit[predicate](m, node)
 	var scimErr *scimerrors.Error
 	if err != nil && !errors.As(err, &scimErr) {
-		return nil, scimerrors.ErrInvalidPath(err.Error())
+		return nil, 0, scimerrors.ErrInvalidPath(err.Error())
 	}
-	return pred, err
+	return pred, *m.clauses, err
 }
 
 func (m matcher) VisitAnd(left, right predicate) (predicate, error) {
@@ -82,9 +83,8 @@ func (m matcher) VisitPresence(path filter.AttrPath) (predicate, error) {
 	if value.Hidden(m.attr, sub) {
 		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator \"pr\" is not valid for %q", path.String()))
 	}
-	return func(member map[string]any) bool {
-		return m.budget.spend() && !value.IsUnassigned(core.Object(member).Get(path.Name))
-	}, nil
+	*m.clauses++
+	return func(member map[string]any) bool { return !value.IsUnassigned(core.Object(member).Get(path.Name)) }, nil
 }
 
 // RFC 7644 3.4.2.2 - a value filter cannot itself contain a value path.
@@ -100,10 +100,8 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 	if err := m.check(attr, path, op, want); err != nil {
 		return nil, err
 	}
+	*m.clauses++
 	return func(member map[string]any) bool {
-		if !m.budget.spend() {
-			return false
-		}
 		got := core.Object(member).Get(path.Name)
 		typed := cmp.Or(attr, inferred(got))
 		expected, ok := literal(typed, op, want)

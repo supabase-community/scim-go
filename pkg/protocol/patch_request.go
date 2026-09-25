@@ -40,7 +40,7 @@ func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error)
 	return r.PatchWithin(resource, schemas, 0)
 }
 
-// PatchWithin is Patch that refuses the request once its value filters check more than maxEvaluations clauses; zero lifts the cap.
+// PatchWithin is Patch that refuses the request before its value filters would check more than maxEvaluations clauses; zero lifts the cap.
 func (r *PatchRequest) PatchWithin[T any](resource T, schemas core.Schemas, maxEvaluations int) (T, error) {
 	var zero T
 	existing, err := core.NewObject(resource)

@@ -612,25 +612,25 @@ func TestApplyWithin(t *testing.T) {
 	either := operation(patch.OpReplace, `emails[value eq "a" or value eq "b"].type`, `"work"`)
 	present := operation(patch.OpReplace, `emails[value pr].type`, `"home"`)
 
-	t.Run("applies a request whose value filters check at most the budget", func(t *testing.T) {
-		_, err := patch.ApplyWithin(item(), []patch.Operation{either}, userSchemas(), 5)
+	t.Run("applies a request whose value filter clauses times elements fit the budget", func(t *testing.T) {
+		_, err := patch.ApplyWithin(item(), []patch.Operation{either}, userSchemas(), 6)
 		require.NoError(t, err)
 	})
 
-	t.Run("refuses a request whose value filters check more than the budget with 413", func(t *testing.T) {
-		_, err := patch.ApplyWithin(item(), []patch.Operation{either}, userSchemas(), 4)
+	t.Run("refuses a request whose value filter clauses times elements exceed the budget with 413", func(t *testing.T) {
+		_, err := patch.ApplyWithin(item(), []patch.Operation{either}, userSchemas(), 5)
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
 
 	t.Run("spends one budget across every operation", func(t *testing.T) {
-		_, err := patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 8)
+		_, err := patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 9)
 		require.NoError(t, err)
 
-		_, err = patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 7)
+		_, err = patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 8)
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
 
-	t.Run("reports the budget before a filter that matched nothing", func(t *testing.T) {
+	t.Run("refuses before evaluating a filter that would match nothing", func(t *testing.T) {
 		_, err := patch.ApplyWithin(item(), []patch.Operation{operation(patch.OpReplace, `emails[value eq "z"].type`, `"work"`)}, userSchemas(), 2)
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
