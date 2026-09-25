@@ -15,34 +15,34 @@ import (
 
 // characteristics enforces the attribute characteristics of RFC 7643, Section 2.2, except uniqueness, which the Repository enforces atomically with the write.
 func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) Validator[T] {
-	readers := readersOf(schemas)
+	fields := fieldsOf(schemas)
 	return func(ctx context.Context, candidate T) error {
 		after, err := core.NewObject(candidate)
 		if err != nil {
 			return err
 		}
-		if err := required(readers, after); err != nil {
+		if err := required(fields, after); err != nil {
 			return err
 		}
-		if err := canonicalValues(readers, after); err != nil {
+		if err := canonicalValues(fields, after); err != nil {
 			return err
 		}
-		if err := primary(readers, after); err != nil {
+		if err := primary(fields, after); err != nil {
 			return err
 		}
 		before, err := previous(ctx, repo, candidate)
 		if err != nil {
 			return err
 		}
-		return immutable(readers, before, after)
+		return immutable(fields, before, after)
 	}
 }
 
 // required rejects a candidate missing a value for an attribute marked "required", per RFC 7643, Section 7.
-func required(readers readers, candidate core.Object) error {
-	for attribute, read := range readers.all() {
-		if attribute.Required && isMissing(attribute, read(candidate)) {
-			return scimerrors.ErrInvalidValue(strconv.Quote(attribute.Name) + " is required")
+func required(fields fields, candidate core.Object) error {
+	for _, field := range fields {
+		if field.Required && isMissing(field.Attribute, field.value(candidate)) {
+			return scimerrors.ErrInvalidValue(strconv.Quote(field.Name) + " is required")
 		}
 	}
 	return nil
@@ -56,26 +56,26 @@ func isMissing(attribute *core.Attribute, raw any) bool {
 }
 
 // canonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.
-func canonicalValues(readers readers, candidate core.Object) error {
-	for attribute, read := range readers.all() {
-		if len(attribute.CanonicalValues) == 0 {
+func canonicalValues(fields fields, candidate core.Object) error {
+	for _, field := range fields {
+		if len(field.CanonicalValues) == 0 {
 			continue
 		}
-		for _, raw := range valuesOf(read(candidate)) {
+		for _, raw := range valuesOf(field.value(candidate)) {
 			value, ok := raw.(string)
-			if !ok || value == "" || containsValue(attribute.CanonicalValues, value, attribute.CaseExact) {
+			if !ok || value == "" || containsValue(field.CanonicalValues, value, field.CaseExact) {
 				continue
 			}
-			return scimerrors.ErrInvalidValue(strconv.Quote(value) + " is not a canonical value for " + strconv.Quote(attribute.Name))
+			return scimerrors.ErrInvalidValue(strconv.Quote(value) + " is not a canonical value for " + strconv.Quote(field.Name))
 		}
 	}
 	return nil
 }
 
 // primary rejects more than one value with "primary" set to true, per RFC 7643, Section 2.4.
-func primary(readers readers, candidate core.Object) error {
-	for attribute, read := range readers.all() {
-		if strings.EqualFold(attribute.Name, "primary") && count(valuesOf(read(candidate)), true) > 1 {
+func primary(fields fields, candidate core.Object) error {
+	for _, field := range fields {
+		if strings.EqualFold(field.Name, "primary") && count(valuesOf(field.value(candidate)), true) > 1 {
 			return scimerrors.ErrInvalidValue(`"primary" may be true for at most one value`)
 		}
 	}
@@ -115,21 +115,27 @@ func previous[T core.Resource](ctx context.Context, repo Repository[T], candidat
 }
 
 // immutable rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7643, Section 7.
-func immutable(readers readers, before, after core.Object) error {
-	for _, attribute := range readers.immutable {
-		read := readers.values[attribute]
-		assigned := read(before)
-		if value.IsUnassigned(assigned) || sameValue(assigned, read(after), attribute.CaseExact) {
+func immutable(fields fields, before, after core.Object) error {
+	for _, field := range fields {
+		if field.parent != nil && field.parent.MultiValued {
 			continue
 		}
-		return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
-	}
-	for parent, subs := range readers.keyed {
-		if err := immutableElements(readers.elements[parent], subs, before, after); err != nil {
+		assigned := field.value(before)
+		if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !sameValue(assigned, field.value(after), field.CaseExact) {
+			return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
+		}
+		if !field.MultiValued || field.SubAttribute("value") == nil {
+			continue
+		}
+		if err := immutableElements(field.elements, immutableSubs(field.SubAttributes), before, after); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func immutableSubs(subs []*core.Attribute) []*core.Attribute {
+	return slices.DeleteFunc(slices.Clone(subs), func(sub *core.Attribute) bool { return sub.Mutability != core.MutabilityImmutable })
 }
 
 // RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".

@@ -28,19 +28,19 @@ type repository[T core.Resource] struct {
 	endpoint string
 	schemas  core.Schemas
 	rows     []row[T]
-	readers
+	fields
 	evaluator protocol.Evaluator[predicate]
 }
 
 // NewRepository stores resources in memory, for tests and reference servers.
 func NewRepository[T core.Resource](endpoint string, schemas core.Schemas) Repository[T] {
-	readers := readersOf(schemas)
+	fields := fieldsOf(schemas)
 	return &repository[T]{
 		endpoint:  endpoint,
 		schemas:   schemas,
 		rows:      []row[T]{},
-		readers:   readers,
-		evaluator: newVisitor(readers),
+		fields:    fields,
+		evaluator: newVisitor(fields),
 	}
 }
 
@@ -176,12 +176,12 @@ func (r *repository[T]) conflictingAttribute(id string, candidate core.Object) *
 		if other.item.Common().ID == id {
 			continue
 		}
-		for attribute, read := range r.all() {
-			if attribute.Uniqueness == core.UniquenessNone {
+		for _, field := range r.fields {
+			if field.Uniqueness == core.UniquenessNone {
 				continue
 			}
-			if sharesValue(read(other.object), read(candidate), attribute.CaseExact) {
-				return attribute
+			if sharesValue(field.value(other.object), field.value(candidate), field.CaseExact) {
+				return field.Attribute
 			}
 		}
 	}
@@ -232,14 +232,14 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]row[T], error) 
 }
 
 // RFC 7644 Section 3.4.2.3: a multi-valued attribute sorts by its primary value, or else its first value.
-func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (reader, bool) {
-	elements, multiValued := r.elements[parent]
-	if !multiValued {
-		read, ok := r.values[attribute]
-		return read, ok
+func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (func(core.Object) any, bool) {
+	list, ok := r.lookup(parent)
+	if !ok || !list.isList() {
+		field, ok := r.lookup(attribute)
+		return field.value, ok
 	}
 	return func(d core.Object) any {
-		element, ok := primaryOrFirst(elements(d))
+		element, ok := primaryOrFirst(list.elements(d))
 		if !ok {
 			return nil
 		}

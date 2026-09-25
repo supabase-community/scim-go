@@ -15,11 +15,11 @@ import (
 type predicate func(row any) bool
 
 type evaluator struct {
-	readers
+	fields
 }
 
-func newVisitor(readers readers) protocol.Evaluator[predicate] {
-	return &evaluator{readers: readers}
+func newVisitor(fields fields) protocol.Evaluator[predicate] {
+	return &evaluator{fields: fields}
 }
 
 func (e *evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (predicate, error) {
@@ -57,8 +57,8 @@ func (e *evaluator) Not(operand predicate) (predicate, error) {
 }
 
 func (e *evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (predicate, error)) (predicate, error) {
-	elements, ok := e.elements[attribute.Definition]
-	if !ok {
+	list, ok := e.lookup(attribute.Definition)
+	if !ok || !list.isList() {
 		return nil, scimerrors.ErrInvalidFilter(attribute.Path.Key() + " is not filterable")
 	}
 	inner, err := valueFilter()
@@ -66,7 +66,7 @@ func (e *evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() 
 		return nil, err
 	}
 	return func(row any) bool {
-		return slices.ContainsFunc(elements(asObject(row)), inner)
+		return slices.ContainsFunc(list.elements(asObject(row)), inner)
 	}, nil
 }
 
@@ -75,8 +75,8 @@ func (e *evaluator) reader(attribute *protocol.Attribute) (func(row any) any, er
 	if attribute.Parent != nil {
 		return func(row any) any { return coerce(definition, asObject(row).Get(definition.Name)) }, nil
 	}
-	if read, ok := e.values[definition]; ok {
-		return func(row any) any { return read(asObject(row)) }, nil
+	if field, ok := e.lookup(definition); ok {
+		return func(row any) any { return field.value(asObject(row)) }, nil
 	}
 	return nil, scimerrors.ErrInvalidFilter(attribute.Path.Key() + " is not filterable")
 }
