@@ -38,11 +38,11 @@ func (s *SearchRequest) Descending() bool {
 	return s.SortOrder == SortDescending
 }
 
-// Validate rejects a malformed filter or an unknown sortBy, per RFC 7644, Section 3.4.2.
+// Validate rejects an invalid filter or sortBy before any Repository sees it, per RFC 7644, Section 3.4.2.
 func (s *SearchRequest) Validate(schemas core.Schemas) error {
 	if s.Filter != "" {
-		if _, err := filter.Parse(s.Filter); err != nil {
-			return scimerrors.ErrInvalidFilter(err.Error())
+		if _, err := Filter[struct{}](schemas, s.Filter, accept{}); err != nil {
+			return err
 		}
 	}
 	if s.SortBy != "" {

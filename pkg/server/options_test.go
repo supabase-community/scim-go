@@ -94,7 +94,7 @@ func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(failingRepository{cause: errors.New("unreachable")})),
 	))
 
-	for _, query := range []string{"filter=((garbage", "sortBy=unknown"} {
+	for _, query := range []string{"filter=((garbage", "filter=bogus+eq+%22x%22", "filter=password+sw+%22x%22", "sortBy=unknown"} {
 		t.Run(query, func(t *testing.T) {
 			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?"+query))
 
