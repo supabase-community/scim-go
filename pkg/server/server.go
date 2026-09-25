@@ -87,6 +87,7 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serviceProviderConfig(w http.ResponseWriter, _ *http.Request) error {
+	setLocation(w, s.config.Meta)
 	return protocol.Send(w, http.StatusOK, s.config)
 }
 
@@ -116,6 +117,7 @@ func (s *Server) listSchemas(w http.ResponseWriter, r *http.Request) error {
 func (s *Server) schemaByID(w http.ResponseWriter, r *http.Request) error {
 	for _, schema := range s.schemas {
 		if r.PathValue("id") == string(schema.ID) {
+			setLocation(w, schema.Meta)
 			return protocol.Send(w, http.StatusOK, schema)
 		}
 	}
@@ -174,6 +176,13 @@ func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
 // me declines the "/Me" alias, per RFC 7644, Section 3.11.
 func me(w http.ResponseWriter, _ *http.Request) error {
 	return protocol.SendError(w, scimerrors.ErrNotImplemented(`"/Me" is not supported`))
+}
+
+// setLocation sets "Content-Location" to meta.location, per RFC 7643, Section 3.1.
+func setLocation(w http.ResponseWriter, meta core.Meta) {
+	if meta.Location != "" {
+		w.Header().Set("Content-Location", meta.Location)
+	}
 }
 
 // rejectFilter forbids "filter" on /ResourceTypes and /Schemas, per RFC 7644, Section 4.

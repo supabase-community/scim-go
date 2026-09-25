@@ -155,6 +155,7 @@ func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *controller[T]) send(w http.ResponseWriter, status int, resource T, projection protocol.Projection) error {
+	setLocation(w, resource.Common().Meta)
 	return protocol.Send(w, status, projection.Of(resource))
 }
 

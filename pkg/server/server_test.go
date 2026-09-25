@@ -332,6 +332,51 @@ func TestRFC7643CommonAttributes(t *testing.T) {
 		assert.Equal(t, created.Meta.Created, created.Meta.LastModified)
 		assert.Equal(t, "hr-42", created.ExternalID)
 	})
+
+	t.Run("sets the Content-Location header to meta.location", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		location := ReadBodyAs[core.User](t, created).Meta.Location
+		require.NotEmpty(t, location)
+		assert.Equal(t, location, created.Header.Get("Content-Location"))
+
+		for _, request := range []*http.Request{
+			Request(t, srv, http.MethodGet, location, WithBearerToken(validToken)),
+			Request(t, srv, http.MethodGet, location+"?attributes=userName", WithBearerToken(validToken)),
+			Request(t, srv, http.MethodPut, location,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.User{UserName: "bjensen", DisplayName: "Babs"}),
+			),
+			Request(t, srv, http.MethodPatch, location,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Barbara"`)}},
+				}),
+			),
+		} {
+			response := Response(t, srv, request)
+			require.Equal(t, http.StatusOK, response.StatusCode, request.Method)
+			assert.Equal(t, location, response.Header.Get("Content-Location"), request.Method)
+		}
+	})
+
+	t.Run("sets the Content-Location header on discovery documents", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		for _, path := range []string{"/ServiceProviderConfig", "/Schemas/" + string(core.SchemaUser)} {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+path, WithBearerToken(validToken)))
+			require.Equal(t, http.StatusOK, response.StatusCode, path)
+			assert.Equal(t, basePath+path, response.Header.Get("Content-Location"), path)
+		}
+	})
 }
 
 // RFC 7643 4.2 "Group" Resource Schema
