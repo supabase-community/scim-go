@@ -1179,6 +1179,19 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.12: invalidFilter when the attribute and filter comparison combination is not supported.
+	t.Run("rejects a value path filter on a single-valued complex attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Name: core.Name{GivenName: "alice"}})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`name[givenName eq "alice"]`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
 	t.Run("a value path filter negates a condition with not", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
