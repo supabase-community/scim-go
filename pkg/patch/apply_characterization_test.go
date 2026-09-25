@@ -103,6 +103,15 @@ func TestApplyResolvesDuplicateFoldingKeysDeterministically(t *testing.T) {
 	assert.Equal(t, "lower", item["username"])
 }
 
+// RFC 7643 2.1 - attribute names are case insensitive; folding collisions resolve to the lowest-ordered key.
+func TestApplyMergeResolvesFoldingKeysDeterministically(t *testing.T) {
+	item := map[string]any{"name": map[string]any{"familyName": "lower", "FamilyName": "upper", "Key": "kelvin"}}
+
+	require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, "name", `{"FAMILYNAME":"new","key":"folded"}`)))
+
+	assert.Equal(t, map[string]any{"familyName": "lower", "FamilyName": "new", "Key": "folded"}, item["name"])
+}
+
 // RFC 7644 Section 3.5.2: an operation incompatible with an attribute's mutability SHALL return an error.
 func TestApplyNoPathMergeRejectsReadOnly(t *testing.T) {
 	item := map[string]any{}

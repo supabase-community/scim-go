@@ -160,12 +160,15 @@ func matching(value any, match predicate) ([]core.Object, error) {
 
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
 func merge(holder core.Object, values map[string]any, parent *core.Attribute, kind Op) error {
-	for key, value := range values {
-		attr := subAttr(parent, key)
+	keys := newKeys(holder)
+	for name, value := range values {
+		attr := subAttr(parent, name)
 		if err := gate(attr); err != nil {
 			return err
 		}
-		set(holder, key, shaped(value, attr.MultiValued), kind)
+		key := keys.resolve(name)
+		holder[key] = appended(holder[key], shaped(value, attr.MultiValued), kind)
+		keys.add(key)
 	}
 	return nil
 }
@@ -189,11 +192,14 @@ func shaped(value any, multiValued bool) any {
 }
 
 func set(o core.Object, name string, value any, kind Op) {
-	if before, ok := o.Get(name).([]any); kind == OpAdd && ok {
-		o.Set(name, append(before, shaped(value, true).([]any)...))
-		return
+	o.Set(name, appended(o.Get(name), value, kind))
+}
+
+func appended(before, value any, kind Op) any {
+	if list, ok := before.([]any); kind == OpAdd && ok {
+		return append(list, shaped(value, true).([]any)...)
 	}
-	o.Set(name, value)
+	return value
 }
 
 func child(o core.Object, name string) (core.Object, error) {
