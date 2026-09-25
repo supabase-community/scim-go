@@ -41,19 +41,18 @@ func BenchmarkServerUsers(b *testing.B) {
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) { serveEach(b, handler, tc.method, tc.target, tc.body, tc.status) })
 	}
-	b.Run("POST then DELETE", func(b *testing.B) { createEach(b, handler, true) })
-	b.Run("POST", func(b *testing.B) { createEach(b, handler, false) })
+	created := 0
+	b.Run("POST then DELETE", func(b *testing.B) { createEach(b, handler, &created, true) })
+	b.Run("POST", func(b *testing.B) { createEach(b, handler, &created, false) })
 }
 
-func createEach(b *testing.B, handler http.Handler, remove bool) {
+func createEach(b *testing.B, handler http.Handler, created *int, remove bool) {
 	head, tail, _ := bytes.Cut(benchBody(b, benchUser("USERNAME")), []byte("USERNAME"))
-	prefix := b.Name()
 	body := []byte{}
-	i := 0
 	b.ReportAllocs()
 	for b.Loop() {
-		i++
-		body = append(strconv.AppendInt(append(append(body[:0], head...), prefix...), int64(i), 10), tail...)
+		*created++
+		body = append(strconv.AppendInt(append(append(body[:0], head...), "new"...), int64(*created), 10), tail...)
 		created := serve(b, handler, http.MethodPost, basePath+"/Users", body, http.StatusCreated)
 		if remove {
 			serve(b, handler, http.MethodDelete, created.Header().Get("Location"), nil, http.StatusNoContent)
