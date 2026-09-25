@@ -132,10 +132,11 @@ func immutableElements(elements func(core.Object) []any, subs []*core.Attribute,
 			continue
 		}
 		stored := asObject(element)
-		if slices.ContainsFunc(candidates, func(candidate core.Object) bool { return changed(subs, stored, candidate) == nil }) {
+		sub := changed(subs, stored, candidates[0])
+		if sub == nil || slices.ContainsFunc(candidates[1:], func(candidate core.Object) bool { return changed(subs, stored, candidate) == nil }) {
 			continue
 		}
-		return scimerrors.ErrMutability(strconv.Quote(changed(subs, stored, candidates[0]).Name) + " is immutable")
+		return scimerrors.ErrMutability(strconv.Quote(sub.Name) + " is immutable")
 	}
 	return nil
 }
