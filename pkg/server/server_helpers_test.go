@@ -149,6 +149,7 @@ func widgetAttributes() core.Attributes {
 		core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
 			core.NewAttribute("serial", core.TypeString).AsRequired(),
 			core.NewAttribute("built", core.TypeDateTime),
+			core.NewAttribute("inspector", core.TypeString).AsReadOnly(),
 		),
 	}
 }

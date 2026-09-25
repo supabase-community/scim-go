@@ -2125,6 +2125,25 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute.
+	t.Run("rejects a readOnly sub-attribute even when the value filter matches nothing", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: `parts[serial eq "none"].inspector`, Value: json.RawMessage(`"x"`)}},
+			}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
 	// RFC 7644 Section 3.5.2: the body carries the PatchOp schema and one or more operations.
 	t.Run("rejects a patch without the PatchOp schema or operations", func(t *testing.T) {
 		srv := newTestServer(t)
