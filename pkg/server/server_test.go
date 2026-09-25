@@ -699,6 +699,35 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.NotEqual(t, 2000, created.Meta.Created.Year())
 	})
 
+	t.Run("ignores readOnly groups", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		id, _ := create(t, srv, &core.User{UserName: "alice", Groups: []core.GroupMembership{{Value: "g-1", Type: "direct"}}})
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		assert.NotContains(t, ReadBodyAs[map[string]any](t, response), "groups")
+	})
+
+	// RFC 7643 Section 7: an attribute returned "never" is never returned, even when requested.
+	t.Run("never returns the writeOnly password", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users?attributes=password",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "alice", Password: "t1meMa$heen"}),
+		)
+		response := Response(t, srv, request)
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		created := ReadBodyAs[map[string]any](t, response)
+		assert.NotContains(t, created, "password")
+
+		for _, query := range []string{"", "?attributes=password"} {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+created["id"].(string)+query, WithBearerToken(validToken)))
+			assert.NotContains(t, ReadBodyAs[map[string]any](t, response), "password", query)
+		}
+	})
+
 	t.Run("rejects a JSON null body instead of panicking", func(t *testing.T) {
 		srv := newTestServer(t)
 

@@ -85,6 +85,7 @@ func deviations(path string, want, got core.Attributes) []string {
 			name string
 			same bool
 		}{
+			{"name", expected.Name == attribute.Name},
 			{"type", expected.Type == attribute.Type},
 			{"multiValued", expected.MultiValued == attribute.MultiValued},
 			{"required", expected.Required == attribute.Required},
