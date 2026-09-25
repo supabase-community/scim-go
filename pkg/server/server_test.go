@@ -3293,8 +3293,7 @@ func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 		for _, query := range []struct{ resource, filter string }{
 			{"/Users", `password eq "hunter2"`},
 			{"/Users", `password sw "hun"`},
-			{"/Users", `password pr`},
-			{"/Users", `not (password pr)`},
+			{"/Users", `not (password ne "hunter2")`},
 			{"/Users", `userName eq "alice" and password eq "hunter2"`},
 			{"/Widgets", `secret eq "s3cret"`},
 			{"/Widgets", `keys.value eq "k3y"`},
@@ -3309,6 +3308,23 @@ func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 			assert.NotContains(t, body.Detail, "hunter2", "filter: %s", query.filter)
 			assert.NotContains(t, body.Detail, "s3cret", "filter: %s", query.filter)
 			assert.NotContains(t, body.Detail, "k3y", "filter: %s", query.filter)
+		}
+	})
+
+	// RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
+	t.Run("rejects presence of a writeOnly attribute with invalidFilter because it sends no value", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		for _, query := range []struct{ resource, filter string }{
+			{"/Users", `password pr`},
+			{"/Users", `not (password pr)`},
+			{"/Widgets", `keys[value pr]`},
+		} {
+			path := basePath + query.resource + "?" + url.Values{"filter": {query.filter}}.Encode()
+			response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType)))
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, "filter: %s", query.filter)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType, "filter: %s", query.filter)
 		}
 	})
 }
