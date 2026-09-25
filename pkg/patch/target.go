@@ -160,15 +160,24 @@ func matching(value any, match predicate) ([]core.Object, error) {
 
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
 func merge(holder core.Object, values map[string]any, parent *core.Attribute, kind Op) error {
+	if err := gateValue(parent, values); err != nil {
+		return err
+	}
 	keys := newKeys(holder)
 	for name, value := range values {
-		attr := subAttr(parent, name)
-		if err := gate(attr); err != nil {
+		key := keys.resolve(name)
+		holder[key] = appended(holder[key], shaped(value, subAttr(parent, name).MultiValued), kind)
+		keys.add(key)
+	}
+	return nil
+}
+
+// RFC 7644 Section 3.5.2: each operation against an attribute MUST be compatible with the attribute's mutability.
+func gateValue(attr *core.Attribute, values map[string]any) error {
+	for name := range values {
+		if err := gate(subAttr(attr, name)); err != nil {
 			return err
 		}
-		key := keys.resolve(name)
-		holder[key] = appended(holder[key], shaped(value, attr.MultiValued), kind)
-		keys.add(key)
 	}
 	return nil
 }
