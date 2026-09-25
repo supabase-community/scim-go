@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# `is` evals its argument, so single-quoted expressions and variables only read
+# inside them are intentional.
+# shellcheck disable=SC2016,SC2034
 # Reproduces the RFC 7643/7644 conformance issues scimcheck found in the
 # example server. Each issue prints PASS once fixed, or FAIL with the
 # expected and actual behaviour and where to start looking.

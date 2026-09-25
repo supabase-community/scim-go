@@ -49,6 +49,7 @@ vet:
 .PHONY: lint
 lint: vet
 	golangci-lint run
+	shellcheck scripts/*.sh
 
 .PHONY: vulncheck
 vulncheck:
