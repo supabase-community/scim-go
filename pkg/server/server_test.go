@@ -2568,6 +2568,27 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 
 // RFC 7644 3.6 Deleting Resources
 func TestRFC7644DeletingResources(t *testing.T) {
+	t.Run("keeps later resources addressable after deleting an earlier one", func(t *testing.T) {
+		srv := newTestServer(t)
+		first, _ := create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "bob"})
+		last, _ := create(t, srv, &core.User{UserName: "carol"})
+
+		require.Equal(t, http.StatusNoContent, Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+first, WithBearerToken(validToken))).StatusCode)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+last, WithBearerToken(validToken)))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, "carol", ReadBodyAs[core.User](t, response).UserName)
+
+		response = Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+last,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "caroline"}),
+		))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, last, ReadBodyAs[core.User](t, response).ID)
+	})
+
 	t.Run("deletes a resource and it is subsequently gone", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
