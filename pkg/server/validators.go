@@ -21,14 +21,10 @@ func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) 
 		if err != nil {
 			return err
 		}
-		if err := required(fields, after); err != nil {
-			return err
-		}
-		if err := canonicalValues(fields, after); err != nil {
-			return err
-		}
-		if err := primary(fields, after); err != nil {
-			return err
+		for _, field := range fields {
+			if err := conforms(field, after); err != nil {
+				return err
+			}
 		}
 		before, err := previous(ctx, repo, candidate)
 		if err != nil {
@@ -38,11 +34,20 @@ func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) 
 	}
 }
 
-// required rejects a candidate missing a value for an attribute marked "required", per RFC 7643, Section 7.
-func required(fields fields, candidate core.Object) error {
-	for _, field := range fields {
-		if field.Required && isMissing(field.Attribute, field.value(candidate)) {
-			return scimerrors.ErrInvalidValue(strconv.Quote(field.Name) + " is required")
+// conforms rejects a missing "required" value or a value outside "canonicalValues" (RFC 7643, Section 7), or more than one "primary" (Section 2.4).
+func conforms(field field, candidate core.Object) error {
+	raw := field.value(candidate)
+	values := valuesOf(raw)
+	if field.Required && isMissing(field.Attribute, raw) {
+		return scimerrors.ErrInvalidValue(strconv.Quote(field.Name) + " is required")
+	}
+	if strings.EqualFold(field.Name, "primary") && count(values, true) > 1 {
+		return scimerrors.ErrInvalidValue(`"primary" may be true for at most one value`)
+	}
+	for _, v := range values {
+		s, ok := v.(string)
+		if ok && s != "" && len(field.CanonicalValues) > 0 && !containsValue(field.CanonicalValues, s, field.CaseExact) {
+			return scimerrors.ErrInvalidValue(strconv.Quote(s) + " is not a canonical value for " + strconv.Quote(field.Name))
 		}
 	}
 	return nil
@@ -53,33 +58,6 @@ func isMissing(attribute *core.Attribute, raw any) bool {
 		return value.IsUnassigned(raw)
 	}
 	return slices.ContainsFunc(valuesOf(raw), value.IsUnassigned)
-}
-
-// canonicalValues rejects a value that is not among an attribute's declared "canonicalValues", per RFC 7643, Section 7.
-func canonicalValues(fields fields, candidate core.Object) error {
-	for _, field := range fields {
-		if len(field.CanonicalValues) == 0 {
-			continue
-		}
-		for _, raw := range valuesOf(field.value(candidate)) {
-			value, ok := raw.(string)
-			if !ok || value == "" || containsValue(field.CanonicalValues, value, field.CaseExact) {
-				continue
-			}
-			return scimerrors.ErrInvalidValue(strconv.Quote(value) + " is not a canonical value for " + strconv.Quote(field.Name))
-		}
-	}
-	return nil
-}
-
-// primary rejects more than one value with "primary" set to true, per RFC 7643, Section 2.4.
-func primary(fields fields, candidate core.Object) error {
-	for _, field := range fields {
-		if strings.EqualFold(field.Name, "primary") && count(valuesOf(field.value(candidate)), true) > 1 {
-			return scimerrors.ErrInvalidValue(`"primary" may be true for at most one value`)
-		}
-	}
-	return nil
 }
 
 func count(values []any, target any) int {
