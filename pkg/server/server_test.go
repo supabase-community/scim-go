@@ -2217,6 +2217,8 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			{"accepts removing a member", "/Kits", gear, patch.Operation{Op: patch.OpRemove, Path: `parts[serial eq "s-1"]`}, http.StatusOK},
 			{"accepts adding a group member", "/Groups", team, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-3","type":"User"}]`)}, http.StatusOK},
 			{"accepts adding a group member that repeats a value with another type", "/Groups", team, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"Group"}]`)}, http.StatusOK},
+			{"accepts a group member type that differs only in case", "/Groups", team, patch.Operation{Op: patch.OpReplace, Path: `members[value eq "u-1"].type`, Value: json.RawMessage(`"user"`)}, http.StatusOK},
+			{"accepts an extension value that differs only in case", "/Users", user, patch.Operation{Op: patch.OpReplace, Path: extension + ":employeeNumber", Value: json.RawMessage(`"e1"`)}, http.StatusOK},
 			{"accepts removing a group member", "/Groups", team, patch.Operation{Op: patch.OpRemove, Path: `members[value eq "u-1"]`}, http.StatusOK},
 			{"accepts replacing the group members", "/Groups", team, patch.Operation{Op: patch.OpReplace, Path: "members", Value: json.RawMessage(`[{"value":"u-3","type":"User"}]`)}, http.StatusOK},
 			{"rejects a changed immutable sub-attribute of a group member", "/Groups", team, patch.Operation{Op: patch.OpReplace, Path: `members[value eq "u-1"].type`, Value: json.RawMessage(`"Group"`)}, http.StatusBadRequest},

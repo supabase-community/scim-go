@@ -119,7 +119,7 @@ func immutable(readers readers, before, after core.Object) error {
 	for _, attribute := range readers.immutable {
 		read := readers.values[attribute]
 		assigned := read(before)
-		if value.IsUnassigned(assigned) || reflect.DeepEqual(assigned, read(after)) {
+		if value.IsUnassigned(assigned) || sameValue(assigned, read(after), attribute.CaseExact) {
 			continue
 		}
 		return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
@@ -163,7 +163,7 @@ func keyOf(element any) (string, bool) {
 func changed(subs []*core.Attribute, stored, candidate core.Object) *core.Attribute {
 	for _, sub := range subs {
 		assigned := coerce(sub, stored.Get(sub.Name))
-		if !value.IsUnassigned(assigned) && !reflect.DeepEqual(assigned, coerce(sub, candidate.Get(sub.Name))) {
+		if !value.IsUnassigned(assigned) && !sameValue(assigned, coerce(sub, candidate.Get(sub.Name)), sub.CaseExact) {
 			return sub
 		}
 	}
