@@ -1852,6 +1852,17 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(resources[0].(map[string]any)))
 	})
 
+	t.Run("ignores requested attributes the schema does not declare", func(t *testing.T) {
+		_, body := get(t, "/Users/"+id+"?attributes=bogus")
+		assert.ElementsMatch(t, []string{"schemas", "id"}, keysOf(body))
+
+		_, body = get(t, "/Users/"+id+"?attributes=bogus,userName,userName")
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(body))
+
+		_, body = get(t, "/Users/"+id+"?excludedAttributes=bogus")
+		assert.Equal(t, "bjensen", body["userName"])
+	})
+
 	t.Run("fetches a resource without the excluded attributes", func(t *testing.T) {
 		status, body := get(t, "/Users/"+id+"?excludedAttributes=emails,meta")
 		require.Equal(t, http.StatusOK, status)

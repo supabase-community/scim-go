@@ -113,7 +113,7 @@ func (p Projection) returns(attribute *core.Attribute, name string) bool {
 		return true
 	case attribute.Returned == core.ReturnedRequest:
 		return slices.Contains(p.included, name) || p.included.within(name)
-	case len(p.included) > 0:
+	case p.included != nil:
 		return p.included.covers(name) || p.included.within(name)
 	default:
 		return !p.excluded.covers(name)
@@ -173,27 +173,42 @@ func (v projected) MarshalJSON() ([]byte, error) {
 type names []string
 
 func qualify(schemas core.Schemas, list []string) (names, error) {
+	if len(list) == 0 {
+		return nil, nil
+	}
 	out := make(names, 0, len(list))
 	for _, raw := range list {
-		if schema := schemas.Lookup(core.SchemaURI(raw)); schema != nil {
-			out = append(out, strings.ToLower(string(schema.ID)))
-			continue
-		}
-		path, err := filter.NewAttrPath(raw)
+		name, known, err := qualifyName(schemas, raw)
 		if err != nil {
-			return nil, invalidName(raw)
+			return nil, err
 		}
-		schema := schemas.Lookup(core.SchemaURI(path.URI))
-		if schema == nil {
-			return nil, invalidName(raw)
+		if known && !slices.Contains(out, name) {
+			out = append(out, name)
 		}
-		qualified := qualifiedKey(schema.ID, path.Name)
-		if path.SubAttribute != "" {
-			qualified += "." + strings.ToLower(path.SubAttribute)
-		}
-		out = append(out, qualified)
 	}
 	return out, nil
+}
+
+func qualifyName(schemas core.Schemas, raw string) (string, bool, error) {
+	if schema := schemas.Lookup(core.SchemaURI(raw)); schema != nil {
+		return strings.ToLower(string(schema.ID)), true, nil
+	}
+	path, err := filter.NewAttrPath(raw)
+	if err != nil {
+		return "", false, invalidName(raw)
+	}
+	schema := schemas.Lookup(core.SchemaURI(path.URI))
+	if schema == nil {
+		return "", false, invalidName(raw)
+	}
+	if _, ok := schemas.Resolve(schema.ID, path.Name, path.SubAttribute); !ok {
+		return "", false, nil
+	}
+	qualified := qualifiedKey(schema.ID, path.Name)
+	if path.SubAttribute != "" {
+		qualified += "." + strings.ToLower(path.SubAttribute)
+	}
+	return qualified, true, nil
 }
 
 // covers reports whether name is selected: an exact match, or nested under a selected
