@@ -76,7 +76,7 @@ func (p Projection) fillSchemas(out map[string]any) {
 }
 
 func (p Projection) project(key string, value any) (any, bool) {
-	if p.schemas == nil {
+	if p.schemas == nil || key == "schemas" {
 		return value, true
 	}
 	base := p.schemas.Base()
@@ -94,17 +94,14 @@ func (p Projection) extension(schema *core.Schema, value any) (any, bool) {
 	if !ok {
 		return nil, false
 	}
-	out := map[string]any{}
-	for key, item := range object {
+	prune(object, func(key string, item any) (any, bool) {
 		attribute := schema.Attributes.Lookup(key)
 		if attribute == nil {
-			continue
+			return nil, false
 		}
-		if projected, ok := p.value(attribute, qualifiedKey(schema.ID, attribute.Name), item); ok {
-			out[key] = projected
-		}
-	}
-	return out, len(out) > 0
+		return p.value(attribute, qualifiedKey(schema.ID, attribute.Name), item)
+	})
+	return object, len(object) > 0
 }
 
 // RFC 7643 Section 7: "returned" decides whether an attribute can appear in a response.
@@ -132,33 +129,27 @@ func (p Projection) value(attribute *core.Attribute, name string, value any) (an
 	}
 	switch v := value.(type) {
 	case map[string]any:
-		object := p.object(attribute, name, v)
-		return object, len(object) > 0
+		p.object(attribute, name, v)
+		return v, len(v) > 0
 	case []any:
-		elements := make([]any, 0, len(v))
 		for _, element := range v {
 			if object, ok := element.(map[string]any); ok {
-				element = p.object(attribute, name, object)
+				p.object(attribute, name, object)
 			}
-			elements = append(elements, element)
 		}
-		return elements, true
+		return v, true
 	}
 	return value, true
 }
 
-func (p Projection) object(attribute *core.Attribute, parentName string, object map[string]any) map[string]any {
-	out := map[string]any{}
-	for key, value := range object {
+func (p Projection) object(attribute *core.Attribute, parentName string, object map[string]any) {
+	prune(object, func(key string, value any) (any, bool) {
 		sub := attribute.SubAttribute(key)
 		if sub == nil {
-			continue
+			return nil, false
 		}
-		if projected, ok := p.value(sub, parentName+"."+strings.ToLower(sub.Name), value); ok {
-			out[key] = projected
-		}
-	}
-	return out
+		return p.value(sub, parentName+"."+strings.ToLower(sub.Name), value)
+	})
 }
 
 type projected struct {
@@ -172,16 +163,9 @@ func (v projected) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	v.projection.fillResourceType(document)
-	out := map[string]any{}
-	for key, value := range document {
-		if key == "schemas" {
-			out[key] = value
-		} else if projected, ok := v.projection.project(key, value); ok {
-			out[key] = projected
-		}
-	}
-	v.projection.fillSchemas(out)
-	return json.Marshal(out)
+	prune(document, v.projection.project)
+	v.projection.fillSchemas(document)
+	return json.Marshal(document)
 }
 
 // names holds fully qualified, lowercase attribute paths: "<schema uri>:<name>[.<sub-name>]",
@@ -255,6 +239,17 @@ func listParam(values url.Values, name string) []string {
 		}
 	}
 	return list
+}
+
+// prune keeps each member of object that project returns, replaced by its projected value.
+func prune(object map[string]any, project func(key string, value any) (any, bool)) {
+	for key, value := range object {
+		if projected, ok := project(key, value); ok {
+			object[key] = projected
+		} else {
+			delete(object, key)
+		}
+	}
 }
 
 func qualifiedKey(uri core.SchemaURI, name string) string {
