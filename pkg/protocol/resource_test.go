@@ -187,4 +187,13 @@ func TestDecodeResource(t *testing.T) {
 		_, err := protocol.DecodeResource[map[string]any](bytes.NewReader([]byte("null")), nil, schemas)
 		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
 	})
+
+	t.Run("rejects a body with two case-variant extension URN keys", func(t *testing.T) {
+		document := map[string]any{
+			uri:                  map[string]any{"department": "Ops"},
+			strings.ToUpper(uri): map[string]any{"employeeNumber": "attacker"},
+		}
+		_, err := protocol.DecodeResource[map[string]any](requestBody(document), existing, schemas)
+		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
+	})
 }
