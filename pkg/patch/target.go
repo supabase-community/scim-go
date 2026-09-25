@@ -23,11 +23,11 @@ func (t *target) write(kind Op, value any) error {
 	if err := eachSub(t.owner(), value, gateWrite); err != nil {
 		return err
 	}
-	holders, err := t.holders(true)
+	holders, matched, err := t.holders(true)
 	if err != nil {
 		return err
 	}
-	written := t.written(t.elements(), kind)
+	written := t.written(t.elements(), matched, kind)
 	for _, holder := range holders {
 		if err := t.put(holder, kind, value); err != nil {
 			return err
@@ -73,7 +73,7 @@ func (t *target) remove() error {
 	if t.match != nil && t.path.SubAttribute == "" {
 		return t.drop()
 	}
-	holders, err := t.holders(false)
+	holders, _, err := t.holders(false)
 	if err != nil {
 		return err
 	}
@@ -99,46 +99,47 @@ func (t *target) unassignEmptyExtension() {
 func (t *target) drop() error {
 	container, _ := t.container(false)
 	elements := t.elements()
-	kept := make([]any, 0, len(elements))
-	for _, element := range elements {
-		member, ok := element.(map[string]any)
-		if !ok || !t.match(member) {
-			kept = append(kept, element)
-			continue
-		}
-		if err := eachSub(t.attr, member, gateRemove); err != nil {
+	removed, matched, err := matching(elements, t.match)
+	if err != nil {
+		return err
+	}
+	for _, member := range removed {
+		if err := eachSub(t.attr, map[string]any(member), gateRemove); err != nil {
 			return err
 		}
 	}
-	if len(kept) == len(elements) {
-		return scimerrors.ErrNoTarget(`"path" matched no elements`)
+	kept := make([]any, 0, len(elements)-len(removed))
+	for i, element := range elements {
+		if !matched[i] {
+			kept = append(kept, element)
+		}
 	}
 	container.Set(t.path.Name, kept)
 	return nil
 }
 
-func (t *target) holders(create bool) ([]core.Object, error) {
+func (t *target) holders(create bool) ([]core.Object, []bool, error) {
 	container, err := t.container(create)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	value := container.Get(t.path.Name)
 	switch {
 	case t.match != nil:
 		return matching(value, t.match)
 	case t.path.SubAttribute == "":
-		return []core.Object{container}, nil
+		return []core.Object{container}, nil, nil
 	case create:
 		nested, err := child(container, t.path.Name)
-		return []core.Object{nested}, err
+		return []core.Object{nested}, nil, err
 	}
 	switch typed := value.(type) {
 	case map[string]any:
-		return []core.Object{typed}, nil
+		return []core.Object{typed}, nil, nil
 	case []any:
 		return matching(value, func(map[string]any) bool { return true })
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 func (t *target) container(create bool) (core.Object, error) {
@@ -158,14 +159,9 @@ func (t *target) elements() []any {
 	return elements
 }
 
-func (t *target) written(elements []any, kind Op) func(int) bool {
+func (t *target) written(elements []any, matched []bool, kind Op) func(int) bool {
 	switch {
 	case t.match != nil:
-		matched := make([]bool, len(elements))
-		for i, element := range elements {
-			member, ok := element.(map[string]any)
-			matched[i] = ok && t.match(member)
-		}
 		return func(i int) bool { return i < len(matched) && matched[i] }
 	case kind == OpAdd && t.path.SubAttribute == "":
 		return func(i int) bool { return i >= len(elements) }
@@ -187,18 +183,21 @@ func (t *target) key() string {
 	return t.path.Name
 }
 
-func matching(value any, match predicate) ([]core.Object, error) {
+// matching evaluates the value filter once per element and returns the matched members with a mask of their positions.
+func matching(value any, match predicate) ([]core.Object, []bool, error) {
 	elements, _ := value.([]any)
-	matched := []core.Object{}
-	for _, element := range elements {
+	members := []core.Object{}
+	matched := make([]bool, len(elements))
+	for i, element := range elements {
 		if member, ok := element.(map[string]any); ok && match(member) {
-			matched = append(matched, member)
+			members = append(members, member)
+			matched[i] = true
 		}
 	}
-	if len(matched) == 0 {
-		return nil, scimerrors.ErrNoTarget(`"path" matched no elements`)
+	if len(members) == 0 {
+		return nil, nil, scimerrors.ErrNoTarget(`"path" matched no elements`)
 	}
-	return matched, nil
+	return members, matched, nil
 }
 
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
