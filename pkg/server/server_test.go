@@ -2317,6 +2317,31 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute.
+	t.Run("rejects a readOnly sub-attribute inside the value", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
+
+		for _, operation := range []patch.Operation{
+			{Op: patch.OpReplace, Path: "parts", Value: json.RawMessage(`[{"serial":"s-1","inspector":"mallory"}]`)},
+			{Op: patch.OpAdd, Path: "parts", Value: json.RawMessage(`{"serial":"s-2","inspector":"mallory"}`)},
+			{Op: patch.OpAdd, Value: json.RawMessage(`{"parts":[{"serial":"s-2","inspector":"mallory"}]}`)},
+		} {
+			request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{operation},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, "operation: %s", operation.Value)
+			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType, "operation: %s", operation.Value)
+		}
+	})
+
 	// RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
 	t.Run("rejects any operator but eq on a writeOnly attribute in a value filter", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -2621,6 +2646,27 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		patched := ReadBodyAs[core.User](t, response)
 		assert.Nil(t, patched.Active)
+	})
+
+	// RFC 7644 Section 3.5.2.2: if a read-only attribute is removed or becomes unassigned, the server SHALL return "mutability".
+	t.Run("rejects a remove that unassigns a readOnly sub-attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
+
+		for _, path := range []string{"parts", `parts[serial eq "s-1"]`} {
+			request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{{Op: patch.OpRemove, Path: path}},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, "path: %s", path)
+			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType, "path: %s", path)
+		}
 	})
 
 	t.Run("rejects a remove without a path with noTarget", func(t *testing.T) {

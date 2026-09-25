@@ -66,13 +66,18 @@ type kit struct {
 }
 
 type part struct {
-	Serial string
-	Built  string `json:",omitempty"`
-	Code   string `json:",omitempty"`
+	Serial    string
+	Built     string `json:",omitempty"`
+	Code      string `json:",omitempty"`
+	Inspector string `json:",omitempty"`
 }
 
 type racingRepository struct {
 	server.Repository[*core.User]
+}
+
+type inspectingRepository struct {
+	server.Repository[*widget]
 }
 
 func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
@@ -102,7 +107,10 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 			WithExtension(core.SchemaEnterpriseUser, enterpriseAttributes()...).
 			WithRepository(users)),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...)),
-		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetAttributes()...)),
+		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetAttributes()...).
+			WithRepository(inspectingRepository{server.NewRepository[*widget](basePath+"/Widgets", core.Schemas{
+				core.NewSchema(widgetSchema).WithName("Widget").With(widgetAttributes()...),
+			})})),
 		server.WithResource(server.NewResource[*kit]("Kit", "/Kits", kitSchema, kitAttributes()...)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
 	}
@@ -122,6 +130,13 @@ func (r racingRepository) Replace(ctx context.Context, user *core.User) (*core.U
 		return nil, scimerrors.ErrPreconditionFailed("resource has changed on the server")
 	}
 	return r.Repository.Replace(ctx, user)
+}
+
+func (r inspectingRepository) Create(ctx context.Context, w *widget) (*widget, error) {
+	for i := range w.Parts {
+		w.Parts[i].Inspector = "qa-bot"
+	}
+	return r.Repository.Create(ctx, w)
 }
 
 func validate(ctx context.Context, token string) (context.Context, error) {

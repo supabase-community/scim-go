@@ -1,6 +1,7 @@
 package patch
 
 import (
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -18,6 +19,9 @@ type target struct {
 func (t *target) write(kind Op, value any) error {
 	if _, ok := value.(map[string]any); t.key() == "" && !ok {
 		return scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
+	}
+	if err := eachSub(t.owner(), value, gateWrite); err != nil {
+		return err
 	}
 	holders, err := t.holders(true)
 	if err != nil {
@@ -39,13 +43,15 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 	values, isObject := value.(map[string]any)
 	switch {
 	case t.key() == "":
-		return merge(holder, values, t.parent, kind)
+		merge(holder, values, t.parent, kind)
+		return nil
 	case isObject && t.attr.Type == core.TypeComplex && !t.attr.MultiValued:
 		nested, err := child(holder, t.key())
 		if err != nil {
 			return err
 		}
-		return merge(nested, values, t.attr, kind)
+		merge(nested, values, t.attr, kind)
+		return nil
 	}
 	set(holder, t.key(), shaped(value, t.attr.MultiValued), kind)
 	return nil
@@ -60,6 +66,11 @@ func (t *target) remove() error {
 		return err
 	}
 	for _, holder := range holders {
+		if err := eachSub(t.attr, holder.Get(t.key()), gateRemove); err != nil {
+			return err
+		}
+	}
+	for _, holder := range holders {
 		holder.Remove(t.key())
 	}
 	return nil
@@ -70,8 +81,13 @@ func (t *target) drop() error {
 	elements := t.elements()
 	kept := make([]any, 0, len(elements))
 	for _, element := range elements {
-		if member, ok := element.(map[string]any); !ok || !t.match(member) {
+		member, ok := element.(map[string]any)
+		if !ok || !t.match(member) {
 			kept = append(kept, element)
+			continue
+		}
+		if err := eachSub(t.attr, member, gateRemove); err != nil {
+			return err
 		}
 	}
 	if len(kept) == len(elements) {
@@ -137,6 +153,13 @@ func (t *target) written(elements []any, kind Op) func(int) bool {
 	return func(int) bool { return true }
 }
 
+func (t *target) owner() *core.Attribute {
+	if t.key() == "" {
+		return t.parent
+	}
+	return t.attr
+}
+
 func (t *target) key() string {
 	if t.match != nil || t.path.SubAttribute != "" {
 		return t.path.SubAttribute
@@ -159,27 +182,44 @@ func matching(value any, match predicate) ([]core.Object, error) {
 }
 
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
-func merge(holder core.Object, values map[string]any, parent *core.Attribute, kind Op) error {
-	if err := gateValue(parent, values); err != nil {
-		return err
-	}
+func merge(holder core.Object, values map[string]any, parent *core.Attribute, kind Op) {
 	keys := newKeys(holder)
 	for name, value := range values {
 		key := keys.resolve(name)
 		holder[key] = appended(holder[key], shaped(value, subAttr(parent, name).MultiValued), kind)
 		keys.add(key)
 	}
+}
+
+func eachSub(attr *core.Attribute, value any, visit func(sub *core.Attribute, held any) error) error {
+	switch v := value.(type) {
+	case map[string]any:
+		for name, held := range v {
+			if err := visit(subAttr(attr, name), held); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, element := range v {
+			if err := eachSub(attr, element, visit); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
 // RFC 7644 Section 3.5.2: each operation against an attribute MUST be compatible with the attribute's mutability.
-func gateValue(attr *core.Attribute, values map[string]any) error {
-	for name := range values {
-		if err := gate(subAttr(attr, name)); err != nil {
-			return err
-		}
+func gateWrite(sub *core.Attribute, _ any) error {
+	return gate(sub)
+}
+
+// RFC 7644 Section 3.5.2.2: removing the value of a read-only attribute SHALL return "mutability".
+func gateRemove(sub *core.Attribute, held any) error {
+	if value.IsUnassigned(held) {
+		return nil
 	}
-	return nil
+	return gate(sub)
 }
 
 func subAttr(parent *core.Attribute, name string) *core.Attribute {
