@@ -14,7 +14,7 @@ import (
 
 // characteristics enforces the attribute characteristics of RFC 7643, Section 2.2, except uniqueness, which the Repository enforces atomically with the write.
 func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) Validator[T] {
-	fields := fieldsOf(schemas)
+	fields := newFields(schemas)
 	constrained := slices.DeleteFunc(slices.Clone(fields), func(field field) bool { return !isConstrained(field) })
 	return func(ctx context.Context, candidate T) error {
 		after, err := core.NewObject(candidate)

@@ -15,7 +15,7 @@ type evaluator struct {
 	fields
 }
 
-func newVisitor(fields fields) protocol.Evaluator[predicate] {
+func newEvaluator(fields fields) protocol.Evaluator[predicate] {
 	return &evaluator{fields: fields}
 }
 

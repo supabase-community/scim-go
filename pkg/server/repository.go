@@ -35,7 +35,7 @@ type repository[T core.Resource] struct {
 
 // NewRepository stores resources in memory, for tests and reference servers.
 func NewRepository[T core.Resource](endpoint string, schemas core.Schemas) Repository[T] {
-	fields := fieldsOf(schemas)
+	fields := newFields(schemas)
 	return &repository[T]{
 		endpoint:  endpoint,
 		schemas:   schemas,
@@ -43,7 +43,7 @@ func NewRepository[T core.Resource](endpoint string, schemas core.Schemas) Repos
 		index:     map[string]int{},
 		owners:    newOwners(fields),
 		fields:    fields,
-		evaluator: newVisitor(fields),
+		evaluator: newEvaluator(fields),
 	}
 }
 
