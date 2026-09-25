@@ -41,7 +41,7 @@ func conforms(field field, candidate core.Object) error {
 	if field.Required && isMissing(field.Attribute, raw) {
 		return scimerrors.ErrInvalidValue(strconv.Quote(field.Name) + " is required")
 	}
-	if isPrimary(field) && count(values, true) > 1 {
+	if isPrimaryField(field) && count(values, true) > 1 {
 		return scimerrors.ErrInvalidValue(`"primary" may be true for at most one value`)
 	}
 	for _, v := range values {
@@ -54,10 +54,10 @@ func conforms(field field, candidate core.Object) error {
 }
 
 func isConstrained(field field) bool {
-	return field.Required || isPrimary(field) || len(field.CanonicalValues) > 0
+	return field.Required || isPrimaryField(field) || len(field.CanonicalValues) > 0
 }
 
-func isPrimary(field field) bool {
+func isPrimaryField(field field) bool {
 	return strings.EqualFold(field.Name, "primary")
 }
 

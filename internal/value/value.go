@@ -23,6 +23,17 @@ func Key(element core.Object) (string, bool) {
 	return key, ok && key != ""
 }
 
+// Primary reports an element of a multi-valued attribute whose "primary" sub-attribute is true, per RFC 7643, Section 2.4.
+func Primary(element any) bool {
+	switch e := element.(type) {
+	case core.Object:
+		return e.Get("primary") == true
+	case map[string]any:
+		return core.Object(e).Get("primary") == true
+	}
+	return false
+}
+
 // Hidden reports an attribute, or the parent it belongs to, whose values SHALL NOT be returned, per RFC 7643, Section 7.
 func Hidden(parent, attribute *core.Attribute) bool {
 	return hides(parent) || hides(attribute)

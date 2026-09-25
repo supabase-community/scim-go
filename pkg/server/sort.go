@@ -7,7 +7,7 @@ import (
 
 func primaryOrFirst(elements []any) (any, bool) {
 	for _, element := range elements {
-		if asObject(element).Get("primary") == true {
+		if value.Primary(element) {
 			return element, true
 		}
 	}

@@ -56,6 +56,15 @@ func TestKey(t *testing.T) {
 	}
 }
 
+func TestPrimary(t *testing.T) {
+	for _, element := range []any{core.Object{"Primary": true}, map[string]any{"primary": true}} {
+		assert.True(t, value.Primary(element), "%#v", element)
+	}
+	for _, element := range []any{nil, "a", core.Object{"primary": false}, map[string]any{"primary": "true"}} {
+		assert.False(t, value.Primary(element), "%#v", element)
+	}
+}
+
 func TestEqual(t *testing.T) {
 	assert.True(t, value.Equal(core.NewAttribute("userName", core.TypeString), "BJensen", "bjensen"))
 	assert.False(t, value.Equal(core.NewAttribute("id", core.TypeString).AsCaseExact(), "BJensen", "bjensen"))
