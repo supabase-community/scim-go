@@ -13,6 +13,7 @@ type visitor[Output any] struct {
 	schemas core.Schemas
 	inner   Evaluator[Output]
 	scope   *core.Attribute
+	uri     bool
 }
 
 func (r *visitor[Output]) VisitEquals(path filter.AttrPath, value any) (Output, error) {
@@ -57,8 +58,8 @@ func (r *visitor[Output]) VisitPresence(path filter.AttrPath) (Output, error) {
 	if err != nil {
 		return zero, err
 	}
-	if value.Hidden(r.parent(path), attribute) {
-		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator \"pr\" is not valid for %q", path.String()))
+	if err := r.conceal(path, attribute, "pr"); err != nil {
+		return zero, err
 	}
 	return r.inner.Present(NewAttribute(attribute, path, r.scope))
 }
@@ -130,8 +131,10 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 	if err != nil {
 		return zero, err
 	}
-	// RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
-	if !value.Allowed(attribute.Type, op) || (value.Hidden(r.parent(path), attribute) && op != filter.OpEquals) {
+	if err := r.conceal(path, attribute, op); err != nil {
+		return zero, err
+	}
+	if !value.Allowed(attribute.Type, op) {
 		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
 	}
 	coerced, ok := attribute.Coerce(literal)
@@ -139,4 +142,18 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 		return zero, scimerrors.ErrInvalidValue(fmt.Sprintf("%q is not a valid value for %q", literal, path.String()))
 	}
 	return r.inner.Compare(NewAttribute(attribute, path, r.scope), op, coerced)
+}
+
+// RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
+func (r *visitor[Output]) conceal(path filter.AttrPath, attribute *core.Attribute, op filter.Operator) error {
+	switch {
+	case !value.Hidden(r.parent(path), attribute):
+		return nil
+	case r.uri:
+		// RFC 7644 Section 7.5.2: a GET filter with sensitive information SHOULD be refused with 403.
+		return scimerrors.ErrSensitive(fmt.Sprintf("a filter on %q must not be sent in a request URI", path.String()))
+	case op != filter.OpEquals:
+		return scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
+	}
+	return nil
 }

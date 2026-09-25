@@ -1186,49 +1186,6 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
-	t.Run("filters a writeOnly password for equality", func(t *testing.T) {
-		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Password: "hunter2"})
-		create(t, srv, &core.User{UserName: "bob", Password: "swordfish"})
-
-		path := basePath + "/Users?" + url.Values{"filter": {`password eq "hunter2"`}}.Encode()
-		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType)))
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
-		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
-	})
-
-	t.Run("rejects any operator but eq on a writeOnly attribute", func(t *testing.T) {
-		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Password: "hunter2"})
-
-		assertInvalidFilter(t, srv, "/Users", `password ne "x"`)
-		assertInvalidFilter(t, srv, "/Users", `password co "nter"`)
-		assertInvalidFilter(t, srv, "/Users", `password sw "hun"`)
-		assertInvalidFilter(t, srv, "/Users", `password ew "r2"`)
-		assertInvalidFilter(t, srv, "/Users", `password gt "a"`)
-		assertInvalidFilter(t, srv, "/Users", `password pr`)
-		assertInvalidFilter(t, srv, "/Users", `not (password pr)`)
-		assertInvalidFilter(t, srv, "/Widgets", `secret sw "s"`)
-	})
-
-	t.Run("rejects any operator but eq on a sub-attribute of a writeOnly attribute", func(t *testing.T) {
-		srv := newTestServer(t)
-		createWidget(t, srv, &widget{Name: "gear", Keys: []map[string]any{{"value": "k3y"}}})
-
-		assertInvalidFilter(t, srv, "/Widgets", `keys.value sw "k"`)
-		assertInvalidFilter(t, srv, "/Widgets", `keys.value pr`)
-		assertInvalidFilter(t, srv, "/Widgets", `keys[value sw "k"]`)
-		assertInvalidFilter(t, srv, "/Widgets", `keys[value pr]`)
-
-		path := basePath + "/Widgets?" + url.Values{"filter": {`keys.value eq "k3y"`}}.Encode()
-		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType)))
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).TotalResults)
-	})
-
 	t.Run("combines clauses with and", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
@@ -3327,5 +3284,31 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 
 // RFC 7644 7.5.2 Disclosure of Sensitive Information in URIs
 func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
-	t.Skip("SHOULD: a GET filter with sensitive data is not rejected with 403 sensitive")
+	// RFC 7644 Section 7.5.2: a GET filter that contains sensitive information SHOULD be refused with 403.
+	t.Run("rejects a GET filter on a writeOnly attribute with sensitive", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Password: "hunter2"})
+		createWidget(t, srv, &widget{Name: "gear", Secret: "s3cret", Keys: []map[string]any{{"value": "k3y"}}})
+
+		for _, query := range []struct{ resource, filter string }{
+			{"/Users", `password eq "hunter2"`},
+			{"/Users", `password sw "hun"`},
+			{"/Users", `password pr`},
+			{"/Users", `not (password pr)`},
+			{"/Users", `userName eq "alice" and password eq "hunter2"`},
+			{"/Widgets", `secret eq "s3cret"`},
+			{"/Widgets", `keys.value eq "k3y"`},
+			{"/Widgets", `keys[value eq "k3y"]`},
+		} {
+			path := basePath + query.resource + "?" + url.Values{"filter": {query.filter}}.Encode()
+			response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType)))
+
+			require.Equal(t, http.StatusForbidden, response.StatusCode, "filter: %s", query.filter)
+			body := ReadBodyAs[scimerrors.Error](t, response)
+			assert.Equal(t, scimerrors.Sensitive, body.ScimType, "filter: %s", query.filter)
+			assert.NotContains(t, body.Detail, "hunter2", "filter: %s", query.filter)
+			assert.NotContains(t, body.Detail, "s3cret", "filter: %s", query.filter)
+			assert.NotContains(t, body.Detail, "k3y", "filter: %s", query.filter)
+		}
+	})
 }

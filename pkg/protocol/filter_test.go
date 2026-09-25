@@ -227,6 +227,31 @@ func TestFilter(t *testing.T) {
 	})
 }
 
+// RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
+func TestFilterOnHiddenAttributes(t *testing.T) {
+	schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+		core.NewAttribute("password", core.TypeString).AsWriteOnly(),
+		core.NewAttribute("keys", core.TypeComplex).AsMultiValued().AsWriteOnly().With(core.NewAttribute("value", core.TypeString)),
+	)}
+
+	t.Run("allows eq", func(t *testing.T) {
+		for _, text := range []string{`password eq "hunter2"`, `keys.value eq "k3y"`, `keys[value eq "k3y"]`} {
+			_, err := protocol.Filter[clause](schemas, text, sqlEvaluator{})
+			require.NoError(t, err, text)
+		}
+	})
+
+	t.Run("rejects any other operator with invalidFilter", func(t *testing.T) {
+		for _, text := range []string{
+			`password ne "x"`, `password co "nter"`, `password sw "hun"`, `password ew "r2"`, `password gt "a"`,
+			`password pr`, `not (password pr)`, `keys.value sw "k"`, `keys.value pr`, `keys[value sw "k"]`, `keys[value pr]`,
+		} {
+			_, err := protocol.Filter[clause](schemas, text, sqlEvaluator{})
+			require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""), text)
+		}
+	})
+}
+
 var sqlOperators = map[filter.Operator]string{
 	filter.OpEquals:            "=",
 	filter.OpNotEquals:         "<>",
