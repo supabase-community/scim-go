@@ -180,7 +180,7 @@ func (r *repository[T]) conflictingAttribute(id string, candidate core.Object) *
 			if field.Uniqueness == core.UniquenessNone {
 				continue
 			}
-			if sharesValue(field.value(other.object), field.value(candidate), field.CaseExact) {
+			if sharesValue(field.Attribute, field.value(other.object), field.value(candidate)) {
 				return field.Attribute
 			}
 		}
@@ -225,7 +225,7 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]row[T], error) 
 		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
 	slices.SortStableFunc(matching, func(a, b row[T]) int {
-		return compareSortKeys(key(a.object), key(b.object), attribute.CaseExact, query.Descending())
+		return compareSortKeys(attribute, key(a.object), key(b.object), query.Descending())
 	})
 
 	return matching, nil
@@ -261,13 +261,13 @@ func schemaURIs(schemas core.Schemas) []core.SchemaURI {
 }
 
 // sharesValue reports whether a and b hold a common value, per RFC 7644 Section 3.4.2.2 (multi-valued "any match").
-func sharesValue(a, b any, caseExact bool) bool {
+func sharesValue(attribute *core.Attribute, a, b any) bool {
 	for _, x := range valuesOf(a) {
 		if value.IsUnassigned(x) {
 			continue
 		}
 		for _, y := range valuesOf(b) {
-			if sameValue(x, y, caseExact) {
+			if sameValue(attribute, x, y) {
 				return true
 			}
 		}

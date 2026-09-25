@@ -48,9 +48,7 @@ func TestApplyValuePathComparisonMatrix(t *testing.T) {
 		{"presence", map[string]any{"value": "a@b.com"}, `value pr`, true},
 		{"presence miss", map[string]any{"score": json.Number("5")}, `value pr`, false},
 
-		{"type mismatch string vs number", map[string]any{"value": "a@b.com"}, `value gt 5`, false},
 		{"native int matches", map[string]any{"score": 5}, `score eq 5`, true},
-		{"bool unsupported op", map[string]any{"active": true}, `active gt false`, false},
 		{"nil value never matches", map[string]any{"value": nil}, `value eq "x"`, false},
 	}
 
@@ -159,6 +157,27 @@ func TestApplyValuePathReadOnlySubAttributeRejected(t *testing.T) {
 
 	member := item["emails"].([]any)[0].(map[string]any)
 	assert.NotContains(t, member, "primary")
+}
+
+// RFC 7644 Section 3.12, Table 9: a PATCH path filter fails like a search filter does.
+func TestApplyValuePathRejectsInvalidComparisons(t *testing.T) {
+	cases := []struct {
+		filter   string
+		scimType scimerrors.ErrorType
+	}{
+		{`value gt 5`, scimerrors.InvalidValue},
+		{`active gt false`, scimerrors.InvalidFilter},
+		{`bogus eq "x"`, scimerrors.InvalidFilter},
+	}
+	for _, tc := range cases {
+		t.Run(tc.filter, func(t *testing.T) {
+			item := map[string]any{"emails": []any{map[string]any{"value": "a@b.com", "active": true}}}
+
+			var scimErr *scimerrors.Error
+			require.ErrorAs(t, apply(item, comparisonSchemas(), operation(patch.OpReplace, `emails[`+tc.filter+`]`, `{"tag":"hit"}`)), &scimErr)
+			assert.Equal(t, tc.scimType, scimErr.ScimType)
+		})
+	}
 }
 
 func comparisonSchemas() []*core.Schema {

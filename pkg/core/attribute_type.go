@@ -40,25 +40,9 @@ func (a AttributeType) coerce(value any) (any, bool) {
 		b, ok := value.(bool)
 		return b, ok
 	case TypeDecimal:
-		switch n := value.(type) {
-		case json.Number:
-			f, err := n.Float64()
-			return f, err == nil
-		case float64:
-			return n, true
-		}
-		return nil, false
+		return decimal(value)
 	case TypeInteger:
-		switch n := value.(type) {
-		case json.Number:
-			i, err := n.Int64()
-			return i, err == nil
-		case int64:
-			return n, true
-		case float64:
-			return int64(n), n == math.Trunc(n)
-		}
-		return nil, false
+		return integer(value)
 	case TypeDateTime:
 		s, ok := value.(string)
 		if !ok {
@@ -66,6 +50,36 @@ func (a AttributeType) coerce(value any) (any, bool) {
 		}
 		t, err := time.Parse(time.RFC3339, s)
 		return t, err == nil
+	}
+	return nil, false
+}
+
+func decimal(value any) (any, bool) {
+	switch n := value.(type) {
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	case float64:
+		return n, true
+	case int64:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	}
+	return nil, false
+}
+
+func integer(value any) (any, bool) {
+	switch n := value.(type) {
+	case json.Number:
+		i, err := n.Int64()
+		return i, err == nil
+	case int64:
+		return n, true
+	case int:
+		return int64(n), true
+	case float64:
+		return int64(n), n == math.Trunc(n)
 	}
 	return nil, false
 }

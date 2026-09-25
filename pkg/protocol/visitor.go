@@ -3,6 +3,7 @@ package protocol
 import (
 	"fmt"
 
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -112,33 +113,18 @@ func (r *visitor[Output]) resolveWithin(path filter.AttrPath) (*core.Attribute, 
 	return attribute, nil
 }
 
-func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, value any) (Output, error) {
+func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, literal any) (Output, error) {
 	var zero Output
 	attribute, err := r.resolve(path)
 	if err != nil {
 		return zero, err
 	}
-	if !operatorAllowed(attribute.Type, op) {
+	if !value.Allowed(attribute.Type, op) {
 		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
 	}
-	coerced, ok := attribute.Coerce(value)
+	coerced, ok := attribute.Coerce(literal)
 	if !ok {
-		return zero, scimerrors.ErrInvalidValue(fmt.Sprintf("%q is not a valid value for %q", value, path.String()))
+		return zero, scimerrors.ErrInvalidValue(fmt.Sprintf("%q is not a valid value for %q", literal, path.String()))
 	}
 	return r.inner.Compare(NewAttribute(attribute, path, r.scope), op, coerced)
-}
-
-func operatorAllowed(attributeType core.AttributeType, op filter.Operator) bool {
-	switch op {
-	case filter.OpEquals, filter.OpNotEquals:
-		return true
-	case filter.OpContains, filter.OpStartsWith, filter.OpEndsWith:
-		return attributeType == core.TypeString || attributeType == core.TypeReference
-	case filter.OpGreaterThan, filter.OpGreaterThanEquals, filter.OpLessThan, filter.OpLessThanEquals:
-		return attributeType == core.TypeString ||
-			attributeType == core.TypeDateTime ||
-			attributeType == core.TypeInteger ||
-			attributeType == core.TypeDecimal
-	}
-	return false
 }

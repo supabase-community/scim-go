@@ -46,7 +46,7 @@ func conforms(field field, candidate core.Object) error {
 	}
 	for _, v := range values {
 		s, ok := v.(string)
-		if ok && s != "" && len(field.CanonicalValues) > 0 && !containsValue(field.CanonicalValues, s, field.CaseExact) {
+		if ok && s != "" && len(field.CanonicalValues) > 0 && !containsValue(field.Attribute, field.CanonicalValues, s) {
 			return scimerrors.ErrInvalidValue(strconv.Quote(s) + " is not a canonical value for " + strconv.Quote(field.Name))
 		}
 	}
@@ -99,7 +99,7 @@ func immutable(fields fields, before, after core.Object) error {
 			continue
 		}
 		assigned := field.value(before)
-		if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !sameValue(assigned, field.value(after), field.CaseExact) {
+		if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !sameValue(field.Attribute, assigned, field.value(after)) {
 			return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
 		}
 		if !field.MultiValued || field.SubAttribute("value") == nil {
@@ -147,24 +147,22 @@ func keyOf(element any) (string, bool) {
 func changed(subs []*core.Attribute, stored, candidate core.Object) *core.Attribute {
 	for _, sub := range subs {
 		assigned := coerce(sub, stored.Get(sub.Name))
-		if !value.IsUnassigned(assigned) && !sameValue(assigned, coerce(sub, candidate.Get(sub.Name)), sub.CaseExact) {
+		if !value.IsUnassigned(assigned) && !sameValue(sub, assigned, coerce(sub, candidate.Get(sub.Name))) {
 			return sub
 		}
 	}
 	return nil
 }
 
-func containsValue(values []string, value string, caseExact bool) bool {
+func containsValue(attribute *core.Attribute, values []string, value string) bool {
 	return slices.ContainsFunc(values, func(candidate string) bool {
-		return sameValue(candidate, value, caseExact)
+		return sameValue(attribute, candidate, value)
 	})
 }
 
-func sameValue(a, b any, caseExact bool) bool {
-	as, aIsString := a.(string)
-	bs, bIsString := b.(string)
-	if aIsString && bIsString && !caseExact {
-		return strings.EqualFold(as, bs)
+func sameValue(attribute *core.Attribute, a, b any) bool {
+	if order, ok := value.Compare(value.Fold(attribute, a), value.Fold(attribute, b)); ok {
+		return order == 0
 	}
 	return reflect.DeepEqual(a, b)
 }

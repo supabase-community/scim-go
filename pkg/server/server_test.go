@@ -2407,6 +2407,40 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.NoTarget, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
+
+	// RFC 7644 Section 3.5.2: a value path filter compares like a search filter, so dateTime values compare as instants.
+	t.Run("matches a value path filter on a dateTime as an instant", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := createWidget(t, srv, &widget{Name: "gear", Parts: []part{{Serial: "s-1", Built: "2026-01-01T00:00:00Z"}}})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+created["id"].(string),
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
+				{Op: patch.OpReplace, Path: `parts[built eq "2026-01-01T01:00:00+01:00"].serial`, Value: json.RawMessage(`"s-2"`)},
+			}}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []part{{Serial: "s-2", Built: "2026-01-01T00:00:00Z"}}, ReadBodyAs[widget](t, response).Parts)
+	})
+
+	// RFC 7644 Section 3.12, Table 9: invalidFilter applies to a PATCH path filter.
+	t.Run("rejects a value path filter on an unknown sub-attribute with invalidFilter", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com", Type: "work"}}})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
+				{Op: patch.OpReplace, Path: `emails[bogus eq "work"].value`, Value: json.RawMessage(`"b@example.com"`)},
+			}}),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
 }
 
 // RFC 7644 3.6 Deleting Resources

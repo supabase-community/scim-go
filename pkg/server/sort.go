@@ -1,9 +1,8 @@
 package server
 
 import (
-	"cmp"
-	"strings"
-	"time"
+	"github.com/supabase-community/scim-go/internal/value"
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 func primaryOrFirst(elements []any) (any, bool) {
@@ -19,16 +18,16 @@ func primaryOrFirst(elements []any) (any, bool) {
 }
 
 // RFC 7644 Section 3.4.2.3: resources without a value are ordered last if ascending and first if descending.
-func compareSortKeys(a, b any, caseExact, descending bool) int {
-	result := compareAscending(a, b, caseExact)
+func compareSortKeys(attribute *core.Attribute, a, b any, descending bool) int {
+	result := compareAscending(attribute, a, b)
 	if descending {
 		return -result
 	}
 	return result
 }
 
-func compareAscending(a, b any, caseExact bool) int {
-	aMissing, bMissing := isMissingSortValue(a), isMissingSortValue(b)
+func compareAscending(attribute *core.Attribute, a, b any) int {
+	aMissing, bMissing := value.IsUnassigned(a), value.IsUnassigned(b)
 	switch {
 	case aMissing && bMissing:
 		return 0
@@ -37,63 +36,6 @@ func compareAscending(a, b any, caseExact bool) int {
 	case bMissing:
 		return -1
 	}
-	return compareSortValue(a, b, caseExact)
-}
-
-func isMissingSortValue(value any) bool {
-	switch v := value.(type) {
-	case nil:
-		return true
-	case string:
-		return v == ""
-	default:
-		return false
-	}
-}
-
-func compareSortValue(a, b any, caseExact bool) int {
-	switch av := a.(type) {
-	case string:
-		bv, ok := b.(string)
-		if !ok {
-			return 0
-		}
-		if !caseExact {
-			av, bv = strings.ToLower(av), strings.ToLower(bv)
-		}
-		return cmp.Compare(av, bv)
-	case bool:
-		bv, ok := b.(bool)
-		if !ok {
-			return 0
-		}
-		return cmp.Compare(boolSortRank(av), boolSortRank(bv))
-	case int64:
-		bv, ok := b.(int64)
-		if !ok {
-			return 0
-		}
-		return cmp.Compare(av, bv)
-	case float64:
-		bv, ok := b.(float64)
-		if !ok {
-			return 0
-		}
-		return cmp.Compare(av, bv)
-	case time.Time:
-		bv, ok := b.(time.Time)
-		if !ok {
-			return 0
-		}
-		return av.Compare(bv)
-	default:
-		return 0
-	}
-}
-
-func boolSortRank(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
+	order, _ := value.Compare(value.Fold(attribute, a), value.Fold(attribute, b))
+	return order
 }

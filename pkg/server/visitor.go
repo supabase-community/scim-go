@@ -1,10 +1,7 @@
 package server
 
 import (
-	"cmp"
 	"slices"
-	"strings"
-	"time"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/filter"
@@ -22,15 +19,15 @@ func newVisitor(fields fields) protocol.Evaluator[predicate] {
 	return &evaluator{fields: fields}
 }
 
-func (e *evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (predicate, error) {
+func (e *evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, literal any) (predicate, error) {
 	read, err := e.reader(attribute)
 	if err != nil {
 		return nil, err
 	}
+	definition := attribute.Definition
+	want := value.Fold(definition, literal)
 	return func(row any) bool {
-		return anyMatch(read(row), func(raw any) bool {
-			return compareValue(op, raw, value, attribute.Definition.CaseExact)
-		})
+		return anyMatch(read(row), func(raw any) bool { return value.Match(op, value.Fold(definition, raw), want) })
 	}, nil
 }
 
@@ -88,87 +85,4 @@ func anyMatch(raw any, pred func(any) bool) bool {
 		return pred(raw)
 	}
 	return slices.ContainsFunc(list, pred)
-}
-
-func compareValue(op filter.Operator, got, want any, caseExact bool) bool {
-	switch g := got.(type) {
-	case string:
-		w, ok := want.(string)
-		return ok && compareStrings(op, g, w, caseExact)
-	case bool:
-		w, ok := want.(bool)
-		return ok && compareBools(op, g, w)
-	case int64:
-		w, ok := want.(int64)
-		return ok && compareOrdered(op, g, w)
-	case float64:
-		w, ok := want.(float64)
-		return ok && compareOrdered(op, g, w)
-	case time.Time:
-		w, ok := want.(time.Time)
-		return ok && compareTime(op, g, w)
-	}
-	return false
-}
-
-func compareStrings(op filter.Operator, got, want string, caseExact bool) bool {
-	if !caseExact {
-		got, want = strings.ToLower(got), strings.ToLower(want)
-	}
-	switch op {
-	case filter.OpContains:
-		return strings.Contains(got, want)
-	case filter.OpStartsWith:
-		return strings.HasPrefix(got, want)
-	case filter.OpEndsWith:
-		return strings.HasSuffix(got, want)
-	default:
-		return compareOrdered(op, got, want)
-	}
-}
-
-func compareBools(op filter.Operator, got, want bool) bool {
-	switch op {
-	case filter.OpEquals:
-		return got == want
-	case filter.OpNotEquals:
-		return got != want
-	}
-	return false
-}
-
-func compareOrdered[T cmp.Ordered](op filter.Operator, got, want T) bool {
-	switch op {
-	case filter.OpEquals:
-		return got == want
-	case filter.OpNotEquals:
-		return got != want
-	case filter.OpGreaterThan:
-		return got > want
-	case filter.OpGreaterThanEquals:
-		return got >= want
-	case filter.OpLessThan:
-		return got < want
-	case filter.OpLessThanEquals:
-		return got <= want
-	}
-	return false
-}
-
-func compareTime(op filter.Operator, got, want time.Time) bool {
-	switch op {
-	case filter.OpEquals:
-		return got.Equal(want)
-	case filter.OpNotEquals:
-		return !got.Equal(want)
-	case filter.OpGreaterThan:
-		return got.After(want)
-	case filter.OpGreaterThanEquals:
-		return !got.Before(want)
-	case filter.OpLessThan:
-		return got.Before(want)
-	case filter.OpLessThanEquals:
-		return !got.After(want)
-	}
-	return false
 }
