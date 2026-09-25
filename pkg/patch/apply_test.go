@@ -590,6 +590,16 @@ func TestApplyExtensionPath(t *testing.T) {
 	})
 }
 
+// RFC 7644 Section 3.5.2.2: if no other values remain after removal, the attribute SHALL be considered unassigned.
+func TestApplyRemoveLastExtensionValueUnassignsTheExtension(t *testing.T) {
+	uri := string(core.SchemaEnterpriseUser)
+	item := map[string]any{"userName": "bjensen", uri: map[string]any{"department": "eng"}}
+
+	require.NoError(t, apply(item, enterpriseSchemas(), operation(patch.OpRemove, uri+":department", "")))
+
+	assert.Equal(t, map[string]any{"userName": "bjensen"}, item)
+}
+
 func TestApplyRemoveReadOnlyRejected(t *testing.T) {
 	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
 

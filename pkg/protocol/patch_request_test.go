@@ -127,3 +127,39 @@ func TestPatchRequestPatchTypedUser(t *testing.T) {
 		assert.Equal(t, "bjensen", patched.UserName)
 	})
 }
+
+func TestPatchRequestPatchReadOnly(t *testing.T) {
+	uri := string(core.SchemaEnterpriseUser)
+	schemas := core.Schemas{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("userName", core.TypeString),
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("serial", core.TypeString),
+				core.NewAttribute("inspector", core.TypeString).AsReadOnly(),
+			),
+		),
+		(&core.Schema{ID: core.SchemaEnterpriseUser}).With(
+			core.NewAttribute("department", core.TypeString),
+		),
+	}
+	patched := func(t *testing.T, resource map[string]any, operation patch.Operation) map[string]any {
+		t.Helper()
+		out, err := (&protocol.PatchRequest{Operations: []patch.Operation{operation}}).Patch(resource, schemas)
+		require.NoError(t, err)
+		return out
+	}
+
+	// RFC 7644 Section 3.5.2.2: if no other values remain after removal, the attribute SHALL be considered unassigned.
+	t.Run("drops an extension whose last value is removed", func(t *testing.T) {
+		out := patched(t, map[string]any{"userName": "bjensen", uri: map[string]any{"department": "eng"}}, patch.Operation{Op: patch.OpRemove, Path: uri + ":department"})
+
+		assert.Equal(t, map[string]any{"userName": "bjensen"}, out)
+	})
+
+	// RFC 7643 Section 7: a readOnly attribute SHALL NOT be modified.
+	t.Run("keeps readOnly sub-attributes of elements the operation does not target", func(t *testing.T) {
+		out := patched(t, map[string]any{"userName": "bjensen", "parts": []any{map[string]any{"serial": "s-1", "inspector": "qa-bot"}}}, patch.Operation{Op: patch.OpReplace, Path: "userName", Value: json.RawMessage(`"babs"`)})
+
+		assert.Equal(t, []any{map[string]any{"serial": "s-1", "inspector": "qa-bot"}}, out["parts"])
+	})
+}

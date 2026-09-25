@@ -73,7 +73,15 @@ func (t *target) remove() error {
 	for _, holder := range holders {
 		holder.Remove(t.key())
 	}
+	t.unassignEmptyExtension()
 	return nil
+}
+
+// RFC 7644 Section 3.5.2.2: if no other values remain after removal, the attribute SHALL be considered unassigned.
+func (t *target) unassignEmptyExtension() {
+	if container, _ := t.container(false); t.extension != "" && len(container) == 0 {
+		t.root.Remove(t.extension)
+	}
 }
 
 func (t *target) drop() error {

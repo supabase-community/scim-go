@@ -2317,6 +2317,25 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 7: a readOnly attribute SHALL NOT be modified.
+	t.Run("keeps readOnly sub-attributes the operations do not target", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "name", Value: json.RawMessage(`"doohickey"`)}},
+			}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []part{{Serial: "s-1", Inspector: "qa-bot"}}, ReadBodyAs[widget](t, response).Parts)
+	})
+
 	// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute.
 	t.Run("rejects a readOnly sub-attribute inside the value", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -2726,7 +2745,7 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		))
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, []part{{Serial: "s-2", Built: "2026-01-01T00:00:00Z"}}, ReadBodyAs[widget](t, response).Parts)
+		assert.Equal(t, []part{{Serial: "s-2", Built: "2026-01-01T00:00:00Z", Inspector: "qa-bot"}}, ReadBodyAs[widget](t, response).Parts)
 	})
 
 	// RFC 7644 Section 3.12, Table 9: invalidFilter applies to a PATCH path filter.

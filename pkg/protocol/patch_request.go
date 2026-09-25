@@ -46,7 +46,7 @@ func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error)
 	if err != nil {
 		return zero, err
 	}
-	return fromDocument[T](writable(patched, existing, schemas))
+	return fromDocument[T](patched)
 }
 
 func isPatchOp(uri core.SchemaURI) bool {
