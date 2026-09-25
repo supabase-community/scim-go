@@ -9,8 +9,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-const opPresent filter.Operator = "pr"
-
 type visitor[Output any] struct {
 	schemas core.Schemas
 	inner   Evaluator[Output]
@@ -60,7 +58,7 @@ func (r *visitor[Output]) VisitPresence(path filter.AttrPath) (Output, error) {
 	if err != nil {
 		return zero, err
 	}
-	if err := r.conceal(path, attribute, opPresent); err != nil {
+	if err := r.conceal(path, attribute, filter.OpPresent); err != nil {
 		return zero, err
 	}
 	return r.inner.Present(NewAttribute(attribute, path, r.scope))
@@ -151,7 +149,7 @@ func (r *visitor[Output]) conceal(path filter.AttrPath, attribute *core.Attribut
 	switch {
 	case !value.Hidden(r.parent(path), attribute):
 		return nil
-	case r.inURI && op != opPresent:
+	case r.inURI && op != filter.OpPresent:
 		// RFC 7644 Section 7.5.2: a GET filter that contains sensitive information SHOULD be refused with 403.
 		return scimerrors.ErrSensitive(fmt.Sprintf("a filter on %q must not be sent in a request URI", path.String()))
 	case op != filter.OpEquals:

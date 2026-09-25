@@ -70,7 +70,7 @@ func dispatch[Output any](v Visitor[Output], n *Node) (Output, error) {
 		return v.VisitLessThan(attr, n.Value())
 	case OpLessThanEquals:
 		return v.VisitLessThanEquals(attr, n.Value())
-	case "pr":
+	case OpPresent:
 		return v.VisitPresence(attr)
 	default:
 		return zero, fmt.Errorf("scim: unrecognized node shape: %+v", n.raw)

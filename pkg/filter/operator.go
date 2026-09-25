@@ -1,6 +1,6 @@
 package filter
 
-// Operator is a SCIM comparison operator, per RFC 7644, Section 3.4.2.2.
+// Operator is a SCIM attribute operator, per RFC 7644, Section 3.4.2.2, Table 3.
 type Operator string
 
 const (
@@ -13,4 +13,5 @@ const (
 	OpGreaterThanEquals Operator = "ge"
 	OpLessThan          Operator = "lt"
 	OpLessThanEquals    Operator = "le"
+	OpPresent           Operator = "pr"
 )
