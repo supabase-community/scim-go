@@ -16,12 +16,13 @@ import (
 // characteristics enforces the attribute characteristics of RFC 7643, Section 2.2, except uniqueness, which the Repository enforces atomically with the write.
 func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) Validator[T] {
 	fields := fieldsOf(schemas)
+	constrained := slices.DeleteFunc(slices.Clone(fields), func(field field) bool { return !isConstrained(field) })
 	return func(ctx context.Context, candidate T) error {
 		after, err := core.NewObject(candidate)
 		if err != nil {
 			return err
 		}
-		for _, field := range fields {
+		for _, field := range constrained {
 			if err := conforms(field, after); err != nil {
 				return err
 			}
@@ -41,7 +42,7 @@ func conforms(field field, candidate core.Object) error {
 	if field.Required && isMissing(field.Attribute, raw) {
 		return scimerrors.ErrInvalidValue(strconv.Quote(field.Name) + " is required")
 	}
-	if strings.EqualFold(field.Name, "primary") && count(values, true) > 1 {
+	if isPrimary(field) && count(values, true) > 1 {
 		return scimerrors.ErrInvalidValue(`"primary" may be true for at most one value`)
 	}
 	for _, v := range values {
@@ -51,6 +52,14 @@ func conforms(field field, candidate core.Object) error {
 		}
 	}
 	return nil
+}
+
+func isConstrained(field field) bool {
+	return field.Required || isPrimary(field) || len(field.CanonicalValues) > 0
+}
+
+func isPrimary(field field) bool {
+	return strings.EqualFold(field.Name, "primary")
 }
 
 func isMissing(attribute *core.Attribute, raw any) bool {
