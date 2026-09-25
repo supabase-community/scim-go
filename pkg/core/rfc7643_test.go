@@ -64,6 +64,7 @@ func TestRFC7643(t *testing.T) {
 		}{
 			{schemas[0], core.UserAttributes(), []string{"addresses.primary"}},
 			{schemas[1], core.GroupAttributes(), []string{"displayName.required", "members.display"}},
+			{schemas[2], core.EnterpriseUserAttributes(), nil},
 		} {
 			t.Run(string(tc.schema.ID), func(t *testing.T) {
 				assert.Equal(t, tc.deviations, deviations("", tc.schema.Attributes, tc.attributes))

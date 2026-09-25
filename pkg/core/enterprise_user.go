@@ -16,3 +16,19 @@ type Manager struct {
 	Ref         string `json:"$ref,omitempty"`
 	DisplayName string `json:"displayName,omitempty"`
 }
+
+// EnterpriseUserAttributes returns the attributes of the enterprise User extension, per RFC 7643, Section 4.3.
+func EnterpriseUserAttributes() Attributes {
+	return Attributes{
+		NewAttribute("employeeNumber", TypeString),
+		NewAttribute("costCenter", TypeString),
+		NewAttribute("organization", TypeString),
+		NewAttribute("division", TypeString),
+		NewAttribute("department", TypeString),
+		NewAttribute("manager", TypeComplex).With(
+			NewAttribute("value", TypeString),
+			NewAttribute("$ref", TypeReference).Referencing("User"),
+			NewAttribute("displayName", TypeString).AsReadOnly(),
+		),
+	}
+}
