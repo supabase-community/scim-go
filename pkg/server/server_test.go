@@ -1879,6 +1879,42 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, "Jensen", ReadBodyAs[core.User](t, response).Name.FamilyName)
 	})
 
+	// RFC 7644 Section 3.5.1: if values are already set for an immutable attribute, the input values MUST match.
+	t.Run("rejects a replace that changes an immutable sub-attribute of a group member", func(t *testing.T) {
+		for _, test := range []struct {
+			name    string
+			members []core.Member
+			status  int
+		}{
+			{"rejects a changed type", []core.Member{{Value: "u-1", Type: "Group"}}, http.StatusBadRequest},
+			{"rejects an omitted type", []core.Member{{Value: "u-1"}}, http.StatusBadRequest},
+			{"accepts a new member list", []core.Member{{Value: "u-2", Type: "User"}}, http.StatusOK},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				srv := newTestServer(t)
+				created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+					WithBearerToken(validToken),
+					WithContentType(protocol.MediaType),
+					WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+				))
+				require.Equal(t, http.StatusCreated, created.StatusCode)
+				id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+				request := Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+					WithBearerToken(validToken),
+					WithContentType(protocol.MediaType),
+					WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: test.members}),
+				)
+				response := Response(t, srv, request)
+
+				require.Equal(t, test.status, response.StatusCode)
+				if test.status == http.StatusBadRequest {
+					assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+				}
+			})
+		}
+	})
+
 	// RFC 7644 Section 3.5.1: values provided for readOnly attributes SHALL be ignored.
 	t.Run("keeps the stored readOnly meta.created value", func(t *testing.T) {
 		srv := newTestServer(t)
