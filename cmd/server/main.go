@@ -38,7 +38,7 @@ func main() {
 	srv := server.New(config,
 		server.ErrorHandler(errorHandler),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
-		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupAttributes()...)),
+		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
 				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {
@@ -89,17 +89,5 @@ func userAttributes() core.Attributes {
 		),
 		core.NewAttribute("active", core.TypeBoolean),
 		core.NewMultiValuedAttribute("emails", "work", "home", "other"),
-	}
-}
-
-func groupAttributes() core.Attributes {
-	return core.Attributes{
-		core.NewAttribute("displayName", core.TypeString).AsRequired(),
-		core.NewAttribute("members", core.TypeComplex).AsMultiValued().With(
-			core.NewAttribute("value", core.TypeString),
-			core.NewAttribute("$ref", core.TypeReference),
-			core.NewAttribute("type", core.TypeString).Suggesting("User", "Group"),
-			core.NewAttribute("display", core.TypeString),
-		),
 	}
 }

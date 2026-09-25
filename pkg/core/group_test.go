@@ -56,3 +56,20 @@ func TestGroup(t *testing.T) {
 		}`, string(body))
 	})
 }
+
+func TestGroupAttributes(t *testing.T) {
+	attributes := core.GroupAttributes()
+
+	t.Run("requires displayName", func(t *testing.T) {
+		require.True(t, attributes.Lookup("displayName").Required)
+	})
+
+	t.Run("makes every sub-attribute of members immutable", func(t *testing.T) {
+		members := attributes.Lookup("members")
+
+		require.True(t, members.MultiValued)
+		for _, sub := range members.SubAttributes {
+			require.Equal(t, core.MutabilityImmutable, sub.Mutability, sub.Name)
+		}
+	})
+}

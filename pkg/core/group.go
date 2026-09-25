@@ -14,3 +14,16 @@ type Group struct {
 	DisplayName string   `json:"displayName"`
 	Members     []Member `json:"members,omitempty"`
 }
+
+// GroupAttributes returns the attributes of the Group schema, per RFC 7643, Section 4.2.
+func GroupAttributes() Attributes {
+	return Attributes{
+		NewAttribute("displayName", TypeString).AsRequired(),
+		NewAttribute("members", TypeComplex).AsMultiValued().With(
+			NewAttribute("value", TypeString).AsImmutable(),
+			NewAttribute("$ref", TypeReference).Referencing("User", "Group").AsImmutable(),
+			NewAttribute("type", TypeString).Suggesting("User", "Group").AsImmutable(),
+			NewAttribute("display", TypeString).AsImmutable(),
+		),
+	}
+}

@@ -89,7 +89,7 @@ func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).
 			WithExtension(core.SchemaEnterpriseUser, enterpriseAttributes()...).
 			WithRepository(users)),
-		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, groupAttributes()...)),
+		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...)),
 		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetAttributes()...)),
 		server.WithResource(server.NewResource[*kit]("Kit", "/Kits", kitSchema, kitAttributes()...)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
@@ -141,17 +141,6 @@ func enterpriseAttributes() core.Attributes {
 	return core.Attributes{
 		core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
 		core.NewAttribute("department", core.TypeString),
-	}
-}
-
-func groupAttributes() core.Attributes {
-	return core.Attributes{
-		core.NewAttribute("displayName", core.TypeString).AsRequired(),
-		core.NewAttribute("members", core.TypeComplex).AsMultiValued().With(
-			core.NewAttribute("value", core.TypeString).AsImmutable(),
-			core.NewAttribute("$ref", core.TypeReference).Referencing("User", "Group").AsImmutable(),
-			core.NewAttribute("type", core.TypeString).Suggesting("User", "Group").AsImmutable(),
-		),
 	}
 }
 
