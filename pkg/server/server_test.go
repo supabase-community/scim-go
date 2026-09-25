@@ -2795,6 +2795,18 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.Equal(t, basePath+"/ServiceProviderConfig", config.Meta.Location)
 	})
 
+	t.Run("keeps a location set by the caller", func(t *testing.T) {
+		location := "https://example.com" + basePath + "/ServiceProviderConfig"
+		config := fullServiceProviderConfig()
+		config.Meta.Location = location
+		srv := newTestServer(t, withConfig(config))
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig", WithBearerToken(validToken)))
+
+		assert.Equal(t, location, ReadBodyAs[core.ServiceProviderConfig](t, response).Meta.Location)
+		assert.Equal(t, location, response.Header.Get("Content-Location"))
+	})
+
 	t.Run("advertises the custom max results configured via Filtering", func(t *testing.T) {
 		config := core.NewServiceProviderConfig().Sorting().Filtering(2).Patching().Versioning()
 		srv := newTestServer(t, withConfig(config))

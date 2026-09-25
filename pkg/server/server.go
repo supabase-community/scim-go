@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"net/http"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -25,7 +26,7 @@ type Server struct {
 
 func New(basePath string, config *core.ServiceProviderConfig, options ...Option[*Server]) *Server {
 	mux := http.NewServeMux()
-	config.Meta.Location = basePath + "/ServiceProviderConfig"
+	config.Meta.Location = cmp.Or(config.Meta.Location, basePath+"/ServiceProviderConfig")
 	s := &Server{
 		mux:          mux,
 		basePath:     basePath,
