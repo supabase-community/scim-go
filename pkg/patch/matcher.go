@@ -74,8 +74,12 @@ func (m matcher) VisitLessThanEquals(attr filter.AttrPath, value any) (predicate
 }
 
 func (m matcher) VisitPresence(path filter.AttrPath) (predicate, error) {
-	if _, err := m.resolve(path); err != nil {
+	sub, err := m.resolve(path)
+	if err != nil {
 		return nil, err
+	}
+	if value.Hidden(m.attr, sub) {
+		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator \"pr\" is not valid for %q", path.String()))
 	}
 	return func(member map[string]any) bool { return !value.IsUnassigned(core.Object(member).Get(path.Name)) }, nil
 }
@@ -115,7 +119,7 @@ func (m matcher) check(attr *core.Attribute, path filter.AttrPath, op filter.Ope
 	switch {
 	case attr == nil:
 		return nil
-	case !value.Allowed(attr.Type, op):
+	case !value.Allowed(attr.Type, op) || (value.Hidden(m.attr, attr) && op != filter.OpEquals):
 		return scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
 	}
 	if _, ok := attr.Coerce(want); !ok {

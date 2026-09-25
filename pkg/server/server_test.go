@@ -2293,6 +2293,27 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
+	t.Run("rejects any operator but eq on a writeOnly attribute in a value filter", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1", Code: "c0de"}}, Keys: []map[string]any{{"value": "k3y"}}})["id"].(string)
+
+		for _, path := range []string{`parts[code sw "c"].serial`, `parts[code pr].serial`, `keys[value sw "k"].value`, `keys[value pr]`} {
+			request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{{Op: patch.OpReplace, Path: path, Value: json.RawMessage(`"x"`)}},
+				}),
+			)
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, path)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType, path)
+		}
+	})
+
 	// RFC 7644 Section 3.5.2: the body carries the PatchOp schema and one or more operations.
 	t.Run("rejects a patch without the PatchOp schema or operations", func(t *testing.T) {
 		srv := newTestServer(t)
