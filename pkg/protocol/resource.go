@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -97,29 +98,38 @@ func readDocument(r io.Reader) (map[string]any, error) {
 	if document == nil {
 		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
 	}
-	if !distinctNames(document) {
-		return nil, scimerrors.ErrInvalidSyntax("request body repeats an attribute name")
+	if !wellFormedNames(document) {
+		return nil, scimerrors.ErrInvalidSyntax("request body has an attribute name that is not US-ASCII or repeats in another case")
 	}
 	return document, nil
 }
 
-// RFC 7643 Section 2.1: attribute names are case insensitive.
-func distinctNames(value any) bool {
+// RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.
+func wellFormedNames(value any) bool {
 	switch v := value.(type) {
 	case map[string]any:
 		seen := make(map[string]struct{}, len(v))
 		for name, element := range v {
 			folded := strings.ToLower(name)
-			if _, repeated := seen[folded]; repeated || !distinctNames(element) {
+			if _, repeated := seen[folded]; repeated || !ascii(name) || !wellFormedNames(element) {
 				return false
 			}
 			seen[folded] = struct{}{}
 		}
 	case []any:
 		for _, element := range v {
-			if !distinctNames(element) {
+			if !wellFormedNames(element) {
 				return false
 			}
+		}
+	}
+	return true
+}
+
+func ascii(name string) bool {
+	for i := 0; i < len(name); i++ {
+		if name[i] >= utf8.RuneSelf {
+			return false
 		}
 	}
 	return true

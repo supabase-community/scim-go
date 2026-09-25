@@ -803,8 +803,8 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.NotEqual(t, 2000, created.Meta.Created.Year())
 	})
 
-	// RFC 7643 Section 2.1: attribute names are case insensitive.
-	t.Run("rejects an attribute name repeated in another case", func(t *testing.T) {
+	// RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.
+	t.Run("rejects an attribute name that is not US-ASCII or repeats in another case", func(t *testing.T) {
 		srv := newTestServer(t)
 		extension := string(core.SchemaEnterpriseUser)
 
@@ -812,6 +812,8 @@ func TestRFC7644CreatingResources(t *testing.T) {
 			`{"userName":"alice","USERNAME":"bob"}`,
 			`{"userName":"alice","` + extension + `":{"department":"ops"},"` + strings.ToLower(extension) + `":{"manager":{"displayName":"forged"}}}`,
 			`{"userName":"alice","` + extension + `":{"manager":{"value":"m-1"},"MANAGER":{"displayName":"forged"}}}`,
+			`{"userName":"alice","` + extension + `":{"department":"ops"},"` + strings.Replace(extension, "enterprise", "enterpri\u017fe", 1) + `":{"manager":{"displayName":"forged"}}}`,
+			`{"userName":"alice","nick\u00e9":"bob"}`,
 		} {
 			request := Request(t, srv, http.MethodPost, basePath+"/Users",
 				WithBearerToken(validToken),
