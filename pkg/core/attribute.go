@@ -28,13 +28,9 @@ func NewAttribute(name string, attributeType AttributeType) *Attribute {
 
 // NewMultiValuedAttribute describes a multi-valued attribute of Element, per RFC 7643, Section 2.4.
 func NewMultiValuedAttribute(name string, types ...string) *Attribute {
-	return NewAttribute(name, TypeComplex).AsMultiValued().With(
-		NewAttribute("value", TypeString),
-		NewAttribute("display", TypeString),
-		NewAttribute("type", TypeString).Suggesting(types...),
-		NewAttribute("primary", TypeBoolean),
-		NewAttribute("$ref", TypeReference),
-	)
+	attribute := elements(name, NewAttribute("value", TypeString), types...)
+	attribute.SubAttributes = append(attribute.SubAttributes, NewAttribute("$ref", TypeReference))
+	return attribute
 }
 
 func (a *Attribute) AsRequired() *Attribute {
@@ -112,4 +108,13 @@ func (a *Attribute) Coerce(value any) (any, bool) {
 		return nil, true
 	}
 	return a.Type.coerce(value)
+}
+
+func elements(name string, value *Attribute, types ...string) *Attribute {
+	return NewAttribute(name, TypeComplex).AsMultiValued().With(
+		value,
+		NewAttribute("display", TypeString),
+		NewAttribute("type", TypeString).Suggesting(types...),
+		NewAttribute("primary", TypeBoolean),
+	)
 }

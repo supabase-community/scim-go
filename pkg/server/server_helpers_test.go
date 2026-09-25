@@ -125,16 +125,10 @@ func fullServiceProviderConfig() *core.ServiceProviderConfig {
 }
 
 func userAttributes() core.Attributes {
-	return core.Attributes{
-		core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
-		core.NewAttribute("name", core.TypeComplex).With(
-			core.NewAttribute("givenName", core.TypeString),
-			core.NewAttribute("familyName", core.TypeString).AsImmutable(),
-		),
-		core.NewAttribute("userType", core.TypeString).Suggesting("employee", "contractor"),
-		core.NewAttribute("active", core.TypeBoolean),
-		core.NewMultiValuedAttribute("emails", "work", "home", "other"),
-	}
+	attributes := core.UserAttributes()
+	attributes.Lookup("name").SubAttribute("familyName").AsImmutable()
+	attributes.Lookup("userType").Suggesting("employee", "contractor")
+	return attributes
 }
 
 func enterpriseAttributes() core.Attributes {

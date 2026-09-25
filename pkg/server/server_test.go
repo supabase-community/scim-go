@@ -1635,9 +1635,9 @@ func TestRFC7644Pagination(t *testing.T) {
 func TestRFC7644Attributes(t *testing.T) {
 	srv := newTestServer(t)
 	id, _ := create(t, srv, &core.User{
-		UserName:    "bjensen",
-		DisplayName: "Babs Jensen",
-		Emails:      []core.Email{{Value: "bjensen@example.com", Type: "work"}},
+		UserName:       "bjensen",
+		Emails:         []core.Email{{Value: "bjensen@example.com", Type: "work"}},
+		EnterpriseUser: &core.EnterpriseUser{Department: "Tour Operations", CostCenter: "4130"},
 	})
 	get := func(t *testing.T, path string) (int, map[string]any) {
 		t.Helper()
@@ -1663,7 +1663,9 @@ func TestRFC7644Attributes(t *testing.T) {
 
 	t.Run("omits attributes the schema does not declare", func(t *testing.T) {
 		_, body := get(t, "/Users/"+id)
-		assert.NotContains(t, body, "displayName")
+		enterprise := body[string(core.SchemaEnterpriseUser)].(map[string]any)
+		assert.Equal(t, "Tour Operations", enterprise["department"])
+		assert.NotContains(t, enterprise, "costCenter")
 	})
 
 	t.Run("rejects attributes together with excludedAttributes", func(t *testing.T) {

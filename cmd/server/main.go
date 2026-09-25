@@ -37,7 +37,7 @@ func main() {
 
 	srv := server.New(config,
 		server.ErrorHandler(errorHandler),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
@@ -77,17 +77,5 @@ func main() {
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		logError(err)
-	}
-}
-
-func userAttributes() core.Attributes {
-	return core.Attributes{
-		core.NewAttribute("userName", core.TypeString).AsRequired().UniqueOn(core.UniquenessServer),
-		core.NewAttribute("name", core.TypeComplex).With(
-			core.NewAttribute("givenName", core.TypeString),
-			core.NewAttribute("familyName", core.TypeString),
-		),
-		core.NewAttribute("active", core.TypeBoolean),
-		core.NewMultiValuedAttribute("emails", "work", "home", "other"),
 	}
 }

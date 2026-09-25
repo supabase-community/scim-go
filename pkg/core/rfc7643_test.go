@@ -1,11 +1,14 @@
 package core_test
 
 import (
+	"encoding/json"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimtest"
 )
@@ -49,6 +52,61 @@ func TestRFC7643(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("declares the attributes of the resource schemas of Section 8.7.1", func(t *testing.T) {
+		var schemas []core.Schema
+		require.NoError(t, json.Unmarshal(scimtest.Golden(t, scimtest.RFC7643ResourceSchemas), &schemas))
+
+		for _, tc := range []struct {
+			schema     core.Schema
+			attributes core.Attributes
+			deviations []string
+		}{
+			{schemas[0], core.UserAttributes(), []string{"addresses.primary"}},
+			{schemas[1], core.GroupAttributes(), []string{"displayName.required", "members.display"}},
+		} {
+			t.Run(string(tc.schema.ID), func(t *testing.T) {
+				assert.Equal(t, tc.deviations, deviations("", tc.schema.Attributes, tc.attributes))
+			})
+		}
+	})
+}
+
+func deviations(path string, want, got core.Attributes) []string {
+	var paths []string
+	for _, attribute := range got {
+		name := path + attribute.Name
+		expected := want.Lookup(attribute.Name)
+		if expected == nil {
+			paths = append(paths, name)
+			continue
+		}
+		for _, characteristic := range []struct {
+			name string
+			same bool
+		}{
+			{"type", expected.Type == attribute.Type},
+			{"multiValued", expected.MultiValued == attribute.MultiValued},
+			{"required", expected.Required == attribute.Required},
+			{"caseExact", expected.CaseExact == attribute.CaseExact},
+			{"mutability", expected.Mutability == attribute.Mutability},
+			{"returned", expected.Returned == attribute.Returned},
+			{"uniqueness", expected.Uniqueness == "" || expected.Uniqueness == attribute.Uniqueness},
+			{"canonicalValues", slices.Equal(expected.CanonicalValues, attribute.CanonicalValues)},
+			{"referenceTypes", slices.Equal(expected.ReferenceTypes, attribute.ReferenceTypes)},
+		} {
+			if !characteristic.same {
+				paths = append(paths, name+"."+characteristic.name)
+			}
+		}
+		paths = append(paths, deviations(name+".", expected.SubAttributes, attribute.SubAttributes)...)
+	}
+	for _, attribute := range want {
+		if got.Lookup(attribute.Name) == nil {
+			paths = append(paths, path+attribute.Name+".missing")
+		}
+	}
+	return paths
 }
 
 func leaves(paths []string) []string {
