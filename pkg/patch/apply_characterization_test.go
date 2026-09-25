@@ -124,6 +124,14 @@ func TestApplySubAttributeOnNonComplexRejected(t *testing.T) {
 	assert.Equal(t, scimerrors.InvalidPath, scimErr.ScimType)
 }
 
+func TestApplySubAttributeOfMultiValuedWriteRejected(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@b.com"}}}
+
+	var scimErr *scimerrors.Error
+	require.ErrorAs(t, apply(item, userSchemas(), operation(patch.OpReplace, "emails.type", `"work"`)), &scimErr)
+	assert.Equal(t, scimerrors.InvalidPath, scimErr.ScimType)
+}
+
 func TestApplyRejectsMalformedValueJSON(t *testing.T) {
 	var scimErr *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, patch.Operation{

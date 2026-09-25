@@ -140,6 +140,26 @@ func TestApplyPrimaryDemotesTheOtherValues(t *testing.T) {
 		assert.Equal(t, []any{true, true}, primaries(item))
 	})
 
+	t.Run("when a value added without a path is primary", func(t *testing.T) {
+		item := core.Object{"emails": []any{map[string]any{"type": "work", "primary": true}}}
+
+		require.NoError(t, apply(item, nil, patch.Operation{Op: patch.OpAdd, Value: json.RawMessage(`{"emails":[{"type":"home","primary":true}]}`)}))
+
+		assert.Equal(t, []any{false, true}, primaries(item))
+	})
+
+	t.Run("but keeps every value a value path makes primary", func(t *testing.T) {
+		item := core.Object{"emails": []any{
+			map[string]any{"type": "work"},
+			map[string]any{"type": "work"},
+			map[string]any{"type": "home", "primary": true},
+		}}
+
+		require.NoError(t, apply(item, nil, operation(patch.OpReplace, `emails[type eq "work"].primary`, `true`)))
+
+		assert.Equal(t, []any{true, true, false}, primaries(item))
+	})
+
 	t.Run("but keeps two primaries the client sent in one value", func(t *testing.T) {
 		item := core.Object{"emails": []any{}}
 
@@ -486,6 +506,14 @@ func TestApplyExtensionPath(t *testing.T) {
 
 		assert.Equal(t, map[string]any{"employeeNumber": "E1"}, extension(item))
 		assert.Equal(t, "top", item["department"])
+	})
+
+	t.Run("does not add the extension object when removing from it", func(t *testing.T) {
+		item := map[string]any{"userName": "bjensen"}
+
+		require.NoError(t, apply(item, enterpriseSchemas(), operation(patch.OpRemove, uri+":department", "")))
+
+		assert.Equal(t, map[string]any{"userName": "bjensen"}, item)
 	})
 
 	t.Run("enforces the mutability of an extension attribute", func(t *testing.T) {
