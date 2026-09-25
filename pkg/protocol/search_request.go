@@ -42,7 +42,7 @@ func (s *SearchRequest) Descending() bool {
 // Validate rejects an invalid filter or sortBy before any Repository sees it, per RFC 7644, Section 3.4.2.
 func (s *SearchRequest) Validate(schemas core.Schemas) error {
 	if s.Filter != "" {
-		if _, err := evaluate(&visitor[struct{}]{schemas: schemas, inner: accept{}, uri: true}, s.Filter); err != nil {
+		if _, err := evaluate(&visitor[struct{}]{schemas: schemas, inner: accept{}, inURI: true}, s.Filter); err != nil {
 			return err
 		}
 	}

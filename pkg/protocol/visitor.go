@@ -13,7 +13,7 @@ type visitor[Output any] struct {
 	schemas core.Schemas
 	inner   Evaluator[Output]
 	scope   *core.Attribute
-	uri     bool
+	inURI   bool
 }
 
 func (r *visitor[Output]) VisitEquals(path filter.AttrPath, value any) (Output, error) {
@@ -149,7 +149,7 @@ func (r *visitor[Output]) conceal(path filter.AttrPath, attribute *core.Attribut
 	switch {
 	case !value.Hidden(r.parent(path), attribute):
 		return nil
-	case r.uri:
+	case r.inURI:
 		// RFC 7644 Section 7.5.2: a GET filter with sensitive information SHOULD be refused with 403.
 		return scimerrors.ErrSensitive(fmt.Sprintf("a filter on %q must not be sent in a request URI", path.String()))
 	case op != filter.OpEquals:
