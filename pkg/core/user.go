@@ -49,23 +49,6 @@ type Name struct {
 	HonorificSuffix string `json:"honorificSuffix,omitempty"`
 }
 
-// Manager is the user's manager in the enterprise extension, per RFC 7643, Section 4.3.
-type Manager struct {
-	Value       string `json:"value,omitempty"`
-	Ref         string `json:"$ref,omitempty"`
-	DisplayName string `json:"displayName,omitempty"`
-}
-
-// EnterpriseUser is the enterprise user schema extension of RFC 7643, Section 4.3.
-type EnterpriseUser struct {
-	EmployeeNumber string   `json:"employeeNumber,omitempty"`
-	CostCenter     string   `json:"costCenter,omitempty"`
-	Organization   string   `json:"organization,omitempty"`
-	Division       string   `json:"division,omitempty"`
-	Department     string   `json:"department,omitempty"`
-	Manager        *Manager `json:"manager,omitempty"`
-}
-
 // User is the core User resource defined in RFC 7643, Section 4.1.
 type User struct {
 	Base
