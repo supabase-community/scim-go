@@ -27,13 +27,7 @@ func main() {
 		log.Fatal("SCIM_BEARER_TOKEN must be set")
 	}
 
-	config := core.NewServiceProviderConfig().
-		Sorting().
-		Filtering(protocol.DefaultLimits.MaxCount).
-		Patching().
-		Versioning()
-
-	srv := server.New(basePath, config,
+	srv := server.New(basePath, core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning(),
 		server.ErrorHandler(errorHandler),
 		server.WithResource(server.
 			NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
