@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -69,7 +70,7 @@ func (s *SearchRequest) SortAttribute(schemas core.Schemas) (parent, attribute *
 	if attribute == nil {
 		return nil, nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
-	if hidden(attribute) {
+	if value.Hidden(parent, attribute) {
 		return nil, nil, scimerrors.ErrInvalidValue(`"sortBy" must not name a writeOnly or returned "never" attribute`)
 	}
 	// RFC 7644 Section 3.4.2.3: a complex "sortBy" must be a path to a sub-attribute.

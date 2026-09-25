@@ -54,7 +54,8 @@ type widget struct {
 	Nick   string
 	Tags   []any
 	Parts  []part
-	Secret string `json:",omitempty"`
+	Secret string           `json:",omitempty"`
+	Keys   []map[string]any `json:",omitempty"`
 }
 
 type kit struct {
@@ -67,6 +68,7 @@ type kit struct {
 type part struct {
 	Serial string
 	Built  string `json:",omitempty"`
+	Code   string `json:",omitempty"`
 }
 
 type racingRepository struct {
@@ -159,8 +161,10 @@ func widgetAttributes() core.Attributes {
 			core.NewAttribute("serial", core.TypeString).AsRequired(),
 			core.NewAttribute("built", core.TypeDateTime),
 			core.NewAttribute("inspector", core.TypeString).AsReadOnly(),
+			core.NewAttribute("code", core.TypeString).AsWriteOnly(),
 		),
 		core.NewAttribute("secret", core.TypeString).AsWriteOnly(),
+		core.NewAttribute("keys", core.TypeComplex).AsMultiValued().AsWriteOnly().With(core.NewAttribute("value", core.TypeString)),
 	}
 }
 

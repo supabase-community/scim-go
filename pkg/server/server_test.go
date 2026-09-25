@@ -1190,6 +1190,21 @@ func TestRFC7644Filtering(t *testing.T) {
 		assertInvalidFilter(t, srv, "/Widgets", `secret sw "s"`)
 	})
 
+	t.Run("rejects any operator but eq on a sub-attribute of a writeOnly attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		createWidget(t, srv, &widget{Name: "gear", Keys: []map[string]any{{"value": "k3y"}}})
+
+		assertInvalidFilter(t, srv, "/Widgets", `keys.value sw "k"`)
+		assertInvalidFilter(t, srv, "/Widgets", `keys.value pr`)
+		assertInvalidFilter(t, srv, "/Widgets", `keys[value sw "k"]`)
+		assertInvalidFilter(t, srv, "/Widgets", `keys[value pr]`)
+
+		path := basePath + "/Widgets?" + url.Values{"filter": {`keys.value eq "k3y"`}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType)))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).TotalResults)
+	})
+
 	t.Run("combines clauses with and", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
@@ -1633,6 +1648,17 @@ func TestRFC7644Sorting(t *testing.T) {
 		srv := newTestServer(t)
 
 		path := basePath + "/Users?" + url.Values{"sortBy": {"password"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("rejects sortBy on a sub-attribute of a writeOnly attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		path := basePath + "/Widgets?" + url.Values{"sortBy": {"keys.value"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 

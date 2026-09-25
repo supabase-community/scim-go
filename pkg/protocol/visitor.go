@@ -57,7 +57,7 @@ func (r *visitor[Output]) VisitPresence(path filter.AttrPath) (Output, error) {
 	if err != nil {
 		return zero, err
 	}
-	if hidden(attribute) {
+	if value.Hidden(r.parent(path), attribute) {
 		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator \"pr\" is not valid for %q", path.String()))
 	}
 	return r.inner.Present(NewAttribute(attribute, path, r.scope))
@@ -108,6 +108,14 @@ func (r *visitor[Output]) resolve(path filter.AttrPath) (*core.Attribute, error)
 	return attribute, nil
 }
 
+func (r *visitor[Output]) parent(path filter.AttrPath) *core.Attribute {
+	if r.scope != nil || path.SubAttribute == "" {
+		return r.scope
+	}
+	parent, _ := r.schemas.Resolve(core.SchemaURI(path.URI), path.Name, "")
+	return parent
+}
+
 func (r *visitor[Output]) resolveWithin(path filter.AttrPath) (*core.Attribute, error) {
 	attribute := r.scope.SubAttribute(path.Name)
 	if attribute == nil || path.SubAttribute != "" {
@@ -123,7 +131,7 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 		return zero, err
 	}
 	// RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
-	if !value.Allowed(attribute.Type, op) || (hidden(attribute) && op != filter.OpEquals) {
+	if !value.Allowed(attribute.Type, op) || (value.Hidden(r.parent(path), attribute) && op != filter.OpEquals) {
 		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
 	}
 	coerced, ok := attribute.Coerce(literal)
