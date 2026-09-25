@@ -143,6 +143,11 @@ func MaxPatchOperations(n int) Option[*Server] {
 	return func(s *Server) { s.limits.MaxOperations = n }
 }
 
+// MaxPatchFilterEvaluations caps the value filter clause checks of one PATCH request; costlier requests get 413, and zero lifts the cap.
+func MaxPatchFilterEvaluations(n int) Option[*Server] {
+	return func(s *Server) { s.limits.MaxFilterEvaluations = n }
+}
+
 // MaxBodySize caps the request body; larger bodies get 413, per RFC 7644, Section 3.12.
 func MaxBodySize(n int64) Option[*Server] {
 	return func(s *Server) { s.maxBodySize = n }

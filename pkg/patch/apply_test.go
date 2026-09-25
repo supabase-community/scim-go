@@ -601,6 +601,46 @@ func TestApplyRemoveLastExtensionValueUnassignsTheExtension(t *testing.T) {
 	assert.Equal(t, map[string]any{"userName": "bjensen"}, item)
 }
 
+func TestApplyWithin(t *testing.T) {
+	item := func() map[string]any {
+		return map[string]any{"emails": []any{
+			map[string]any{"value": "a"},
+			map[string]any{"value": "b"},
+			map[string]any{"value": "c"},
+		}}
+	}
+	either := operation(patch.OpReplace, `emails[value eq "a" or value eq "b"].type`, `"work"`)
+	present := operation(patch.OpReplace, `emails[value pr].type`, `"home"`)
+
+	t.Run("applies a request whose value filters check at most the budget", func(t *testing.T) {
+		_, err := patch.ApplyWithin(item(), []patch.Operation{either}, userSchemas(), 5)
+		require.NoError(t, err)
+	})
+
+	t.Run("refuses a request whose value filters check more than the budget with 413", func(t *testing.T) {
+		_, err := patch.ApplyWithin(item(), []patch.Operation{either}, userSchemas(), 4)
+		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
+	})
+
+	t.Run("spends one budget across every operation", func(t *testing.T) {
+		_, err := patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 8)
+		require.NoError(t, err)
+
+		_, err = patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 7)
+		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
+	})
+
+	t.Run("reports the budget before a filter that matched nothing", func(t *testing.T) {
+		_, err := patch.ApplyWithin(item(), []patch.Operation{operation(patch.OpReplace, `emails[value eq "z"].type`, `"work"`)}, userSchemas(), 2)
+		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
+	})
+
+	t.Run("has no cap when the budget is zero", func(t *testing.T) {
+		_, err := patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 0)
+		require.NoError(t, err)
+	})
+}
+
 func TestApplyRemoveReadOnlyRejected(t *testing.T) {
 	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
 

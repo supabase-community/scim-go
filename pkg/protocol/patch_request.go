@@ -37,12 +37,17 @@ func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 
 // Patch returns a new resource; resource is left unchanged, per RFC 7644 Section 3.5.2.
 func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas) (T, error) {
+	return r.PatchWithin(resource, schemas, 0)
+}
+
+// PatchWithin is Patch that refuses the request once its value filters check more than maxEvaluations clauses; zero lifts the cap.
+func (r *PatchRequest) PatchWithin[T any](resource T, schemas core.Schemas, maxEvaluations int) (T, error) {
 	var zero T
 	existing, err := core.NewObject(resource)
 	if err != nil {
 		return zero, err
 	}
-	patched, err := patch.Apply(existing, r.Operations, schemas)
+	patched, err := patch.ApplyWithin(existing, r.Operations, schemas, maxEvaluations)
 	if err != nil {
 		return zero, err
 	}

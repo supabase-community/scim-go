@@ -15,11 +15,16 @@ var permissiveAttr = &core.Attribute{}
 
 type patcher struct {
 	schemas core.Schemas
+	budget  *budget
 }
 
 func (p *patcher) run(root core.Object, ops []Operation) error {
 	for _, op := range ops {
-		if err := p.apply(root, op); err != nil {
+		err := p.apply(root, op)
+		if p.budget.exceeded() {
+			return scimerrors.ErrTooLarge("the value filters of the request check more than " + strconv.Itoa(p.budget.max) + " clauses")
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -132,7 +137,7 @@ func (p *patcher) target(root core.Object, path filter.Path) (*target, error) {
 	}
 	t := &target{root: root, extension: p.extension(path), parent: parent, path: path}
 	if path.ValueFilter != nil {
-		if t.match, err = compile(parent, path.ValueFilter); err != nil {
+		if t.match, err = compile(parent, path.ValueFilter, p.budget); err != nil {
 			return nil, err
 		}
 	}

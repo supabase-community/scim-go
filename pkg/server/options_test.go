@@ -128,6 +128,32 @@ func TestMaxPatchOperations(t *testing.T) {
 	})
 }
 
+func TestMaxPatchFilterEvaluations(t *testing.T) {
+	patchWith := func(t *testing.T, options ...server.Option[*server.Server]) int {
+		t.Helper()
+		options = append(options, server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)))
+		srv := Server(t, server.New(basePath, fullServiceProviderConfig(), options...))
+		user := core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com"}, {Value: "b@example.com"}}}
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, user)))
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		id := ReadBodyAs[core.User](t, response).ID
+
+		request := protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpReplace, Path: `emails[value eq "b@example.com"].type`, Value: json.RawMessage(`"work"`)}},
+		}
+		return Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, WithRequestBodyAs(t, request))).StatusCode
+	}
+
+	t.Run("accepts a request within the default budget", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, patchWith(t))
+	})
+
+	t.Run("refuses a request beyond a configured budget with 413", func(t *testing.T) {
+		assert.Equal(t, http.StatusRequestEntityTooLarge, patchWith(t, server.MaxPatchFilterEvaluations(1)))
+	})
+}
+
 func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
 	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(failingRepository{cause: errors.New("unreachable")})),
