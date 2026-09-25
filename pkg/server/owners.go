@@ -11,27 +11,28 @@ import (
 type ownedKey string
 
 // owners maps each value of a unique attribute to the id holding it, per RFC 7643, Section 7.
-type owners struct {
-	fields []field
-	ids    []map[any]string
+type owners []claims
+
+type claims struct {
+	field
+	ids map[any]string
 }
 
 func newOwners(fields fields) owners {
 	o := owners{}
 	for _, field := range fields {
 		if field.Uniqueness != core.UniquenessNone {
-			o.fields = append(o.fields, field)
-			o.ids = append(o.ids, map[any]string{})
+			o = append(o, claims{field: field, ids: map[any]string{}})
 		}
 	}
 	return o
 }
 
 func (o owners) conflict(id string, object core.Object) *core.Attribute {
-	for i, field := range o.fields {
-		for _, key := range uniqueKeys(field, object) {
-			if owner, ok := o.ids[i][key]; ok && owner != id {
-				return field.Attribute
+	for _, c := range o {
+		for _, key := range uniqueKeys(c.field, object) {
+			if owner, ok := c.ids[key]; ok && owner != id {
+				return c.Attribute
 			}
 		}
 	}
@@ -39,18 +40,18 @@ func (o owners) conflict(id string, object core.Object) *core.Attribute {
 }
 
 func (o owners) claim(id string, object core.Object) {
-	for i, field := range o.fields {
-		for _, key := range uniqueKeys(field, object) {
-			o.ids[i][key] = id
+	for _, c := range o {
+		for _, key := range uniqueKeys(c.field, object) {
+			c.ids[key] = id
 		}
 	}
 }
 
 func (o owners) release(id string, object core.Object) {
-	for i, field := range o.fields {
-		for _, key := range uniqueKeys(field, object) {
-			if o.ids[i][key] == id {
-				delete(o.ids[i], key)
+	for _, c := range o {
+		for _, key := range uniqueKeys(c.field, object) {
+			if c.ids[key] == id {
+				delete(c.ids, key)
 			}
 		}
 	}
