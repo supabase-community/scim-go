@@ -9,7 +9,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4, and the most operations one PATCH may carry; zero means no cap.
+// Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4, and the most operations one PATCH may carry, where a zero MaxOperations lifts that cap.
 type Limits struct {
 	DefaultCount  int
 	MaxCount      int
