@@ -2214,6 +2214,22 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, original.Meta.Created, ReadBodyAs[core.User](t, response).Meta.Created)
 	})
 
+	// RFC 7643 Section 7: a readOnly attribute SHALL NOT be modified.
+	t.Run("keeps readOnly sub-attributes of the elements it resends", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1", Code: "c0de"}, {Serial: "s-2"}}})["id"].(string)
+
+		request := Request(t, srv, http.MethodPut, basePath+"/Widgets/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"name":"gizmo","parts":[{"serial":"s-1","inspector":"mallory"},{"serial":"s-3"}]}`)),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []part{{Serial: "s-1", Inspector: "qa-bot"}, {Serial: "s-3"}}, ReadBodyAs[widget](t, response).Parts)
+	})
+
 	t.Run("rejects a replace missing a required attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})

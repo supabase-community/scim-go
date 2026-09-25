@@ -1,6 +1,11 @@
 package protocol
 
-import "github.com/supabase-community/scim-go/pkg/core"
+import (
+	"encoding/json"
+
+	"github.com/supabase-community/scim-go/internal/value"
+	"github.com/supabase-community/scim-go/pkg/core"
+)
 
 func writable(document, existing core.Object, schemas core.Schemas) core.Object {
 	if len(schemas) == 0 {
@@ -38,7 +43,7 @@ func writableObject(lookup func(string) *core.Attribute, body, existing map[stri
 		case attribute.Mutability == core.MutabilityReadOnly:
 			return nil, false
 		}
-		return writableValue(attribute, value, existing[key]), true
+		return writableValue(attribute, value, core.Object(existing).Get(key)), true
 	})
 	for key, value := range existing {
 		if attribute := lookup(key); attribute != nil && attribute.Mutability == core.MutabilityReadOnly {
@@ -56,11 +61,44 @@ func writableValue(attribute *core.Attribute, value, existing any) any {
 		previous, _ := existing.(map[string]any)
 		writableObject(attribute.SubAttribute, v, previous)
 	case []any:
+		stored := byIdentity(attribute, existing)
 		for _, element := range v {
 			if object, ok := element.(map[string]any); ok {
-				writableObject(attribute.SubAttribute, object, nil)
+				writableObject(attribute.SubAttribute, object, stored[identity(attribute, object)])
 			}
 		}
 	}
 	return value
+}
+
+func byIdentity(attribute *core.Attribute, existing any) map[string]map[string]any {
+	elements, _ := existing.([]any)
+	stored := make(map[string]map[string]any, len(elements))
+	for _, element := range elements {
+		object, ok := element.(map[string]any)
+		if id := identity(attribute, object); ok && id != "" && stored[id] == nil {
+			stored[id] = object
+		}
+	}
+	return stored
+}
+
+// RFC 7643 Section 2.4: "value" identifies an element; without one, the client-visible writable sub-attributes do.
+func identity(attribute *core.Attribute, element core.Object) string {
+	if sub := attribute.SubAttribute("value"); sub != nil {
+		key, _ := value.Key(element)
+		folded, _ := value.Fold(sub, key).(string)
+		return folded
+	}
+	folded := []any{}
+	for _, sub := range attribute.SubAttributes {
+		if sub.Mutability != core.MutabilityReadOnly && !value.Hidden(nil, sub) {
+			folded = append(folded, value.Fold(sub, element.Get(sub.Name)))
+		}
+	}
+	if len(folded) == 0 {
+		return ""
+	}
+	raw, _ := json.Marshal(folded)
+	return string(raw)
 }

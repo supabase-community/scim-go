@@ -13,6 +13,63 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+// RFC 7643 Section 7: a readOnly attribute SHALL NOT be modified, so a replaced element keeps the values of the stored element it matches.
+func TestDecodeResourceKeepsReadOnlySubAttributesOfMatchingElements(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("keys", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("value", core.TypeString),
+				core.NewAttribute("fingerprint", core.TypeString).AsReadOnly(),
+			),
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("serial", core.TypeString),
+				core.NewAttribute("code", core.TypeString).AsWriteOnly(),
+				core.NewAttribute("inspector", core.TypeString).AsReadOnly(),
+			),
+		),
+	}
+	decode := func(t *testing.T, body, existing map[string]any) map[string]any {
+		t.Helper()
+		raw, err := json.Marshal(body)
+		require.NoError(t, err)
+		out, err := protocol.DecodeResource[map[string]any](bytes.NewReader(raw), existing, schemas)
+		require.NoError(t, err)
+		return out
+	}
+
+	// RFC 7643 Section 2.4: "value" identifies an element of a multi-valued attribute.
+	t.Run("matches elements by value", func(t *testing.T) {
+		existing := map[string]any{"keys": []any{
+			map[string]any{"value": "k1", "fingerprint": "server"},
+			map[string]any{"value": "k2", "fingerprint": "other"},
+		}}
+
+		out := decode(t, map[string]any{"keys": []any{
+			map[string]any{"value": "K1", "fingerprint": "client"},
+			map[string]any{"value": "k3", "fingerprint": "client"},
+		}}, existing)
+
+		assert.Equal(t, []any{
+			map[string]any{"value": "K1", "fingerprint": "server"},
+			map[string]any{"value": "k3"},
+		}, out["keys"])
+	})
+
+	t.Run("matches elements without a value by the sub-attributes a client can see and write", func(t *testing.T) {
+		existing := map[string]any{"parts": []any{map[string]any{"serial": "s-1", "code": "c0de", "inspector": "qa-bot"}}}
+
+		out := decode(t, map[string]any{"parts": []any{
+			map[string]any{"serial": "S-1"},
+			map[string]any{"serial": "s-2"},
+		}}, existing)
+
+		assert.Equal(t, []any{
+			map[string]any{"serial": "S-1", "inspector": "qa-bot"},
+			map[string]any{"serial": "s-2"},
+		}, out["parts"])
+	})
+}
+
 // RFC 7644 Sections 3.3 and 3.5.1: values provided for readOnly attributes SHALL be ignored.
 func TestDecodeResource(t *testing.T) {
 	user := (&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
