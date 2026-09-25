@@ -2,9 +2,11 @@ package patch_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -703,6 +705,23 @@ func TestApplyComplexMerge(t *testing.T) {
 		require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, "emails", `[{"value":"c@d.com"}]`)))
 
 		assert.Equal(t, []any{map[string]any{"value": "c@d.com"}}, item["emails"])
+	})
+
+	t.Run("merges many distinct keys in linear time", func(t *testing.T) {
+		const keyCount = 30000
+		values := make(map[string]any, keyCount)
+		for i := range keyCount {
+			values[fmt.Sprintf("k%d", i)] = i
+		}
+		raw, err := json.Marshal(values)
+		require.NoError(t, err)
+		item := map[string]any{"name": map[string]any{}}
+
+		start := time.Now()
+		require.NoError(t, apply(item, schemas(), patch.Operation{Op: patch.OpAdd, Path: "name", Value: raw}))
+		require.Less(t, time.Since(start), 3*time.Second)
+
+		assert.Len(t, item["name"], keyCount)
 	})
 }
 
