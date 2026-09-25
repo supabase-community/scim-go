@@ -78,13 +78,6 @@ func count(values []any, target any) int {
 	return n
 }
 
-func valuesOf(raw any) []any {
-	if list, ok := raw.([]any); ok {
-		return list
-	}
-	return []any{raw}
-}
-
 func previous[T core.Resource](ctx context.Context, repo Repository[T], candidate T) (core.Object, error) {
 	id := candidate.Common().ID
 	if id == "" {

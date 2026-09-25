@@ -59,7 +59,7 @@ func (o owners) release(id string, object core.Object) {
 // RFC 7644 Section 3.4.2.2: each value of a multi-valued attribute is compared on its own.
 func uniqueKeys(field field, object core.Object) []any {
 	keys := []any{}
-	for _, v := range valuesOf(field.value(object)) {
+	for _, v := range field.values(object) {
 		if !value.IsUnassigned(v) {
 			keys = append(keys, uniqueKey(field.Attribute, v))
 		}

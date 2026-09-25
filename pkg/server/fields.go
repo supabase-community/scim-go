@@ -56,6 +56,10 @@ func (f field) elements(d core.Object) []any {
 	return list
 }
 
+func (f field) values(d core.Object) []any {
+	return valuesOf(f.value(d))
+}
+
 func (f field) isList() bool {
 	return f.parent == nil && f.MultiValued
 }
@@ -83,6 +87,13 @@ func asObject(value any) core.Object {
 		return v
 	}
 	return nil
+}
+
+func valuesOf(raw any) []any {
+	if list, ok := raw.([]any); ok {
+		return list
+	}
+	return []any{raw}
 }
 
 func coerce(attribute *core.Attribute, value any) any {
