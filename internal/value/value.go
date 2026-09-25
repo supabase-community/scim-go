@@ -17,6 +17,12 @@ func IsUnassigned(value any) bool {
 	return false
 }
 
+// Key returns the "value" sub-attribute that identifies an element of a multi-valued attribute, per RFC 7643, Section 2.4.
+func Key(element core.Object) (string, bool) {
+	key, ok := element.Get("value").(string)
+	return key, ok && key != ""
+}
+
 // Hidden reports an attribute, or the parent it belongs to, whose values SHALL NOT be returned, per RFC 7643, Section 7.
 func Hidden(parent, attribute *core.Attribute) bool {
 	return hides(parent) || hides(attribute)

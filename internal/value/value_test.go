@@ -44,3 +44,20 @@ func TestCompare(t *testing.T) {
 		}
 	})
 }
+
+func TestKey(t *testing.T) {
+	key, ok := value.Key(core.Object{"Value": "a@b.com"})
+	assert.True(t, ok)
+	assert.Equal(t, "a@b.com", key)
+
+	for _, element := range []core.Object{nil, {"value": ""}, {"value": 1}, {"serial": "s-1"}} {
+		_, ok := value.Key(element)
+		assert.False(t, ok, "%#v", element)
+	}
+}
+
+func TestEqual(t *testing.T) {
+	assert.True(t, value.Equal(core.NewAttribute("userName", core.TypeString), "BJensen", "bjensen"))
+	assert.False(t, value.Equal(core.NewAttribute("id", core.TypeString).AsCaseExact(), "BJensen", "bjensen"))
+	assert.True(t, value.Equal(core.NewAttribute("x", core.TypeComplex), map[string]any{"a": "b"}, map[string]any{"a": "b"}))
+}

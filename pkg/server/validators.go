@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -108,7 +107,7 @@ func immutable(fields fields, before, after core.Object) error {
 			continue
 		}
 		assigned := field.value(before)
-		if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !sameValue(field.Attribute, assigned, field.value(after)) {
+		if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(after)) {
 			return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
 		}
 		if !field.MultiValued || field.SubAttribute("value") == nil {
@@ -129,12 +128,12 @@ func immutableSubs(subs []*core.Attribute) []*core.Attribute {
 func immutableElements(elements func(core.Object) []any, subs []*core.Attribute, before, after core.Object) error {
 	current := map[string][]core.Object{}
 	for _, element := range elements(after) {
-		if key, ok := keyOf(element); ok {
+		if key, ok := value.Key(asObject(element)); ok {
 			current[key] = append(current[key], asObject(element))
 		}
 	}
 	for _, element := range elements(before) {
-		key, ok := keyOf(element)
+		key, ok := value.Key(asObject(element))
 		candidates := current[key]
 		if !ok || len(candidates) == 0 {
 			continue
@@ -148,30 +147,18 @@ func immutableElements(elements func(core.Object) []any, subs []*core.Attribute,
 	return nil
 }
 
-func keyOf(element any) (string, bool) {
-	key, ok := asObject(element).Get("value").(string)
-	return key, ok && key != ""
-}
-
 func changed(subs []*core.Attribute, stored, candidate core.Object) *core.Attribute {
 	for _, sub := range subs {
 		assigned := coerce(sub, stored.Get(sub.Name))
-		if !value.IsUnassigned(assigned) && !sameValue(sub, assigned, coerce(sub, candidate.Get(sub.Name))) {
+		if !value.IsUnassigned(assigned) && !value.Equal(sub, assigned, coerce(sub, candidate.Get(sub.Name))) {
 			return sub
 		}
 	}
 	return nil
 }
 
-func containsValue(attribute *core.Attribute, values []string, value string) bool {
+func containsValue(attribute *core.Attribute, values []string, want string) bool {
 	return slices.ContainsFunc(values, func(candidate string) bool {
-		return sameValue(attribute, candidate, value)
+		return value.Equal(attribute, candidate, want)
 	})
-}
-
-func sameValue(attribute *core.Attribute, a, b any) bool {
-	if order, ok := value.Compare(value.Fold(attribute, a), value.Fold(attribute, b)); ok {
-		return order == 0
-	}
-	return reflect.DeepEqual(a, b)
 }

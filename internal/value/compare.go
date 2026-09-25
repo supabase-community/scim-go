@@ -2,6 +2,7 @@ package value
 
 import (
 	"cmp"
+	"reflect"
 	"strings"
 	"time"
 
@@ -29,6 +30,14 @@ func Fold(attribute *core.Attribute, value any) any {
 		return value
 	}
 	return strings.ToLower(s)
+}
+
+// Equal reports whether a and b are the same value of attribute, per RFC 7643, Section 2.3.
+func Equal(attribute *core.Attribute, a, b any) bool {
+	if order, ok := Compare(Fold(attribute, a), Fold(attribute, b)); ok {
+		return order == 0
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // Match reports whether got op want holds for two folded values, per RFC 7644, Section 3.4.2.2.
