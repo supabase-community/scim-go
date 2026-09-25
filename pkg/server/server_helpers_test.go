@@ -73,6 +73,12 @@ type racingRepository struct {
 func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 	t.Helper()
 
+	return Server(t, newTestHandler(t, options...))
+}
+
+func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
+	tb.Helper()
+
 	s := &testServer{config: fullServiceProviderConfig()}
 	for _, option := range options {
 		option(s)
@@ -84,7 +90,7 @@ func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 	standard := []server.Option[*server.Server]{
 		server.ErrorHandler(func(_ *http.Request, err error) {
 			if !errors.Is(err, errUnreachable) {
-				t.Errorf("%v\n", err)
+				tb.Errorf("%v\n", err)
 			}
 		}),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).
@@ -95,7 +101,7 @@ func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 		server.WithResource(server.NewResource[*kit]("Kit", "/Kits", kitSchema, kitAttributes()...)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
 	}
-	return Server(t, server.New(basePath, s.config, slices.Concat(standard, s.options)...))
+	return server.New(basePath, s.config, slices.Concat(standard, s.options)...)
 }
 
 func withConfig(config *core.ServiceProviderConfig) testOption {
