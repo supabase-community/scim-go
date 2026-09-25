@@ -167,6 +167,33 @@ func TestApplyValuePathReadOnlySubAttributeRejected(t *testing.T) {
 	assert.NotContains(t, member, "primary")
 }
 
+func TestApplyReadOnlyIsRejectedBeforeMatching(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+	}{
+		{"a sub-attribute behind a filter that matches nothing", `emails[value eq "none"].primary`},
+		{"a sub-attribute of a readOnly attribute", "groups.value"},
+	}
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("groups", core.TypeComplex).AsMultiValued().AsReadOnly().With(
+				core.NewAttribute("value", core.TypeString),
+			),
+			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("value", core.TypeString),
+				core.NewAttribute("primary", core.TypeBoolean).AsReadOnly(),
+			),
+		),
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
+			requireMutability(t, apply(item, schemas, operation(patch.OpReplace, tc.path, `true`)))
+		})
+	}
+}
+
 // RFC 7644 Section 3.12, Table 9: a PATCH path filter fails like a search filter does.
 func TestApplyValuePathRejectsInvalidComparisons(t *testing.T) {
 	cases := []struct {
