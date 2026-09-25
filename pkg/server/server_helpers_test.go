@@ -147,6 +147,11 @@ func enterpriseAttributes() core.Attributes {
 func groupAttributes() core.Attributes {
 	return core.Attributes{
 		core.NewAttribute("displayName", core.TypeString).AsRequired(),
+		core.NewAttribute("members", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString).AsImmutable(),
+			core.NewAttribute("$ref", core.TypeReference).Referencing("User", "Group").AsImmutable(),
+			core.NewAttribute("type", core.TypeString).Suggesting("User", "Group").AsImmutable(),
+		),
 	}
 }
 

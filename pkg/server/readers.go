@@ -13,10 +13,15 @@ type readers struct {
 	elements  map[*core.Attribute]func(core.Object) []any
 	order     []*core.Attribute
 	immutable []*core.Attribute
+	keyed     map[*core.Attribute][]*core.Attribute
 }
 
 func readersOf(schemas core.Schemas) readers {
-	r := &readers{values: map[*core.Attribute]reader{}, elements: map[*core.Attribute]func(core.Object) []any{}}
+	r := &readers{
+		values:   map[*core.Attribute]reader{},
+		elements: map[*core.Attribute]func(core.Object) []any{},
+		keyed:    map[*core.Attribute][]*core.Attribute{},
+	}
 	root := func(d core.Object) core.Object { return d }
 	for _, name := range []string{"id", "externalId", "meta"} {
 		attribute, _ := core.CommonAttribute(name)
@@ -33,15 +38,13 @@ func (r *readers) add(parent func(core.Object) core.Object, attributes ...*core.
 	for _, attribute := range attributes {
 		read := func(d core.Object) any { return parent(d).Get(attribute.Name) }
 		r.set(attribute, func(d core.Object) any { return coerce(attribute, read(d)) })
-		r.track(attribute)
+		r.track(nil, attribute)
 		if attribute.MultiValued {
 			r.elements[attribute] = func(d core.Object) []any { list, _ := read(d).([]any); return list }
 		}
 		for _, sub := range attribute.SubAttributes {
 			r.set(sub, r.sub(attribute, sub, read))
-			if !attribute.MultiValued {
-				r.track(sub)
-			}
+			r.track(attribute, sub)
 		}
 	}
 }
@@ -51,9 +54,16 @@ func (r *readers) set(attribute *core.Attribute, read reader) {
 	r.order = append(r.order, attribute)
 }
 
-func (r *readers) track(attribute *core.Attribute) {
-	if attribute.Mutability == core.MutabilityImmutable {
+func (r *readers) track(parent, attribute *core.Attribute) {
+	if attribute.Mutability != core.MutabilityImmutable {
+		return
+	}
+	if parent == nil || !parent.MultiValued {
 		r.immutable = append(r.immutable, attribute)
+		return
+	}
+	if parent.SubAttribute("value") != nil {
+		r.keyed[parent] = append(r.keyed[parent], attribute)
 	}
 }
 

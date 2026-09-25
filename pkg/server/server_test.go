@@ -2166,6 +2166,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		active := true
 		user := &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "E1"}}
 		gear := &kit{Active: &active, Name: &core.Name{GivenName: "gear"}, Parts: []part{{Serial: "s-1"}, {Serial: "s-2"}}}
+		team := &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}, {Value: "u-2", Type: "User"}}}
 
 		for _, test := range []struct {
 			name     string
@@ -2178,6 +2179,11 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			{"accepts the same extension value", "/Users", user, patch.Operation{Op: patch.OpReplace, Path: extension + ":employeeNumber", Value: json.RawMessage(`"E1"`)}, http.StatusOK},
 			{"accepts adding a member", "/Kits", gear, patch.Operation{Op: patch.OpAdd, Path: "parts", Value: json.RawMessage(`[{"serial":"s-3"}]`)}, http.StatusOK},
 			{"accepts removing a member", "/Kits", gear, patch.Operation{Op: patch.OpRemove, Path: `parts[serial eq "s-1"]`}, http.StatusOK},
+			{"accepts adding a group member", "/Groups", team, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-3","type":"User"}]`)}, http.StatusOK},
+			{"accepts adding a group member that repeats a value with another type", "/Groups", team, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"Group"}]`)}, http.StatusOK},
+			{"accepts removing a group member", "/Groups", team, patch.Operation{Op: patch.OpRemove, Path: `members[value eq "u-1"]`}, http.StatusOK},
+			{"accepts replacing the group members", "/Groups", team, patch.Operation{Op: patch.OpReplace, Path: "members", Value: json.RawMessage(`[{"value":"u-3","type":"User"}]`)}, http.StatusOK},
+			{"rejects a changed immutable sub-attribute of a group member", "/Groups", team, patch.Operation{Op: patch.OpReplace, Path: `members[value eq "u-1"].type`, Value: json.RawMessage(`"Group"`)}, http.StatusBadRequest},
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				srv := newTestServer(t)
@@ -2191,7 +2197,11 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 					WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{test.op}}),
 				)
 
-				assert.Equal(t, test.status, Response(t, srv, request).StatusCode)
+				response := Response(t, srv, request)
+				require.Equal(t, test.status, response.StatusCode)
+				if test.status == http.StatusBadRequest {
+					assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+				}
 			})
 		}
 	})

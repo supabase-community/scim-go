@@ -124,6 +124,49 @@ func immutable(readers readers, before, after core.Object) error {
 		}
 		return scimerrors.ErrMutability(strconv.Quote(attribute.Name) + " is immutable")
 	}
+	for parent, subs := range readers.keyed {
+		if err := immutableElements(readers.elements[parent], subs, before, after); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
+func immutableElements(elements func(core.Object) []any, subs []*core.Attribute, before, after core.Object) error {
+	current := map[string][]core.Object{}
+	for _, element := range elements(after) {
+		if key, ok := keyOf(element); ok {
+			current[key] = append(current[key], asObject(element))
+		}
+	}
+	for _, element := range elements(before) {
+		key, ok := keyOf(element)
+		candidates := current[key]
+		if !ok || len(candidates) == 0 {
+			continue
+		}
+		stored := asObject(element)
+		if slices.ContainsFunc(candidates, func(candidate core.Object) bool { return changed(subs, stored, candidate) == nil }) {
+			continue
+		}
+		return scimerrors.ErrMutability(strconv.Quote(changed(subs, stored, candidates[0]).Name) + " is immutable")
+	}
+	return nil
+}
+
+func keyOf(element any) (string, bool) {
+	key, ok := asObject(element).Get("value").(string)
+	return key, ok && key != ""
+}
+
+func changed(subs []*core.Attribute, stored, candidate core.Object) *core.Attribute {
+	for _, sub := range subs {
+		assigned := coerce(sub, stored.Get(sub.Name))
+		if !value.IsUnassigned(assigned) && !reflect.DeepEqual(assigned, coerce(sub, candidate.Get(sub.Name))) {
+			return sub
+		}
+	}
 	return nil
 }
 
