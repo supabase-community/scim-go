@@ -8,7 +8,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -28,6 +27,8 @@ type repository[T core.Resource] struct {
 	endpoint string
 	schemas  core.Schemas
 	rows     []row[T]
+	index    map[string]int
+	owners   owners
 	fields
 	evaluator protocol.Evaluator[predicate]
 }
@@ -39,6 +40,8 @@ func NewRepository[T core.Resource](endpoint string, schemas core.Schemas) Repos
 		endpoint:  endpoint,
 		schemas:   schemas,
 		rows:      []row[T]{},
+		index:     map[string]int{},
+		owners:    newOwners(fields),
 		fields:    fields,
 		evaluator: newVisitor(fields),
 	}
@@ -57,21 +60,21 @@ func (r *repository[T]) Get(_ context.Context, id string) (item T, err error) {
 }
 
 func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
-	var matching []row[T]
-	err := r.withLock(func() (err error) {
-		matching, err = r.sortBy(query)
-		return err
+	items, total := []T{}, 0
+	err := r.withLock(func() error {
+		matching, err := r.sortBy(query)
+		if err != nil {
+			return err
+		}
+		total = len(matching)
+		start := min(query.Offset(), total)
+		for _, row := range matching[start:min(start+query.Count, total)] {
+			items = append(items, row.item)
+		}
+		return nil
 	})
 	if err != nil {
 		return []T{}, 0, err
-	}
-
-	total := len(matching)
-	start := min(query.Offset(), total)
-	end := min(start+query.Count, total)
-	items := make([]T, 0, end-start)
-	for _, row := range matching[start:end] {
-		items = append(items, row.item)
 	}
 	return items, total, nil
 }
@@ -94,7 +97,9 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 		if err != nil {
 			return err
 		}
+		r.index[common.ID] = len(r.rows)
 		r.rows = append(r.rows, created)
+		r.owners.claim(common.ID, created.object)
 		return nil
 	})
 	if err != nil {
@@ -120,6 +125,8 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 		if err != nil {
 			return err
 		}
+		r.owners.release(common.ID, r.rows[i].object)
+		r.owners.claim(common.ID, replaced.object)
 		r.rows[i] = replaced
 		return nil
 	})
@@ -136,7 +143,12 @@ func (r *repository[T]) Delete(_ context.Context, id, version string) error {
 		if err != nil {
 			return err
 		}
+		r.owners.release(id, r.rows[i].object)
 		r.rows = slices.Delete(r.rows, i, i+1)
+		delete(r.index, id)
+		for j := i; j < len(r.rows); j++ {
+			r.index[r.rows[j].item.Common().ID] = j
+		}
 		return nil
 	})
 }
@@ -149,9 +161,9 @@ func (r *repository[T]) withLock(fn func() error) error {
 
 // RFC 7644 Section 3.14: a non-empty version must match the stored one.
 func (r *repository[T]) locate(id, version string) (int, error) {
-	i := slices.IndexFunc(r.rows, func(row row[T]) bool { return row.item.Common().ID == id })
+	i, ok := r.index[id]
 	switch {
-	case i < 0:
+	case !ok:
 		return i, scimerrors.ErrNotFound("Not found")
 	case version != "" && r.rows[i].item.Common().Meta.Version != version:
 		return i, scimerrors.ErrPreconditionFailed("resource has changed on the server")
@@ -165,32 +177,15 @@ func (r *repository[T]) rowOf(item T) (row[T], error) {
 	if err != nil {
 		return row[T]{}, err
 	}
-	if attribute := r.conflictingAttribute(item.Common().ID, candidate); attribute != nil {
+	if attribute := r.owners.conflict(item.Common().ID, candidate); attribute != nil {
 		return row[T]{}, scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
 	}
 	return row[T]{item: item, object: candidate}, nil
 }
 
-func (r *repository[T]) conflictingAttribute(id string, candidate core.Object) *core.Attribute {
-	for _, other := range r.rows {
-		if other.item.Common().ID == id {
-			continue
-		}
-		for _, field := range r.fields {
-			if field.Uniqueness == core.UniquenessNone {
-				continue
-			}
-			if sharesValue(field.Attribute, field.value(other.object), field.value(candidate)) {
-				return field.Attribute
-			}
-		}
-	}
-	return nil
-}
-
 func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]row[T], error) {
 	if query.Filter == "" {
-		return slices.Clone(r.rows), nil
+		return r.rows, nil
 	}
 
 	predicate, err := protocol.Filter(r.schemas, query.Filter, r.evaluator)
@@ -224,6 +219,7 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]row[T], error) 
 	if !ok {
 		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
+	matching = slices.Clone(matching)
 	slices.SortStableFunc(matching, func(a, b row[T]) int {
 		return compareSortKeys(attribute, key(a.object), key(b.object), query.Descending())
 	})
@@ -258,21 +254,6 @@ func schemaURIs(schemas core.Schemas) []core.SchemaURI {
 		ids[i] = schema.ID
 	}
 	return ids
-}
-
-// sharesValue reports whether a and b hold a common value, per RFC 7644 Section 3.4.2.2 (multi-valued "any match").
-func sharesValue(attribute *core.Attribute, a, b any) bool {
-	for _, x := range valuesOf(a) {
-		if value.IsUnassigned(x) {
-			continue
-		}
-		for _, y := range valuesOf(b) {
-			if sameValue(attribute, x, y) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func weakETag(t time.Time) string {

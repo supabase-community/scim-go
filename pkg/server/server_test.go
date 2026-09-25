@@ -727,6 +727,65 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	t.Run("rejects a unique value that differs only in case", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "Bjensen"})
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusConflict, response.StatusCode)
+		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("frees a unique value that a replace gives up", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "babs"}),
+		))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+
+		create(t, srv, &core.User{UserName: "bjensen"})
+	})
+
+	t.Run("frees a unique value when its resource is deleted", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		require.Equal(t, http.StatusNoContent, response.StatusCode)
+
+		create(t, srv, &core.User{UserName: "bjensen"})
+	})
+
+	t.Run("keeps a unique value after a failed replace", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "babs"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "babs"}),
+		))
+		require.Equal(t, http.StatusConflict, response.StatusCode)
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		)
+		assert.Equal(t, http.StatusConflict, Response(t, srv, request).StatusCode)
+	})
+
 	// RFC 7644 Section 3.3: values provided for readOnly attributes SHALL be ignored.
 	t.Run("ignores readOnly id and meta", func(t *testing.T) {
 		srv := newTestServer(t)
