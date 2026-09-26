@@ -17,42 +17,21 @@ import (
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
+const basePath = "/scim/v2"
+
 func main() {
-	basePath := "/scim/v2"
-	errorHandler := func(r *http.Request, err error) {
-		log.Printf("%s %s: %v\n", strconv.Quote(r.Method), strconv.Quote(r.URL.Path), err)
+	addr := ":8080"
+	if port := os.Getenv("PORT"); port != "" {
+		addr = ":" + port
 	}
 	token := os.Getenv("SCIM_BEARER_TOKEN")
 	if token == "" {
 		log.Fatal("SCIM_BEARER_TOKEN must be set")
 	}
-
-	srv := server.New(basePath, core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning(),
-		server.ErrorHandler(errorHandler),
-		server.WithResource(server.
-			NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
-			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...),
-		),
-		server.WithResource(server.
-			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...),
-		),
-		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
-			func(ctx context.Context, candidate string) (context.Context, error) {
-				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {
-					return ctx, server.ErrInvalidToken
-				}
-				return ctx, nil
-			},
-		)),
-	)
-
-	addr := ":8080"
-	if port := os.Getenv("PORT"); port != "" {
-		addr = ":" + port
-	}
+	config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning()
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           srv,
+		Handler:           newServer(config, token),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -75,4 +54,28 @@ func main() {
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("%v\n", err)
 	}
+}
+
+func newServer(config *core.ServiceProviderConfig, token string) http.Handler {
+	errorHandler := func(r *http.Request, err error) {
+		log.Printf("%s %s: %v\n", strconv.Quote(r.Method), strconv.Quote(r.URL.Path), err)
+	}
+	return server.New(basePath, config,
+		server.ErrorHandler(errorHandler),
+		server.WithResource(server.
+			NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
+			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...),
+		),
+		server.WithResource(server.
+			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...),
+		),
+		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
+			func(ctx context.Context, candidate string) (context.Context, error) {
+				if subtle.ConstantTimeCompare([]byte(candidate), []byte(token)) != 1 {
+					return ctx, server.ErrInvalidToken
+				}
+				return ctx, nil
+			},
+		)),
+	)
 }
