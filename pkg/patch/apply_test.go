@@ -58,6 +58,24 @@ func TestApplyAddSingleValueAppendsToArray(t *testing.T) {
 	assert.Equal(t, "c@d.com", emails[1].(map[string]any)["value"])
 }
 
+// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
+func TestApplyAddSkipsAValueTheTargetAlreadyContains(t *testing.T) {
+	item := core.Object{"emails": []any{map[string]any{"type": "work", "value": "a@b.com"}}}
+
+	require.NoError(t, apply(item, userSchemas(), operation(patch.OpAdd, "emails", `[{"type":"work","value":"a@b.com"},{"type":"home","value":"c@d.com"}]`)))
+
+	assert.Len(t, item["emails"], 2)
+}
+
+// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
+func TestApplyAddWithoutPathSkipsAValueTheTargetAlreadyContains(t *testing.T) {
+	item := core.Object{"emails": []any{map[string]any{"type": "work", "value": "a@b.com"}}}
+
+	require.NoError(t, apply(item, userSchemas(), patch.Operation{Op: patch.OpAdd, Value: json.RawMessage(`{"emails":[{"type":"work","value":"a@b.com"}]}`)}))
+
+	assert.Len(t, item["emails"], 1)
+}
+
 func TestApplyMissingValueRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, patch.Operation{Op: patch.OpReplace, Path: "userName"}), &err)
@@ -168,6 +186,14 @@ func TestApplyPrimaryDemotesTheOtherValues(t *testing.T) {
 		require.NoError(t, apply(item, nil, operation(patch.OpAdd, "emails", `[{"primary":true},{"primary":true}]`)))
 
 		assert.Equal(t, []any{true, true}, primaries(item))
+	})
+
+	t.Run("but leaves primary untouched when the added value duplicates the existing one", func(t *testing.T) {
+		item := core.Object{"emails": []any{map[string]any{"type": "work", "value": "a@b.com", "primary": true}}}
+
+		require.NoError(t, apply(item, userSchemas(), operation(patch.OpAdd, "emails", `[{"type":"work","value":"a@b.com","primary":true}]`)))
+
+		assert.Equal(t, []any{true}, primaries(item))
 	})
 }
 

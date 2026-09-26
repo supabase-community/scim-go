@@ -2678,6 +2678,54 @@ func TestRFC7644AddOperation(t *testing.T) {
 
 		assert.Equal(t, "employee", patched.UserType)
 	})
+
+	// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made, and the modify timestamp SHALL NOT change.
+	t.Run("does not append an email the target location already contains, and leaves meta.lastModified unchanged", func(t *testing.T) {
+		srv := newTestServer(t)
+		primary := true
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com", Type: "work", Primary: &primary}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		user := ReadBodyAs[core.User](t, created)
+
+		patched := patchUser(t, srv, user.ID, patch.Operation{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"a@example.com","type":"work","primary":true}]`)})
+
+		require.Len(t, patched.Emails, 1)
+		assert.True(t, *patched.Emails[0].Primary)
+		assert.Equal(t, user.Meta.Version, patched.Meta.Version)
+		assert.Equal(t, user.Meta.LastModified, patched.Meta.LastModified)
+	})
+
+	// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made, and the modify timestamp SHALL NOT change.
+	t.Run("does not append a group member the target location already contains, and leaves meta.lastModified unchanged", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		group := ReadBodyAs[core.Group](t, created)
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"User"}]`)}},
+			}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		patched := ReadBodyAs[core.Group](t, response)
+		assert.Len(t, patched.Members, 1)
+		assert.Equal(t, group.Meta.Version, patched.Meta.Version)
+		assert.Equal(t, group.Meta.LastModified, patched.Meta.LastModified)
+	})
 }
 
 // RFC 7644 3.5.2.2 Remove Operation

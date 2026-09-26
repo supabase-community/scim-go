@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"net/http"
+	"reflect"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -149,9 +150,9 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err := c.stampSchemas(patched); err != nil {
 		return protocol.SendError(w, err)
 	}
-	replaced, err := c.service.Replace(r.Context(), patched)
+	replaced, err := c.persist(r, existing, patched)
 	if err != nil {
-		return protocol.SendError(w, c.lostRace(r, err))
+		return protocol.SendError(w, err)
 	}
 	c.setVersion(w, replaced)
 	return c.send(w, http.StatusOK, replaced, projection)
@@ -173,6 +174,16 @@ func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
 	if c.config.SupportsVersioning() {
 		w.Header().Set("ETag", resource.Common().Meta.Version)
 	}
+}
+
+// persist skips the write when the patch changed nothing, per RFC 7644, Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
+func (c *controller[T]) persist(r *http.Request, existing, patched T) (T, error) {
+	same, err := unchanged(existing, patched)
+	if err != nil || same {
+		return existing, err
+	}
+	replaced, err := c.service.Replace(r.Context(), patched)
+	return replaced, c.lostRace(r, err)
 }
 
 func (c *controller[T]) lostRace(r *http.Request, err error) error {
@@ -204,4 +215,18 @@ func (c *controller[T]) stampSchemas(resource T) error {
 	}
 	resource.Common().Schemas = uris
 	return nil
+}
+
+func unchanged(existing, patched any) (bool, error) {
+	before, err := core.NewObject(existing)
+	if err != nil {
+		return false, err
+	}
+	after, err := core.NewObject(patched)
+	if err != nil {
+		return false, err
+	}
+	before.Remove("meta")
+	after.Remove("meta")
+	return reflect.DeepEqual(before, after), nil
 }

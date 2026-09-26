@@ -1,6 +1,8 @@
 package patch
 
 import (
+	"slices"
+
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
@@ -29,6 +31,9 @@ func (t *target) write(kind Op, value any) error {
 	holders, err := t.holders(true)
 	if err != nil {
 		return err
+	}
+	if t.isListAdd(kind) {
+		value = t.fresh(value)
 	}
 	written := t.written(t.elements(), kind)
 	for _, holder := range holders {
@@ -178,6 +183,18 @@ func (t *target) elements() []any {
 	container, _ := t.container(false)
 	elements, _ := container.Get(t.path.Name).([]any)
 	return elements
+}
+
+func (t *target) isListAdd(kind Op) bool {
+	return kind == OpAdd && t.match == nil && t.path.Name != "" && t.path.SubAttribute == "" && t.attr.MultiValued
+}
+
+// fresh drops elements already present in the target list, per RFC 7644, Section 3.5.2.1: "If the target location already contains the value specified, no changes SHOULD be made".
+func (t *target) fresh(candidate any) []any {
+	existing := t.elements()
+	return slices.DeleteFunc(slices.Clone(shaped(candidate, true).([]any)), func(addition any) bool {
+		return value.Contains(t.attr, existing, addition)
+	})
 }
 
 func (t *target) written(elements []any, kind Op) func(int) bool {

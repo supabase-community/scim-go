@@ -3,6 +3,7 @@ package value
 import (
 	"cmp"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -38,6 +39,11 @@ func Equal(attribute *core.Attribute, a, b any) bool {
 		return order == 0
 	}
 	return reflect.DeepEqual(a, b)
+}
+
+// Contains reports whether elements holds a value equal to want, per RFC 7643, Section 2.3.
+func Contains[E any](attribute *core.Attribute, elements []E, want any) bool {
+	return slices.ContainsFunc(elements, func(element E) bool { return Equal(attribute, element, want) })
 }
 
 // Match reports whether got op want holds for two folded values, per RFC 7644, Section 3.4.2.2.
