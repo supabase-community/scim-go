@@ -3,9 +3,11 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -119,26 +121,55 @@ func immutableSubs(subs []*core.Attribute) []*core.Attribute {
 
 // RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
 func immutableElements(elements func(core.Object) []any, subs []*core.Attribute, before, after core.Object) error {
-	current := map[string][]core.Object{}
+	signatures := map[string]map[string]struct{}{}
+	sample := map[string]core.Object{}
 	for _, element := range elements(after) {
-		if key, ok := value.Key(asObject(element)); ok {
-			current[key] = append(current[key], asObject(element))
-		}
-	}
-	for _, element := range elements(before) {
-		key, ok := value.Key(asObject(element))
-		candidates := current[key]
-		if !ok || len(candidates) == 0 {
+		candidate := asObject(element)
+		key, ok := value.Key(candidate)
+		if !ok {
 			continue
 		}
+		if signatures[key] == nil {
+			signatures[key] = map[string]struct{}{}
+			sample[key] = candidate
+		}
+		signatures[key][signature(subs, candidate)] = struct{}{}
+	}
+	for _, element := range elements(before) {
 		stored := asObject(element)
-		sub := changed(subs, stored, candidates[0])
-		if sub == nil || slices.ContainsFunc(candidates[1:], func(candidate core.Object) bool { return changed(subs, stored, candidate) == nil }) {
+		key, ok := value.Key(stored)
+		if !ok {
+			continue
+		}
+		if _, matched := signatures[key][signature(subs, stored)]; matched || signatures[key] == nil {
+			continue
+		}
+		sub := changed(subs, stored, sample[key])
+		if sub == nil {
 			continue
 		}
 		return scimerrors.ErrMutability(strconv.Quote(sub.Name) + " is immutable")
 	}
 	return nil
+}
+
+// signature reduces an element to one comparable string over subs, so duplicate "value" members
+// can be matched in constant time instead of scanned pairwise.
+func signature(subs []*core.Attribute, element core.Object) string {
+	var b strings.Builder
+	for _, sub := range subs {
+		b.WriteString(foldedString(sub, coerce(sub, element.Get(sub.Name))))
+		b.WriteByte(0)
+	}
+	return b.String()
+}
+
+func foldedString(sub *core.Attribute, v any) string {
+	folded := value.Fold(sub, v)
+	if t, ok := folded.(time.Time); ok {
+		return t.UTC().Format(time.RFC3339Nano)
+	}
+	return fmt.Sprint(folded)
 }
 
 func changed(subs []*core.Attribute, stored, candidate core.Object) *core.Attribute {

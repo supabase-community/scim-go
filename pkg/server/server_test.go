@@ -2208,6 +2208,44 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		}
 	})
 
+	t.Run("checks immutable group members in time proportional to their count", func(t *testing.T) {
+		srv := newTestServer(t)
+		grow := func(n int) time.Duration {
+			original := make([]core.Member, n)
+			for i := range original {
+				original[i] = core.Member{Value: "dup", Type: "User"}
+			}
+			created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: original}),
+			))
+			require.Equal(t, http.StatusCreated, created.StatusCode)
+			id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+			changed := make([]core.Member, n)
+			for i := range changed {
+				changed[i] = core.Member{Value: "dup", Type: "Group"}
+			}
+			changed[n-1] = core.Member{Value: "dup", Type: "User"}
+			start := time.Now()
+			response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: changed}),
+			))
+			elapsed := time.Since(start)
+
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			return elapsed
+		}
+
+		small := grow(200)
+		large := grow(800)
+
+		assert.Less(t, float64(large)/float64(small), 8.0, "immutable member validation must not be quadratic in duplicate values")
+	})
+
 	// RFC 7644 Section 3.5.1: values provided for readOnly attributes SHALL be ignored.
 	t.Run("keeps the stored readOnly meta.created value", func(t *testing.T) {
 		srv := newTestServer(t)
