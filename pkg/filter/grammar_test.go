@@ -159,6 +159,12 @@ func TestGrammarLogicalExpression(t *testing.T) {
 		assert.Equal(t, "b", node.Right().Left().Attribute())
 		assert.Equal(t, "c", node.Right().Right().Attribute())
 	})
+
+	t.Run("rejects a dangling operator with nothing valid after it", func(t *testing.T) {
+		_, err := g.Parse(`userName eq "bjensen" and `)
+
+		require.Error(t, err)
+	})
 }
 
 func TestGrammarParensAndNot(t *testing.T) {
