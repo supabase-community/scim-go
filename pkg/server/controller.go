@@ -111,16 +111,24 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	resource.Common().Meta = core.Meta{Version: c.ifMatch(r)}
+	resource.Common().Meta = core.Meta{Version: c.version(r, existing)}
 	if err := c.stampSchemas(resource); err != nil {
 		return protocol.SendError(w, err)
 	}
 	replaced, err := c.service.Replace(r.Context(), resource)
 	if err != nil {
-		return protocol.SendError(w, err)
+		return protocol.SendError(w, c.lostRace(r, err))
 	}
 	c.setVersion(w, replaced)
 	return c.send(w, http.StatusOK, replaced, projection)
+}
+
+// version pins a version-less write to the version the request just validated against, per RFC 7643 Section 7, so a concurrent version-less PUT cannot commit past a stale immutability check.
+func (c *controller[T]) version(r *http.Request, existing T) string {
+	if match := c.ifMatch(r); match != "" {
+		return match
+	}
+	return existing.Common().Meta.Version
 }
 
 func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {

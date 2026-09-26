@@ -2332,6 +2332,38 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	})
 }
 
+func TestRFC7644ConcurrentVersionlessPUTsCannotBothPassImmutabilityValidation(t *testing.T) {
+	gate := newRaceGate(2)
+	srv := newTestServer(t, withReplaceGate(gate))
+	id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+	put := func(employeeNumber string) *http.Response {
+		return Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: employeeNumber}}),
+		))
+	}
+
+	responses := make([]*http.Response, 2)
+	var wg sync.WaitGroup
+	for i, employeeNumber := range []string{"a", "b"} {
+		wg.Go(func() { responses[i] = put(employeeNumber) })
+	}
+	wg.Wait()
+
+	statuses := []int{responses[0].StatusCode, responses[1].StatusCode}
+	slices.Sort(statuses)
+	require.Equal(t, []int{http.StatusOK, http.StatusConflict}, statuses)
+
+	winner := "a"
+	if responses[0].StatusCode != http.StatusOK {
+		winner = "b"
+	}
+	final := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))))
+	assert.Equal(t, winner, final.EnterpriseUser.EmployeeNumber)
+}
+
 // RFC 7644 3.5.2 Modifying with PATCH
 func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	t.Run("patches a resource and returns the updated field with an ETag", func(t *testing.T) {
@@ -3206,7 +3238,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 					WithContentType(protocol.MediaType),
 					WithRequestBody([]byte(`{"userName":"bjensen"}`)),
 				)
-				assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
+				assert.Contains(t, []int{http.StatusOK, http.StatusConflict}, Response(t, srv, request).StatusCode)
 			})
 			wg.Go(func() {
 				request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,

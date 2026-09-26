@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,8 +39,31 @@ var tokens = map[string]error{
 }
 
 type testServer struct {
-	config  *core.ServiceProviderConfig
-	options []server.Option[*server.Server]
+	config      *core.ServiceProviderConfig
+	options     []server.Option[*server.Server]
+	replaceGate *raceGate
+}
+
+type raceGate struct {
+	mu      sync.Mutex
+	arrived int
+	total   int
+	release chan struct{}
+}
+
+func newRaceGate(total int) *raceGate {
+	return &raceGate{total: total, release: make(chan struct{})}
+}
+
+func (g *raceGate) arrive() {
+	g.mu.Lock()
+	g.arrived++
+	last := g.arrived == g.total
+	g.mu.Unlock()
+	if last {
+		close(g.release)
+	}
+	<-g.release
 }
 
 type testOption func(*testServer)
@@ -72,6 +96,7 @@ type part struct {
 
 type racingRepository struct {
 	server.Repository[*core.User]
+	replaceGate *raceGate
 }
 
 type inspectingRepository struct {
@@ -91,10 +116,13 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 	for _, option := range options {
 		option(s)
 	}
-	users := racingRepository{server.NewRepository[*core.User](basePath+"/Users", core.Schemas{
-		core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...),
-		core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...),
-	})}
+	users := racingRepository{
+		Repository: server.NewRepository[*core.User](basePath+"/Users", core.Schemas{
+			core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...),
+			core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...),
+		}),
+		replaceGate: s.replaceGate,
+	}
 	standard := []server.Option[*server.Server]{
 		server.ErrorHandler(func(_ *http.Request, err error) {
 			if !errors.Is(err, errUnreachable) {
@@ -123,9 +151,16 @@ func withOption(options ...server.Option[*server.Server]) testOption {
 	return func(s *testServer) { s.options = append(s.options, options...) }
 }
 
+func withReplaceGate(gate *raceGate) testOption {
+	return func(s *testServer) { s.replaceGate = gate }
+}
+
 func (r racingRepository) Replace(ctx context.Context, user *core.User) (*core.User, error) {
 	if user.UserName == racer {
 		return nil, scimerrors.ErrPreconditionFailed("resource has changed on the server")
+	}
+	if r.replaceGate != nil {
+		r.replaceGate.arrive()
 	}
 	return r.Repository.Replace(ctx, user)
 }
