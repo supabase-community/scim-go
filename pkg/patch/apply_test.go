@@ -668,6 +668,42 @@ func TestApplyWithin(t *testing.T) {
 		_, err := patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 0)
 		require.NoError(t, err)
 	})
+
+	t.Run("refuses a value-filtered write once holders times value size exceed the budget", func(t *testing.T) {
+		const holderCount = 2000
+		elements := make([]map[string]any, holderCount)
+		for i := range elements {
+			elements[i] = map[string]any{"type": "a", "n": i}
+		}
+		raw, err := json.Marshal(elements)
+		require.NoError(t, err)
+
+		big := strings.Repeat("x", 6000)
+		_, err = patch.ApplyWithin(map[string]any{}, []patch.Operation{
+			operation(patch.OpAdd, "emails", string(raw)),
+			operation(patch.OpReplace, `emails[type eq "a"].value`, `"`+big+`"`),
+		}, userSchemas(), 10_000_000)
+
+		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
+	})
+
+	t.Run("allows an ordinary value-filtered write within the budget", func(t *testing.T) {
+		resource := map[string]any{"emails": []any{
+			map[string]any{"type": "a", "value": "old-1"},
+			map[string]any{"type": "a", "value": "old-2"},
+		}}
+
+		patched, err := patch.ApplyWithin(resource, []patch.Operation{
+			operation(patch.OpReplace, `emails[type eq "a"].value`, `"new@example.com"`),
+		}, userSchemas(), 10_000_000)
+		require.NoError(t, err)
+
+		emails := patched["emails"].([]any)
+		require.Len(t, emails, 2)
+		for _, e := range emails {
+			assert.Equal(t, "new@example.com", e.(map[string]any)["value"])
+		}
+	})
 }
 
 func TestApplyRemoveReadOnlyRejected(t *testing.T) {

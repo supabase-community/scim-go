@@ -1,6 +1,7 @@
 package patch
 
 import (
+	"encoding/json"
 	"slices"
 
 	"github.com/supabase-community/scim-go/internal/value"
@@ -32,6 +33,9 @@ func (t *target) write(kind Op, value any) error {
 	if err != nil {
 		return err
 	}
+	if err := t.chargeOutput(holders, value); err != nil {
+		return err
+	}
 	if t.isListAdd(kind) {
 		value = t.fresh(value)
 	}
@@ -45,6 +49,14 @@ func (t *target) write(kind Op, value any) error {
 		demote(t.elements(), written)
 	}
 	return nil
+}
+
+func (t *target) chargeOutput(holders []core.Object, value any) error {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return scimerrors.ErrInternal("could not encode the request body")
+	}
+	return t.budget.chargeBytes(len(holders) * len(encoded))
 }
 
 func (t *target) put(holder core.Object, kind Op, value any) error {
