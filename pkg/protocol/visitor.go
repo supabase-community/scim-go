@@ -131,6 +131,12 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 	if err != nil {
 		return zero, err
 	}
+	// RFC 7644 Section 3.4.2.2: a bare multi-valued attribute name compares its "value" sub-attribute.
+	if path.SubAttribute == "" && attribute.Type == core.TypeComplex && attribute.MultiValued {
+		if sub := attribute.SubAttribute("value"); sub != nil {
+			attribute = sub
+		}
+	}
 	if err := r.conceal(path, attribute, op); err != nil {
 		return zero, err
 	}

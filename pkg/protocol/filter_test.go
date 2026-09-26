@@ -166,9 +166,11 @@ func TestFilter(t *testing.T) {
 	})
 
 	// RFC 7644 Section 3.4.2.2: for complex attributes, a fully qualified sub-attribute MUST be specified.
-	t.Run("rejects a comparison on a complex attribute without a sub-attribute", func(t *testing.T) {
-		_, err := protocol.Filter[clause](schemas, `emails co "example.com"`, sqlEvaluator{})
-		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
+	t.Run("compares a multi-valued attribute without a sub-attribute against its value sub-attribute", func(t *testing.T) {
+		out, err := protocol.Filter[clause](schemas, `emails co "example.com"`, sqlEvaluator{})
+		require.NoError(t, err)
+		assert.Equal(t, "emails LIKE ?", out.sql)
+		assert.Equal(t, []any{"%example.com%"}, out.args)
 	})
 
 	t.Run("resolves presence of an unknown attribute to invalidFilter", func(t *testing.T) {

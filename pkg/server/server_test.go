@@ -1186,6 +1186,22 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.4.2.2: a bare multi-valued attribute name compares its "value" sub-attribute.
+	t.Run("filters a multi-valued attribute name without a sub-attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "alice@example.com"}}})
+		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{{Value: "bob@example.org"}}})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`emails co "example.com"`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "alice", list.Resources[0].UserName)
+	})
+
 	t.Run("combines clauses with and", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
@@ -1737,6 +1753,31 @@ func TestRFC7644Sorting(t *testing.T) {
 		create(t, srv, &core.User{UserName: "nobody"})
 
 		path := basePath + "/Users?" + url.Values{"sortBy": {"emails.value"}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Len(t, list.Resources, 3)
+		assert.Equal(t, "mia", list.Resources[0].UserName)
+		assert.Equal(t, "zed", list.Resources[1].UserName)
+		assert.Equal(t, "nobody", list.Resources[2].UserName)
+	})
+
+	// RFC 7644 Section 3.4.2.3: a multi-valued attribute without a sub-attribute sorts by its primary value, or else its first value.
+	t.Run("sorts by a multi-valued attribute name without a sub-attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "zed", Emails: []core.Email{
+			{Value: "a@example.com", Primary: new(false)},
+			{Value: "z@example.com", Primary: new(true)},
+		}})
+		create(t, srv, &core.User{UserName: "mia", Emails: []core.Email{
+			{Value: "m@example.com"},
+			{Value: "b@example.com"},
+		}})
+		create(t, srv, &core.User{UserName: "nobody"})
+
+		path := basePath + "/Users?" + url.Values{"sortBy": {"emails"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 

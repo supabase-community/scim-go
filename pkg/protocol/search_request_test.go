@@ -174,7 +174,7 @@ func TestSearchRequest(t *testing.T) {
 			{protocol.SearchRequest{SortBy: "nickName"}, false},
 			{protocol.SearchRequest{SortBy: "name.familyName"}, false},
 			{protocol.SearchRequest{SortBy: "name"}, false},
-			{protocol.SearchRequest{SortBy: "emails"}, false},
+			{protocol.SearchRequest{SortBy: "emails"}, true},
 			{protocol.SearchRequest{SortBy: "emails.value"}, true},
 		}
 		for _, tc := range tt {
