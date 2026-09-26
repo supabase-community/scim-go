@@ -50,6 +50,7 @@ func New(basePath string, config *core.ServiceProviderConfig, options ...Option[
 	mux.HandleFunc("GET "+s.basePath+"/Schemas/{id}", s.handle(s.schemaByID))
 	mux.HandleFunc(s.basePath+"/Me", s.handle(me))
 	mux.HandleFunc(s.basePath+"/Bulk", s.handle(bulk))
+	mux.HandleFunc("POST "+s.basePath+"/.search", s.handle(search))
 
 	return s
 }
@@ -144,6 +145,11 @@ func me(w http.ResponseWriter, _ *http.Request) error {
 // bulk declines bulk operations, per RFC 7644, Section 3.7.
 func bulk(w http.ResponseWriter, _ *http.Request) error {
 	return protocol.SendError(w, scimerrors.ErrNotImplemented(`"/Bulk" is not supported`))
+}
+
+// search declines querying resources with POST ".search", per RFC 7644, Section 3.4.3.
+func search(w http.ResponseWriter, _ *http.Request) error {
+	return protocol.SendError(w, scimerrors.ErrNotImplemented(`".search" is not supported`))
 }
 
 // setLocation sets "Content-Location" to meta.location, per RFC 7643, Section 3.1.

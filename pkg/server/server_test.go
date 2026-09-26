@@ -2020,7 +2020,14 @@ func TestRFC7644Attributes(t *testing.T) {
 
 // RFC 7644 3.4.3 Querying Resources Using HTTP POST
 func TestRFC7644QueryingResourcesUsingHTTPPOST(t *testing.T) {
-	t.Skip("MAY: querying with POST /.search is not supported")
+	srv := newTestServer(t)
+
+	for _, path := range []string{basePath + "/.search", basePath + "/Users/.search"} {
+		response := Response(t, srv, Request(t, srv, http.MethodPost, path, WithBearerToken(validToken)))
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode, path)
+		assert.Equal(t, "501", ReadBodyAs[scimerrors.Error](t, response).Status, path)
+	}
 }
 
 // RFC 7644 3.5.1 Replacing with PUT

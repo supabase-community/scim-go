@@ -86,6 +86,7 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	s.mux.HandleFunc("PUT "+path+"/{id}", s.handle(controller.Replace))
 	s.mux.HandleFunc("PATCH "+path+"/{id}", s.handle(controller.Patch))
 	s.mux.HandleFunc("DELETE "+path+"/{id}", s.handle(controller.Delete))
+	s.mux.HandleFunc("POST "+path+"/.search", s.handle(search))
 }
 
 type extension struct {
