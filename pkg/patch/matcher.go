@@ -1,7 +1,6 @@
 package patch
 
 import (
-	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -101,9 +100,16 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 		return nil, err
 	}
 	*m.clauses++
+	if attr != nil {
+		expected, ok := literal(attr, op, want)
+		return func(member map[string]any) bool {
+			actual, _ := attr.Coerce(core.Object(member).Get(path.Name))
+			return ok && value.Match(op, value.Fold(attr, actual), expected)
+		}, nil
+	}
 	return func(member map[string]any) bool {
 		got := core.Object(member).Get(path.Name)
-		typed := cmp.Or(attr, inferred(got))
+		typed := inferred(got)
 		expected, ok := literal(typed, op, want)
 		actual, _ := typed.Coerce(got)
 		return ok && value.Match(op, value.Fold(typed, actual), expected)
@@ -137,14 +143,20 @@ func literal(attr *core.Attribute, op filter.Operator, want any) (any, bool) {
 	return value.Fold(attr, coerced), ok && value.Allowed(attr.Type, op)
 }
 
+var (
+	inferredString  = core.NewAttribute("", core.TypeString)
+	inferredBoolean = core.NewAttribute("", core.TypeBoolean)
+	inferredDecimal = core.NewAttribute("", core.TypeDecimal)
+)
+
 func inferred(got any) *core.Attribute {
 	switch got.(type) {
 	case string:
-		return core.NewAttribute("", core.TypeString)
+		return inferredString
 	case bool:
-		return core.NewAttribute("", core.TypeBoolean)
+		return inferredBoolean
 	case json.Number, float64, int64, int:
-		return core.NewAttribute("", core.TypeDecimal)
+		return inferredDecimal
 	}
 	return permissiveAttr
 }

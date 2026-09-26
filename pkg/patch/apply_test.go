@@ -1,6 +1,7 @@
 package patch_test
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -749,6 +750,42 @@ func TestApplyComplexMerge(t *testing.T) {
 
 		assert.Len(t, item["name"], keyCount)
 	})
+}
+
+func TestApplyValueFilterRecomputesLiteralPerElement(t *testing.T) {
+	certSchemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("certs", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("value", core.TypeBinary),
+			),
+		),
+	}
+	const elementCount = 2000
+	elements := make([]map[string]any, elementCount)
+	for i := range elements {
+		elements[i] = map[string]any{}
+	}
+	raw, err := json.Marshal(elements)
+	require.NoError(t, err)
+
+	run := func(literal string) time.Duration {
+		item := core.Object{}
+		require.NoError(t, apply(item, certSchemas, operation(patch.OpAdd, "certs", string(raw))))
+
+		start := time.Now()
+		err := apply(item, certSchemas, operation(patch.OpRemove, fmt.Sprintf(`certs[value eq %q]`, literal), ""))
+		elapsed := time.Since(start)
+
+		var scimErr *scimerrors.Error
+		require.ErrorAs(t, err, &scimErr)
+		require.Equal(t, scimerrors.NoTarget, scimErr.ScimType)
+		return elapsed
+	}
+
+	small := run(base64.StdEncoding.EncodeToString([]byte("x")))
+	large := run(base64.StdEncoding.EncodeToString([]byte(strings.Repeat("x", 6000))))
+
+	assert.Less(t, large, 10*small, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
 }
 
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
