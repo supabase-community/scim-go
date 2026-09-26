@@ -2975,7 +2975,12 @@ func TestRFC7644DeletingResources(t *testing.T) {
 
 // RFC 7644 3.7 Bulk Operations
 func TestRFC7644BulkOperations(t *testing.T) {
-	t.Skip("OPTIONAL: bulk operations are not supported")
+	srv := newTestServer(t)
+
+	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Bulk", WithBearerToken(validToken)))
+
+	assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+	assert.Equal(t, "501", ReadBodyAs[scimerrors.Error](t, response).Status)
 }
 
 // RFC 7644 3.8 Data Input/Output Formats

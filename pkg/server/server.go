@@ -49,6 +49,7 @@ func New(basePath string, config *core.ServiceProviderConfig, options ...Option[
 	mux.HandleFunc("GET "+s.basePath+"/Schemas", s.handle(s.listSchemas))
 	mux.HandleFunc("GET "+s.basePath+"/Schemas/{id}", s.handle(s.schemaByID))
 	mux.HandleFunc(s.basePath+"/Me", s.handle(me))
+	mux.HandleFunc(s.basePath+"/Bulk", s.handle(bulk))
 
 	return s
 }
@@ -138,6 +139,11 @@ func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
 // me declines the "/Me" alias, per RFC 7644, Section 3.11.
 func me(w http.ResponseWriter, _ *http.Request) error {
 	return protocol.SendError(w, scimerrors.ErrNotImplemented(`"/Me" is not supported`))
+}
+
+// bulk declines bulk operations, per RFC 7644, Section 3.7.
+func bulk(w http.ResponseWriter, _ *http.Request) error {
+	return protocol.SendError(w, scimerrors.ErrNotImplemented(`"/Bulk" is not supported`))
 }
 
 // setLocation sets "Content-Location" to meta.location, per RFC 7643, Section 3.1.
