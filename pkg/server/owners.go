@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"iter"
 	"time"
 
 	"github.com/supabase-community/scim-go/internal/value"
@@ -29,39 +30,35 @@ func newOwners(fields fields) owners {
 }
 
 func (o owners) conflict(id string, object core.Object) *core.Attribute {
-	var found *core.Attribute
-	o.each(object, func(c claims, key any) bool {
+	for c, key := range o.keys(object) {
 		if owner, ok := c.ids[key]; ok && owner != id {
-			found = c.Attribute
-			return true
+			return c.Attribute
 		}
-		return false
-	})
-	return found
+	}
+	return nil
 }
 
 func (o owners) claim(id string, object core.Object) {
-	o.each(object, func(c claims, key any) bool {
+	for c, key := range o.keys(object) {
 		c.ids[key] = id
-		return false
-	})
+	}
 }
 
 func (o owners) release(id string, object core.Object) {
-	o.each(object, func(c claims, key any) bool {
+	for c, key := range o.keys(object) {
 		if c.ids[key] == id {
 			delete(c.ids, key)
 		}
-		return false
-	})
+	}
 }
 
-// each walks every unique-attribute claim key for object, stopping early when fn returns true.
-func (o owners) each(object core.Object, fn func(c claims, key any) bool) {
-	for _, c := range o {
-		for _, key := range uniqueKeys(c.field, object) {
-			if fn(c, key) {
-				return
+func (o owners) keys(object core.Object) iter.Seq2[claims, any] {
+	return func(yield func(claims, any) bool) {
+		for _, c := range o {
+			for _, key := range uniqueKeys(c.field, object) {
+				if !yield(c, key) {
+					return
+				}
 			}
 		}
 	}
