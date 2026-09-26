@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -84,6 +85,9 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	if err := c.stampSchemas(resource); err != nil {
+		return protocol.SendError(w, err)
+	}
 	created, err := c.service.Create(r.Context(), resource)
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -107,6 +111,9 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	resource.Common().Meta = core.Meta{Version: c.ifMatch(r)}
+	if err := c.stampSchemas(resource); err != nil {
+		return protocol.SendError(w, err)
+	}
 	replaced, err := c.service.Replace(r.Context(), resource)
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -139,6 +146,9 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
+	if err := c.stampSchemas(patched); err != nil {
+		return protocol.SendError(w, err)
+	}
 	replaced, err := c.service.Replace(r.Context(), patched)
 	if err != nil {
 		return protocol.SendError(w, c.lostRace(r, err))
@@ -178,4 +188,20 @@ func (c *controller[T]) ifMatch(r *http.Request) string {
 		return ""
 	}
 	return match
+}
+
+// stampSchemas lists the base schema plus every extension with assigned data, per RFC 7643, Section 3.
+func (c *controller[T]) stampSchemas(resource T) error {
+	object, err := core.NewObject(resource)
+	if err != nil {
+		return err
+	}
+	uris := []core.SchemaURI{c.schemas.Base().ID}
+	for _, extension := range c.schemas.Extensions() {
+		if !value.IsUnassigned(object.Get(string(extension.ID))) {
+			uris = append(uris, extension.ID)
+		}
+	}
+	resource.Common().Schemas = uris
+	return nil
 }

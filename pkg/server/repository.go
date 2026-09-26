@@ -83,7 +83,6 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 	now := time.Now().UTC()
 	common := item.Common()
 	common.ID = uuid.NewV7().String()
-	common.Schemas = schemaURIs(r.schemas)
 	common.Meta = core.Meta{
 		ResourceType: r.schemas[0].Name,
 		Created:      now,
@@ -120,7 +119,6 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 		common.Meta = r.rows[i].item.Common().Meta
 		common.Meta.LastModified = now
 		common.Meta.Version = weakETag(now)
-		common.Schemas = schemaURIs(r.schemas)
 		replaced, err := r.rowOf(item)
 		if err != nil {
 			return err
@@ -246,14 +244,6 @@ func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (func(core.Ob
 type row[T core.Resource] struct {
 	item   T
 	object core.Object
-}
-
-func schemaURIs(schemas core.Schemas) []core.SchemaURI {
-	ids := make([]core.SchemaURI, len(schemas))
-	for i, schema := range schemas {
-		ids[i] = schema.ID
-	}
-	return ids
 }
 
 func weakETag(t time.Time) string {
