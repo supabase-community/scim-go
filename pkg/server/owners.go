@@ -29,29 +29,39 @@ func newOwners(fields fields) owners {
 }
 
 func (o owners) conflict(id string, object core.Object) *core.Attribute {
-	for _, c := range o {
-		for _, key := range uniqueKeys(c.field, object) {
-			if owner, ok := c.ids[key]; ok && owner != id {
-				return c.Attribute
-			}
+	var found *core.Attribute
+	o.each(object, func(c claims, key any) bool {
+		if owner, ok := c.ids[key]; ok && owner != id {
+			found = c.Attribute
+			return true
 		}
-	}
-	return nil
+		return false
+	})
+	return found
 }
 
 func (o owners) claim(id string, object core.Object) {
-	for _, c := range o {
-		for _, key := range uniqueKeys(c.field, object) {
-			c.ids[key] = id
-		}
-	}
+	o.each(object, func(c claims, key any) bool {
+		c.ids[key] = id
+		return false
+	})
 }
 
 func (o owners) release(id string, object core.Object) {
+	o.each(object, func(c claims, key any) bool {
+		if c.ids[key] == id {
+			delete(c.ids, key)
+		}
+		return false
+	})
+}
+
+// each walks every unique-attribute claim key for object, stopping early when fn returns true.
+func (o owners) each(object core.Object, fn func(c claims, key any) bool) {
 	for _, c := range o {
 		for _, key := range uniqueKeys(c.field, object) {
-			if c.ids[key] == id {
-				delete(c.ids, key)
+			if fn(c, key) {
+				return
 			}
 		}
 	}
