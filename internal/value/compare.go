@@ -66,7 +66,11 @@ func Compare(a, b any) (int, bool) {
 	case float64:
 		return compare(x, b)
 	case bool:
-		return compare(rank(x), rankOf(b))
+		y, ok := b.(bool)
+		if !ok {
+			return 0, false
+		}
+		return cmp.Compare(rank(x), rank(y)), true
 	case time.Time:
 		y, ok := b.(time.Time)
 		if !ok {
@@ -90,13 +94,6 @@ func rank(b bool) int {
 		return 1
 	}
 	return 0
-}
-
-func rankOf(b any) any {
-	if y, ok := b.(bool); ok {
-		return rank(y)
-	}
-	return nil
 }
 
 func substring(op filter.Operator, got, want any) bool {
