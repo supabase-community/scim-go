@@ -16,9 +16,13 @@ func merge(holder core.Object, values map[string]any, parent *core.Attribute, ki
 }
 
 // RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array.
+// RFC 7643 Section 2.5: "null" for the value is treated the same as an empty array, not an array holding a null.
 func shaped(value any, multiValued bool) any {
 	if !multiValued {
 		return value
+	}
+	if value == nil {
+		return []any{}
 	}
 	if list, ok := value.([]any); ok {
 		return list

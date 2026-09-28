@@ -1011,6 +1011,15 @@ func TestApplyReplaceKeepsOmittedImmutableSubAttributesWithoutAValueSubAttribute
 	assert.Equal(t, "A", parts[0].(map[string]any)["code"])
 }
 
+// RFC 7643 Section 2.5: "null" for a multi-valued attribute clears it rather than storing an array holding null.
+func TestApplyReplaceMultiValuedWithNullClearsIt(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@b.com", "type": "work"}}}
+
+	require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, "emails", "null")))
+
+	assert.Empty(t, item["emails"].([]any))
+}
+
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
 	patched, err := patch.Apply(resource, ops, schemas)
 	if err != nil {
