@@ -12,6 +12,12 @@ func (n ResourceTypeName) Reference() ReferenceType { return ReferenceType(n) }
 // ReferenceType is a "referenceTypes" value, per RFC 7643, Section 7.
 type ReferenceType string
 
+// The reference types of RFC 7643, Section 7 that are not resource types.
+const (
+	ReferenceExternal ReferenceType = "external"
+	ReferenceURI      ReferenceType = "uri"
+)
+
 // Mutability states when an attribute may be (re)defined, per RFC 7643, Section 7.
 type Mutability string
 
@@ -39,10 +45,4 @@ const (
 	UniquenessNone   Uniqueness = "none"
 	UniquenessServer Uniqueness = "server"
 	UniquenessGlobal Uniqueness = "global"
-)
-
-// The reference types of RFC 7643, Section 7 that are not resource types.
-const (
-	ReferenceExternal ReferenceType = "external"
-	ReferenceURI      ReferenceType = "uri"
 )
