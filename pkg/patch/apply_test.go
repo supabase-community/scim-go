@@ -77,6 +77,15 @@ func TestApplyAddWithoutPathSkipsAValueTheTargetAlreadyContains(t *testing.T) {
 	assert.Len(t, item["emails"], 1)
 }
 
+// RFC 7643 Section 2.4: "value" identifies an element of a multi-valued attribute, so an add matching it by "value" alone is skipped, per RFC 7644 Section 3.5.2.1.
+func TestApplyAddSkipsAnElementAlreadyPresentByValueAlone(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User", "$ref": "https://example.com/Users/u-1"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpAdd, "members", `[{"value":"u-1","display":"Bob"}]`)))
+
+	assert.Len(t, item["members"], 1)
+}
+
 func TestApplyMissingValueRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, patch.Operation{Op: patch.OpReplace, Path: "userName"}), &err)

@@ -217,11 +217,20 @@ func (t *target) isListAdd(kind Op) bool {
 	return kind == OpAdd && t.filter.match == nil && t.path.Name != "" && t.path.SubAttribute == "" && t.attr.MultiValued
 }
 
-// fresh drops elements already present in the target list, per RFC 7644, Section 3.5.2.1: "If the target location already contains the value specified, no changes SHOULD be made".
+// fresh drops elements already present in the target list, per RFC 7644, Section 3.5.2.1: "If the target location already contains the value specified, no changes SHOULD be made". Elements identified by a "value" sub-attribute are matched by that identity, per RFC 7643 Section 2.4.
 func (t *target) fresh(candidate any) []any {
-	existing := t.elements()
-	return slices.DeleteFunc(slices.Clone(shaped(candidate, true).([]any)), func(addition any) bool {
-		return value.Contains(t.attr, existing, addition)
+	elements := slices.Clone(shaped(candidate, true).([]any))
+	if t.attr.SubAttribute("value") == nil {
+		existing := t.elements()
+		return slices.DeleteFunc(elements, func(addition any) bool {
+			return value.Contains(t.attr, existing, addition)
+		})
+	}
+	stored := byValue(t.elements())
+	return slices.DeleteFunc(elements, func(addition any) bool {
+		key, ok := value.Key(asMember(addition))
+		_, exists := stored[key]
+		return ok && exists
 	})
 }
 
