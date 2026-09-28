@@ -11,6 +11,12 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+var (
+	inferredString  = core.NewAttribute("", core.TypeString)
+	inferredBoolean = core.NewAttribute("", core.TypeBoolean)
+	inferredDecimal = core.NewAttribute("", core.TypeDecimal)
+)
+
 type matcher struct {
 	attr    *core.Attribute
 	clauses *int
@@ -142,12 +148,6 @@ func literal(attr *core.Attribute, op filter.Operator, want any) (any, bool) {
 	coerced, ok := attr.Coerce(want)
 	return value.Fold(attr, coerced), ok && value.Allowed(attr.Type, op)
 }
-
-var (
-	inferredString  = core.NewAttribute("", core.TypeString)
-	inferredBoolean = core.NewAttribute("", core.TypeBoolean)
-	inferredDecimal = core.NewAttribute("", core.TypeDecimal)
-)
 
 func inferred(got any) *core.Attribute {
 	switch got.(type) {
