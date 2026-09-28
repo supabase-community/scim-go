@@ -65,22 +65,22 @@ func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
-	projection, err := protocol.ParseProjection(r.URL.Query(), c.schemas)
-	if err != nil {
-		return protocol.SendError(w, err)
+	projection, ok, err := c.projectionFor(w, r)
+	if !ok {
+		return err
 	}
-	resource, err := c.service.Get(r.Context(), r.PathValue("id"))
-	if err != nil {
-		return protocol.SendError(w, err)
+	resource, ok, err := c.existing(w, r)
+	if !ok {
+		return err
 	}
 	c.setVersion(w, resource)
 	return c.send(w, http.StatusOK, resource, projection)
 }
 
 func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
-	projection, err := protocol.ParseProjection(r.URL.Query(), c.schemas)
-	if err != nil {
-		return protocol.SendError(w, err)
+	projection, ok, err := c.projectionFor(w, r)
+	if !ok {
+		return err
 	}
 	resource, err := protocol.DecodeResource[T](r.Body, nil, c.schemas)
 	if err != nil {
@@ -99,13 +99,13 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
-	projection, err := protocol.ParseProjection(r.URL.Query(), c.schemas)
-	if err != nil {
-		return protocol.SendError(w, err)
+	projection, ok, err := c.projectionFor(w, r)
+	if !ok {
+		return err
 	}
-	existing, err := c.service.Get(r.Context(), r.PathValue("id"))
-	if err != nil {
-		return protocol.SendError(w, err)
+	existing, ok, err := c.existing(w, r)
+	if !ok {
+		return err
 	}
 	resource, err := protocol.DecodeResource[T](r.Body, existing, c.schemas)
 	if err != nil {
@@ -135,13 +135,13 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if !c.config.SupportsPatch() {
 		return protocol.SendError(w, scimerrors.ErrNotImplemented(`"PATCH" is not supported`))
 	}
-	projection, err := protocol.ParseProjection(r.URL.Query(), c.schemas)
-	if err != nil {
-		return protocol.SendError(w, err)
+	projection, ok, err := c.projectionFor(w, r)
+	if !ok {
+		return err
 	}
-	existing, err := c.service.Get(r.Context(), r.PathValue("id"))
-	if err != nil {
-		return protocol.SendError(w, err)
+	existing, ok, err := c.existing(w, r)
+	if !ok {
+		return err
 	}
 	if match := c.ifMatch(r); match != "" && existing.Common().Meta.Version != match {
 		return protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
@@ -171,6 +171,24 @@ func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	return protocol.Send(w, http.StatusNoContent, nil)
+}
+
+// projectionFor reports ok=false when the request is invalid; err is then already written to w and must be returned as-is.
+func (c *controller[T]) projectionFor(w http.ResponseWriter, r *http.Request) (projection protocol.Projection, ok bool, err error) {
+	projection, err = protocol.ParseProjection(r.URL.Query(), c.schemas)
+	if err != nil {
+		return projection, false, protocol.SendError(w, err)
+	}
+	return projection, true, nil
+}
+
+// existing reports ok=false when the resource could not be fetched; err is then already written to w and must be returned as-is.
+func (c *controller[T]) existing(w http.ResponseWriter, r *http.Request) (resource T, ok bool, err error) {
+	resource, err = c.service.Get(r.Context(), r.PathValue("id"))
+	if err != nil {
+		return resource, false, protocol.SendError(w, err)
+	}
+	return resource, true, nil
 }
 
 func (c *controller[T]) send(w http.ResponseWriter, status int, resource T, projection protocol.Projection) error {
