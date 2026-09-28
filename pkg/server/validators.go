@@ -153,8 +153,6 @@ func immutableElements(elements func(core.Object) []any, subs []*core.Attribute,
 	return nil
 }
 
-// signature reduces an element to one comparable string over subs, so duplicate "value" members
-// can be matched in constant time instead of scanned pairwise.
 func signature(subs []*core.Attribute, element core.Object) string {
 	var b strings.Builder
 	for _, sub := range subs {
