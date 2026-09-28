@@ -221,9 +221,9 @@ func (t *target) isListAdd(kind Op) bool {
 func (t *target) fresh(candidate any) []any {
 	elements := slices.Clone(shaped(candidate, true).([]any))
 	if t.attr.SubAttribute("value") == nil {
-		existing := t.elements()
+		set := value.NewSet(t.attr, t.elements())
 		return slices.DeleteFunc(elements, func(addition any) bool {
-			return value.Contains(t.attr, existing, addition)
+			return set.Contains(addition)
 		})
 	}
 	stored := value.ByIdentity(t.attr, t.elements())

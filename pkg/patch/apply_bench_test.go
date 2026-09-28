@@ -74,6 +74,29 @@ func BenchmarkApplyManyAdds(b *testing.B) {
 	}
 }
 
+// BenchmarkApplyManyAddsWithoutAValueSubAttribute covers AUTH-1502: "addresses" has no "value"
+// sub-attribute, so fresh() used to compare every added element against every stored one.
+func BenchmarkApplyManyAddsWithoutAValueSubAttribute(b *testing.B) {
+	schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
+	for _, n := range []int{1000, 10000} {
+		first := make([]map[string]any, n)
+		second := make([]map[string]any, n)
+		for i := range n {
+			first[i] = map[string]any{"postalCode": fmt.Sprintf("a%d", i)}
+			second[i] = map[string]any{"postalCode": fmt.Sprintf("b%d", i)}
+		}
+		firstValue, _ := json.Marshal(first)
+		secondValue, _ := json.Marshal(second)
+		ops := []patch.Operation{
+			{Op: patch.OpAdd, Path: "addresses", Value: firstValue},
+			{Op: patch.OpAdd, Path: "addresses", Value: secondValue},
+		}
+		b.Run(fmt.Sprintf("ops=%d", n), func(b *testing.B) {
+			benchApply(b, map[string]any{}, ops, schemas)
+		})
+	}
+}
+
 func benchApply(b *testing.B, doc map[string]any, ops []patch.Operation, schemas []*core.Schema) {
 	b.Helper()
 	b.ReportAllocs()
