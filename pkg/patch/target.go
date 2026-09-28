@@ -150,25 +150,36 @@ func (t *target) holders(create bool) ([]core.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	value := container.Get(t.path.Name)
-	elements, _ := value.([]any)
 	switch {
 	case t.filter.match != nil:
-		if t.filter.matched, err = t.matches(elements); err != nil {
-			return nil, err
-		}
-		return members(elements, t.filter.matched)
+		return t.matchedHolders(container)
 	case t.path.SubAttribute == "":
 		return []core.Object{container}, nil
 	case create:
 		nested, err := child(container, t.path.Name)
 		return []core.Object{nested}, err
 	}
-	switch typed := value.(type) {
+	return t.typedHolders(container)
+}
+
+// matchedHolders resolves a value-filtered path to the elements the filter selects, per RFC 7644, Section 3.5.2.
+func (t *target) matchedHolders(container core.Object) ([]core.Object, error) {
+	elements, _ := container.Get(t.path.Name).([]any)
+	matched, err := t.matches(elements)
+	if err != nil {
+		return nil, err
+	}
+	t.filter.matched = matched
+	return members(elements, matched)
+}
+
+// typedHolders resolves a plain sub-attribute path by the runtime shape of its container value.
+func (t *target) typedHolders(container core.Object) ([]core.Object, error) {
+	switch value := container.Get(t.path.Name).(type) {
 	case map[string]any:
-		return []core.Object{typed}, nil
+		return []core.Object{value}, nil
 	case []any:
-		return members(elements, nil)
+		return members(value, nil)
 	}
 	return nil, nil
 }
