@@ -271,69 +271,6 @@ func members(elements []any, matched []bool) ([]core.Object, error) {
 	return holders, nil
 }
 
-// RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
-func merge(holder core.Object, values map[string]any, parent *core.Attribute, kind Op) {
-	keys := newKeys(holder)
-	for name, value := range values {
-		key := keys.resolve(name)
-		holder[key] = appended(holder[key], shaped(value, subAttr(parent, name).MultiValued), kind)
-		keys.add(key)
-	}
-}
-
-// RFC 7644 Section 3.5.2: an immutable sub-attribute a replacement element omits keeps its stored value, matched by "value" to the element it replaces.
-func carryImmutable(attr *core.Attribute, kind Op, stored []any, candidate any) any {
-	elements, ok := candidate.([]any)
-	subs := immutableSubs(attr.SubAttributes)
-	if kind != OpReplace || !ok || attr.SubAttribute("value") == nil || len(subs) == 0 {
-		return candidate
-	}
-	byKey := byValue(stored)
-	for _, element := range elements {
-		fillOmitted(asMember(element), subs, byKey)
-	}
-	return candidate
-}
-
-func immutableSubs(subs []*core.Attribute) []*core.Attribute {
-	return slices.DeleteFunc(slices.Clone(subs), func(sub *core.Attribute) bool { return sub.Mutability != core.MutabilityImmutable })
-}
-
-func byValue(elements []any) map[string]map[string]any {
-	stored := map[string]map[string]any{}
-	for _, element := range elements {
-		if member := asMember(element); member != nil {
-			if key, ok := value.Key(member); ok {
-				stored[key] = member
-			}
-		}
-	}
-	return stored
-}
-
-func fillOmitted(member map[string]any, subs []*core.Attribute, stored map[string]map[string]any) {
-	if member == nil {
-		return
-	}
-	key, ok := value.Key(member)
-	existing := stored[key]
-	if !ok || existing == nil {
-		return
-	}
-	for _, sub := range subs {
-		if _, present := member[sub.Name]; !present {
-			if held, has := existing[sub.Name]; has {
-				member[sub.Name] = held
-			}
-		}
-	}
-}
-
-func asMember(element any) map[string]any {
-	member, _ := element.(map[string]any)
-	return member
-}
-
 func eachSub(attr *core.Attribute, value any, visit func(sub *core.Attribute, held any) error) error {
 	switch v := value.(type) {
 	case map[string]any:
@@ -370,40 +307,4 @@ func subAttr(parent *core.Attribute, name string) *core.Attribute {
 		return sub
 	}
 	return permissiveAttr
-}
-
-// RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array.
-func shaped(value any, multiValued bool) any {
-	if !multiValued {
-		return value
-	}
-	if list, ok := value.([]any); ok {
-		return list
-	}
-	return []any{value}
-}
-
-func set(o core.Object, name string, value any, kind Op) {
-	o.Set(name, appended(o.Get(name), value, kind))
-}
-
-func appended(before, value any, kind Op) any {
-	if list, ok := before.([]any); kind == OpAdd && ok {
-		return append(list, shaped(value, true).([]any)...)
-	}
-	return value
-}
-
-func child(o core.Object, name string) (core.Object, error) {
-	existing := o.Get(name)
-	if existing == nil {
-		fresh := map[string]any{}
-		o.Set(name, fresh)
-		return fresh, nil
-	}
-	nested, ok := existing.(map[string]any)
-	if !ok {
-		return nil, scimerrors.ErrInvalidPath(`"path" targets a non-complex attribute`)
-	}
-	return nested, nil
 }
