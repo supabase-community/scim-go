@@ -480,9 +480,20 @@ func TestApplyValuePathFilterHonorsCaseExact(t *testing.T) {
 	}
 	item := map[string]any{"emails": []any{map[string]any{"value": "abc@x"}}}
 
-	var err *scimerrors.Error
-	require.ErrorAs(t, apply(item, schemas, operation(patch.OpRemove, `emails[value eq "ABC@x"]`, "")), &err)
-	assert.Equal(t, scimerrors.NoTarget, err.ScimType)
+	require.NoError(t, apply(item, schemas, operation(patch.OpRemove, `emails[value eq "ABC@x"]`, "")))
+
+	emails := item["emails"].([]any)
+	require.Len(t, emails, 1)
+	assert.Equal(t, "abc@x", emails[0].(map[string]any)["value"])
+}
+
+// RFC 7644 Section 3.5.2.2: removing a value a filter doesn't match makes no change and still succeeds.
+func TestApplyValuePathRemoveNoMatchIsANoOp(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"type": "work", "value": "w@x"}}}
+
+	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[type eq "home"]`, "")))
+
+	assert.Len(t, item["emails"].([]any), 1)
 }
 
 func TestApplyValuePathNumericFilterNativeInt(t *testing.T) {
@@ -812,9 +823,7 @@ func TestApplyValueFilterRecomputesLiteralPerElement(t *testing.T) {
 		err := apply(item, certSchemas, operation(patch.OpRemove, fmt.Sprintf(`certs[value eq %q]`, literal), ""))
 		elapsed := time.Since(start)
 
-		var scimErr *scimerrors.Error
-		require.ErrorAs(t, err, &scimErr)
-		require.Equal(t, scimerrors.NoTarget, scimErr.ScimType)
+		require.NoError(t, err)
 		return elapsed
 	}
 

@@ -139,7 +139,7 @@ func (t *target) drop() error {
 		}
 	}
 	if len(kept) == len(elements) {
-		return scimerrors.ErrNoTarget(`"path" matched no elements`)
+		return nil // RFC 7644 Section 3.5.2.2: a filter matching no value makes no change and still succeeds.
 	}
 	container.Set(t.path.Name, kept)
 	return nil
