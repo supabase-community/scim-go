@@ -3,6 +3,7 @@ package patch
 import (
 	"encoding/json"
 	"slices"
+	"strconv"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -97,6 +98,10 @@ func (t *target) overwritable(holder core.Object, kind Op) error {
 func (t *target) remove() error {
 	if t.filter.match != nil && t.path.SubAttribute == "" {
 		return t.drop()
+	}
+	// RFC 7643 Section 7: removing a named immutable sub-attribute leaves its element assigned but changed, which "immutable" forbids; removing the whole element is unaffected, since that takes the drop() branch above.
+	if t.path.SubAttribute != "" && t.attr.Mutability == core.MutabilityImmutable {
+		return scimerrors.ErrMutability(strconv.Quote(t.attr.Name) + " is immutable")
 	}
 	holders, err := t.holders(false)
 	if err != nil {

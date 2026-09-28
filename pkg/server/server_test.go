@@ -2414,6 +2414,32 @@ func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
 		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 4.2: "value" identifies a member; removing it while the member stays is still a mutability error, not a way to blank the identity undetected.
+	for _, path := range []string{"members.value", `members[value eq "u-1"].value`} {
+		t.Run("PATCH remove of the member value sub-attribute itself is a mutability error: "+path, func(t *testing.T) {
+			srv := newTestServer(t)
+			created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+			))
+			require.Equal(t, http.StatusCreated, created.StatusCode)
+			id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+			response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{{Op: patch.OpRemove, Path: path}},
+				}),
+			))
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+	}
+
 	t.Run("resending a member by value and display alone twice keeps $ref and type", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
