@@ -2172,78 +2172,20 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, "Jensen", ReadBodyAs[core.User](t, response).Name.FamilyName)
 	})
 
-	// RFC 7644 Section 3.5.1: if values are already set for an immutable attribute, the input values MUST match.
-	t.Run("rejects a replace that changes an immutable sub-attribute of a group member", func(t *testing.T) {
-		for _, test := range []struct {
-			name    string
-			members []core.Member
-			status  int
-		}{
-			{"rejects a changed type", []core.Member{{Value: "u-1", Type: "Group"}}, http.StatusBadRequest},
-			{"rejects an omitted type", []core.Member{{Value: "u-1"}}, http.StatusBadRequest},
-			{"accepts a new member list", []core.Member{{Value: "u-2", Type: "User"}}, http.StatusOK},
-		} {
-			t.Run(test.name, func(t *testing.T) {
-				srv := newTestServer(t)
-				created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
-					WithBearerToken(validToken),
-					WithContentType(protocol.MediaType),
-					WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
-				))
-				require.Equal(t, http.StatusCreated, created.StatusCode)
-				id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
-
-				request := Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
-					WithBearerToken(validToken),
-					WithContentType(protocol.MediaType),
-					WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: test.members}),
-				)
-				response := Response(t, srv, request)
-
-				require.Equal(t, test.status, response.StatusCode)
-				if test.status == http.StatusBadRequest {
-					assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
-				}
-			})
-		}
-	})
-
-	t.Run("checks immutable group members in time proportional to their count", func(t *testing.T) {
+	// RFC 7644 Section 3.5.1: an omitted immutable attribute is not asserted, so it is not compared.
+	t.Run("allows a replace that omits an immutable attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		grow := func(n int) time.Duration {
-			original := make([]core.Member, n)
-			for i := range original {
-				original[i] = core.Member{Value: "dup", Type: "User"}
-			}
-			created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
-				WithBearerToken(validToken),
-				WithContentType(protocol.MediaType),
-				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: original}),
-			))
-			require.Equal(t, http.StatusCreated, created.StatusCode)
-			id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+		id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
 
-			changed := make([]core.Member, n)
-			for i := range changed {
-				changed[i] = core.Member{Value: "dup", Type: "Group"}
-			}
-			changed[n-1] = core.Member{Value: "dup", Type: "User"}
-			start := time.Now()
-			response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
-				WithBearerToken(validToken),
-				WithContentType(protocol.MediaType),
-				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: changed}),
-			))
-			elapsed := time.Since(start)
+		request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithHeader("If-Match", etag),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		)
+		response := Response(t, srv, request)
 
-			require.Equal(t, http.StatusOK, response.StatusCode)
-			return elapsed
-		}
-
-		small := grow(200)
-		large := grow(800)
-
-		assert.Less(t, float64(large)/float64(small), 8.0, "immutable member validation must not be quadratic in duplicate values")
+		require.Equal(t, http.StatusOK, response.StatusCode)
 	})
 
 	// RFC 7644 Section 3.5.1: values provided for readOnly attributes SHALL be ignored.
@@ -2330,6 +2272,128 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.True(t, ReadBodyAs[core.User](t, response).Meta.LastModified.After(created.Meta.LastModified))
 	})
+}
+
+// RFC 7644 Section 3.5.1: an omitted immutable sub-attribute is not asserted, so it is not compared; a different asserted value still 400s.
+func TestRFC7644GroupMemberMutability(t *testing.T) {
+	seed := core.Member{Value: "u-1", Type: "User", Ref: "https://example.com/v2/Users/u-1"}
+	for _, test := range []struct {
+		name   string
+		member core.Member
+		status int
+	}{
+		{"rejects a changed type", core.Member{Value: "u-1", Type: "Group", Ref: seed.Ref}, http.StatusBadRequest},
+		{"allows an omitted type", core.Member{Value: "u-1", Ref: seed.Ref}, http.StatusOK},
+		{"rejects a changed $ref", core.Member{Value: "u-1", Type: "User", Ref: "https://example.com/v2/Users/other"}, http.StatusBadRequest},
+		{"allows an omitted $ref", core.Member{Value: "u-1", Type: "User"}, http.StatusOK},
+		{"accepts a new member list", core.Member{Value: "u-2", Type: "User"}, http.StatusOK},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			srv := newTestServer(t)
+			created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{seed}}),
+			))
+			require.Equal(t, http.StatusCreated, created.StatusCode)
+			id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+			response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{test.member}}),
+			))
+
+			require.Equal(t, test.status, response.StatusCode)
+			if test.status == http.StatusBadRequest {
+				assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+			}
+		})
+	}
+}
+
+func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
+	t.Run("PUT re-sending an existing member by value alone keeps the member", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1"}}}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []core.Member{{Value: "u-1"}}, ReadBodyAs[core.Group](t, response).Members)
+	})
+
+	t.Run("PATCH replace members with an already-present value and no type is not a mutability error", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{
+					{Op: patch.OpReplace, Path: "members", Value: json.RawMessage(`[{"value":"u-1"}]`)},
+				},
+			}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+	})
+}
+
+func TestRFC7644GroupMemberMutabilityIsLinearInMemberCount(t *testing.T) {
+	srv := newTestServer(t)
+	grow := func(n int) time.Duration {
+		original := make([]core.Member, n)
+		for i := range original {
+			original[i] = core.Member{Value: "dup", Type: "User"}
+		}
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: original}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		changed := make([]core.Member, n)
+		for i := range changed {
+			changed[i] = core.Member{Value: "dup", Type: "Group"}
+		}
+		changed[n-1] = core.Member{Value: "dup", Type: "User"}
+		start := time.Now()
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: changed}),
+		))
+		elapsed := time.Since(start)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		return elapsed
+	}
+
+	small := grow(200)
+	large := grow(800)
+
+	assert.Less(t, float64(large)/float64(small), 8.0, "immutable member validation must not be quadratic in duplicate values")
 }
 
 func TestRFC7644ConcurrentVersionlessPUTsCannotBothPassImmutabilityValidation(t *testing.T) {

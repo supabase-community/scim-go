@@ -95,14 +95,14 @@ func previous[T core.Resource](ctx context.Context, repo Repository[T], candidat
 	return core.NewObject(existing)
 }
 
-// immutable rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7643, Section 7.
+// immutable rejects a change to an "immutable" attribute once a value has been assigned; an omitted candidate value is not asserted, per RFC 7644, Section 3.5.1.
 func immutable(fields fields, before, after core.Object) error {
 	for _, field := range fields {
 		if field.parent != nil && field.parent.MultiValued {
 			continue
 		}
-		assigned := field.value(before)
-		if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(after)) {
+		assigned, candidate := field.value(before), field.value(after)
+		if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.IsUnassigned(candidate) && !value.Equal(field.Attribute, assigned, candidate) {
 			return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
 		}
 		if !field.MultiValued || field.SubAttribute("value") == nil {
@@ -170,10 +170,14 @@ func foldedString(sub *core.Attribute, v any) string {
 	return fmt.Sprint(folded)
 }
 
+// RFC 7644 Section 3.5.1: an omitted candidate sub-attribute is not asserted, so it is not compared.
 func changed(subs []*core.Attribute, stored, candidate core.Object) *core.Attribute {
 	for _, sub := range subs {
-		assigned := coerce(sub, stored.Get(sub.Name))
-		if !value.IsUnassigned(assigned) && !value.Equal(sub, assigned, coerce(sub, candidate.Get(sub.Name))) {
+		assigned, given := coerce(sub, stored.Get(sub.Name)), coerce(sub, candidate.Get(sub.Name))
+		if value.IsUnassigned(assigned) || value.IsUnassigned(given) {
+			continue
+		}
+		if !value.Equal(sub, assigned, given) {
 			return sub
 		}
 	}
