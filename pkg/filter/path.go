@@ -17,13 +17,12 @@ func NewPath(text string) (Path, error) {
 		}
 		return Path{AttrPath: path}, nil
 	}
-	node, err := Parse(text)
+	// RFC 7644 Section 3.5.2: PATH's valuePath alternative is attrPath "[" valFilter "]" [subAttr], not the general FILTER grammar, so a leading "(" or "not" here is rejected rather than silently unwrapped.
+	raw, err := defaultGrammar.run(text, defaultGrammar.valuePath(defaultGrammar.valueFilter))
 	if err != nil {
 		return Path{}, err
 	}
-	if !node.HasPath() {
-		return Path{}, newParseError(text, 0)
-	}
+	node := NewNode(raw)
 	path := Path{
 		AttrPath:    splitAttrPath(node.Path()),
 		ValueFilter: node.ValueFilter(),
