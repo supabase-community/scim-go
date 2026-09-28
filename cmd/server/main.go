@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,14 +21,7 @@ import (
 const basePath = "/scim/v2"
 
 func main() {
-	addr := ":8080"
-	if port := os.Getenv("PORT"); port != "" {
-		addr = ":" + port
-	}
-	token := os.Getenv("SCIM_BEARER_TOKEN")
-	if token == "" {
-		log.Fatal("SCIM_BEARER_TOKEN must be set")
-	}
+	addr, token := configFromEnv()
 	config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning()
 	httpServer := &http.Server{
 		Addr:              addr,
@@ -41,14 +35,31 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	fmt.Println("scim server listening on", addr, "under", basePath)
+	run(ctx.Done(), httpServer)
+}
+
+func configFromEnv() (addr, token string) {
+	addr = ":8080"
+	if port := os.Getenv("PORT"); port != "" {
+		addr = ":" + port
+	}
+	token = os.Getenv("SCIM_BEARER_TOKEN")
+	if token == "" {
+		log.Fatal("SCIM_BEARER_TOKEN must be set")
+	}
+	return addr, token
+}
+
+// run serves httpServer until done is closed, then shuts it down within a grace period.
+func run(done <-chan struct{}, httpServer *http.Server) {
 	go func() {
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
 	}()
-	fmt.Println("scim server listening on", addr, "under", basePath)
 
-	<-ctx.Done()
+	<-done
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
