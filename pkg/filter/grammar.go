@@ -44,12 +44,8 @@ func newGrammar(maxInputBytes int) *grammar {
 	// valFilter atom omits valuePath: RFC forbids a nested value path here.
 	valueAtom := peg.Choice(g.parenGroup(valueRef), attrExp)
 
-	var andFilter, andValue peg.Parser
-	andFilter = g.and(filterAtom, peg.Ref(&andFilter))
-	andValue = g.and(valueAtom, peg.Ref(&andValue))
-
-	g.filter = g.or(andFilter, filterRef)
-	g.valueFilter = g.or(andValue, valueRef)
+	g.filter = g.logExpr(filterAtom, filterRef)
+	g.valueFilter = g.logExpr(valueAtom, valueRef)
 
 	return g
 }
@@ -87,6 +83,13 @@ func (g *grammar) or(left, filter peg.Parser) peg.Parser {
 // logExp = FILTER SP "and" SP FILTER (binds tighter than "or").
 func (g *grammar) and(atom, self peg.Parser) peg.Parser {
 	return binaryExpression(atom, peg.Fold("and"), "and", self)
+}
+
+// logExpr = atom *("and" atom) / fallback: builds the "and"-chain then wraps it with the "or" fallback.
+func (g *grammar) logExpr(atom, fallback peg.Parser) peg.Parser {
+	var and peg.Parser
+	and = g.and(atom, peg.Ref(&and))
+	return g.or(and, fallback)
 }
 
 // *1"not" "(" sub ")": an optional negation around a parenthesized sub-filter.
