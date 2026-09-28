@@ -108,7 +108,7 @@ func (r *visitor[Output]) resolve(path filter.AttrPath) (*core.Attribute, error)
 	}
 	attribute, ok := r.schemas.Resolve(core.SchemaURI(path.URI), path.Name, path.SubAttribute)
 	if !ok {
-		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
+		return nil, unknownAttribute(path)
 	}
 	return attribute, nil
 }
@@ -124,7 +124,7 @@ func (r *visitor[Output]) parent(path filter.AttrPath) *core.Attribute {
 func (r *visitor[Output]) resolveWithin(path filter.AttrPath) (*core.Attribute, error) {
 	attribute := r.scope.SubAttribute(path.Name)
 	if attribute == nil || path.SubAttribute != "" {
-		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
+		return nil, unknownAttribute(path)
 	}
 	return attribute, nil
 }
@@ -145,7 +145,7 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 		return zero, err
 	}
 	if !value.Allowed(attribute.Type, op) {
-		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
+		return zero, invalidOperator(op, path)
 	}
 	coerced, ok := attribute.Coerce(literal)
 	if !ok {
@@ -163,7 +163,15 @@ func (r *visitor[Output]) conceal(path filter.AttrPath, attribute *core.Attribut
 		// RFC 7644 Section 7.5.2: a GET filter that contains sensitive information SHOULD be refused with 403.
 		return scimerrors.ErrSensitive(fmt.Sprintf("a filter on %q must not be sent in a request URI", path.String()))
 	case op != filter.OpEquals:
-		return scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
+		return invalidOperator(op, path)
 	}
 	return nil
+}
+
+func unknownAttribute(path filter.AttrPath) error {
+	return scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
+}
+
+func invalidOperator(op filter.Operator, path filter.AttrPath) error {
+	return scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
 }
