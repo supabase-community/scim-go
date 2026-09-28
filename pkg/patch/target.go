@@ -16,10 +16,15 @@ type target struct {
 	parent    *core.Attribute
 	attr      *core.Attribute
 	path      filter.Path
-	match     predicate
-	clauses   int
-	matched   []bool
+	filter    filterState
 	budget    *budget
+}
+
+// filterState holds the compiled value-filter predicate and its match results; RFC 7644, Section 3.5.2: a "path" value filter targets specific elements of a multi-valued attribute.
+type filterState struct {
+	match   predicate
+	clauses int
+	matched []bool
 }
 
 func (t *target) write(kind Op, value any) error {
@@ -90,7 +95,7 @@ func (t *target) overwritable(holder core.Object, kind Op) error {
 }
 
 func (t *target) remove() error {
-	if t.match != nil && t.path.SubAttribute == "" {
+	if t.filter.match != nil && t.path.SubAttribute == "" {
 		return t.drop()
 	}
 	holders, err := t.holders(false)
@@ -148,11 +153,11 @@ func (t *target) holders(create bool) ([]core.Object, error) {
 	value := container.Get(t.path.Name)
 	elements, _ := value.([]any)
 	switch {
-	case t.match != nil:
-		if t.matched, err = t.matches(elements); err != nil {
+	case t.filter.match != nil:
+		if t.filter.matched, err = t.matches(elements); err != nil {
 			return nil, err
 		}
-		return members(elements, t.matched)
+		return members(elements, t.filter.matched)
 	case t.path.SubAttribute == "":
 		return []core.Object{container}, nil
 	case create:
@@ -169,13 +174,13 @@ func (t *target) holders(create bool) ([]core.Object, error) {
 }
 
 func (t *target) matches(elements []any) ([]bool, error) {
-	if err := t.budget.charge(len(elements) * t.clauses); err != nil {
+	if err := t.budget.charge(len(elements) * t.filter.clauses); err != nil {
 		return nil, err
 	}
 	matched := make([]bool, len(elements))
 	for i, element := range elements {
 		member, ok := element.(map[string]any)
-		matched[i] = ok && t.match(member)
+		matched[i] = ok && t.filter.match(member)
 	}
 	return matched, nil
 }
@@ -198,7 +203,7 @@ func (t *target) elements() []any {
 }
 
 func (t *target) isListAdd(kind Op) bool {
-	return kind == OpAdd && t.match == nil && t.path.Name != "" && t.path.SubAttribute == "" && t.attr.MultiValued
+	return kind == OpAdd && t.filter.match == nil && t.path.Name != "" && t.path.SubAttribute == "" && t.attr.MultiValued
 }
 
 // fresh drops elements already present in the target list, per RFC 7644, Section 3.5.2.1: "If the target location already contains the value specified, no changes SHOULD be made".
@@ -211,8 +216,8 @@ func (t *target) fresh(candidate any) []any {
 
 func (t *target) written(elements []any, kind Op) func(int) bool {
 	switch {
-	case t.match != nil:
-		return func(i int) bool { return t.matched[i] }
+	case t.filter.match != nil:
+		return func(i int) bool { return t.filter.matched[i] }
 	case kind == OpAdd && t.path.SubAttribute == "":
 		return func(i int) bool { return i >= len(elements) }
 	}
@@ -227,7 +232,7 @@ func (t *target) owner() *core.Attribute {
 }
 
 func (t *target) key() string {
-	if t.match != nil || t.path.SubAttribute != "" {
+	if t.filter.match != nil || t.path.SubAttribute != "" {
 		return t.path.SubAttribute
 	}
 	return t.path.Name

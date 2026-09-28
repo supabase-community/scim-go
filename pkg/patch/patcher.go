@@ -133,7 +133,7 @@ func (p *patcher) target(root core.Object, path filter.Path) (*target, error) {
 	}
 	t := &target{root: root, extension: p.extension(path), parent: parent, path: path, budget: p.budget}
 	if path.ValueFilter != nil {
-		if t.match, t.clauses, err = compile(parent, path.ValueFilter); err != nil {
+		if t.filter.match, t.filter.clauses, err = compile(parent, path.ValueFilter); err != nil {
 			return nil, err
 		}
 	}
