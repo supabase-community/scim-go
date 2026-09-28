@@ -69,17 +69,15 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 	values, isObject := value.(map[string]any)
 	switch {
 	case t.key() == "":
-		merge(holder, values, t.parent, kind)
-		return nil
+		return merge(holder, values, t.parent, kind)
 	case isObject && t.attr.Type == core.TypeComplex && !t.attr.MultiValued:
 		nested, err := child(holder, t.key())
 		if err != nil {
 			return err
 		}
-		merge(nested, values, t.attr, kind)
-		return nil
+		return merge(nested, values, t.attr, kind)
 	}
-	if err := t.overwritable(holder, kind); err != nil {
+	if err := t.overwritable(holder, kind, value); err != nil {
 		return err
 	}
 	set(holder, t.key(), carryImmutable(t.attr, kind, t.elements(), shaped(value, t.attr.MultiValued)), kind)
@@ -87,10 +85,13 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 }
 
 // RFC 7644 Section 3.5.2.2: a value that becomes unassigned and is read-only SHALL return "mutability".
-func (t *target) overwritable(holder core.Object, kind Op) error {
+func (t *target) overwritable(holder core.Object, kind Op, candidate any) error {
 	before := holder.Get(t.key())
 	if _, appends := before.([]any); appends && kind == OpAdd {
 		return nil
+	}
+	if err := gateImmutableWrite(t.attr, before, shaped(candidate, t.attr.MultiValued)); err != nil {
+		return err
 	}
 	return eachSub(t.attr, before, gateRemove)
 }
@@ -99,10 +100,6 @@ func (t *target) remove() error {
 	if t.filter.match != nil && t.path.SubAttribute == "" {
 		return t.drop()
 	}
-	// RFC 7643 Section 7: removing a named immutable sub-attribute leaves its element assigned but changed, which "immutable" forbids; removing the whole element is unaffected, since that takes the drop() branch above.
-	if t.path.SubAttribute != "" && t.attr.Mutability == core.MutabilityImmutable {
-		return scimerrors.ErrMutability(strconv.Quote(t.attr.Name) + " is immutable")
-	}
 	holders, err := t.holders(false)
 	if err != nil {
 		return err
@@ -110,6 +107,10 @@ func (t *target) remove() error {
 	for _, holder := range holders {
 		if err := eachSub(t.attr, holder.Get(t.key()), gateRemove); err != nil {
 			return err
+		}
+		// RFC 7643 Section 7: an assigned immutable sub-attribute cannot be removed while its element survives.
+		if t.path.SubAttribute != "" && t.attr.Mutability == core.MutabilityImmutable && !value.IsUnassigned(holder.Get(t.key())) {
+			return scimerrors.ErrMutability(strconv.Quote(t.attr.Name) + " is immutable")
 		}
 	}
 	for _, holder := range holders {

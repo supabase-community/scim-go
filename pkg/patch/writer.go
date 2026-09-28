@@ -1,22 +1,37 @@
 package patch
 
 import (
+	"strconv"
+
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
-func merge(holder core.Object, values map[string]any, parent *core.Attribute, kind Op) {
+func merge(holder core.Object, values map[string]any, parent *core.Attribute, kind Op) error {
 	keys := newKeys(holder)
-	for name, value := range values {
+	for name, incoming := range values {
 		key := keys.resolve(name)
-		holder[key] = appended(holder[key], shaped(value, subAttr(parent, name).MultiValued), kind)
+		sub := subAttr(parent, name)
+		if err := gateImmutableWrite(sub, holder[key], shaped(incoming, sub.MultiValued)); err != nil {
+			return err
+		}
+		holder[key] = appended(holder[key], shaped(incoming, sub.MultiValued), kind)
 		keys.add(key)
 	}
+	return nil
 }
 
-// RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array.
-// RFC 7643 Section 2.5: "null" for the value is treated the same as an empty array, not an array holding a null.
+// RFC 7643 Section 7: an assigned immutable sub-attribute rejects any write that would change it.
+func gateImmutableWrite(sub *core.Attribute, before, candidate any) error {
+	if sub.Mutability != core.MutabilityImmutable || value.IsUnassigned(before) || value.Equal(sub, before, candidate) {
+		return nil
+	}
+	return scimerrors.ErrMutability(strconv.Quote(sub.Name) + " is immutable")
+}
+
+// RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array; RFC 7643 Section 2.5 treats "null" the same as an empty array.
 func shaped(value any, multiValued bool) any {
 	if !multiValued {
 		return value

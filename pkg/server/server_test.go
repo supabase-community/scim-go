@@ -2440,6 +2440,58 @@ func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
 		})
 	}
 
+	// RFC 7643 Section 7: a matched write that would change an assigned immutable sub-attribute is a mutability error, not a silent overwrite.
+	for _, op := range []patch.Operation{
+		{Op: patch.OpReplace, Path: `members[value eq "u-1"].value`, Value: json.RawMessage(`"u-2"`)},
+		{Op: patch.OpReplace, Path: `members[value eq "u-1"].value`, Value: json.RawMessage(`null`)},
+		{Op: patch.OpReplace, Path: `members[value eq "u-1"]`, Value: json.RawMessage(`{"value":"u-2"}`)},
+	} {
+		t.Run("PATCH replace that changes the member value sub-attribute is a mutability error: "+op.Path, func(t *testing.T) {
+			srv := newTestServer(t)
+			created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+			))
+			require.Equal(t, http.StatusCreated, created.StatusCode)
+			id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+			response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{op},
+				}),
+			))
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
+			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		})
+	}
+
+	t.Run("PATCH remove of an unassigned immutable sub-attribute of a matched member is a no-op", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpRemove, Path: `members[value eq "u-1"].type`}},
+			}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+	})
+
 	t.Run("resending a member by value and display alone twice keeps $ref and type", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
