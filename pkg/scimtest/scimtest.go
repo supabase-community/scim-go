@@ -7,9 +7,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 //go:embed testdata
@@ -23,10 +20,9 @@ type TB interface {
 	Fatalf(format string, args ...any)
 }
 
-func Fixture(t *testing.T, filename string) string {
-	data, err := Load(filename)
-	require.NoError(t, err)
-	return string(data)
+func Fixture(t TB, filename string) string {
+	t.Helper()
+	return string(Golden(t, filename))
 }
 
 func Load(name string) ([]byte, error) {
