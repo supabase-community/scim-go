@@ -1020,6 +1020,14 @@ func TestApplyReplaceMultiValuedWithNullClearsIt(t *testing.T) {
 	assert.Empty(t, item["emails"].([]any))
 }
 
+// RFC 7644 Section 3.5.2.1: a bare sub-attribute path cannot target a multi-valued attribute, present or absent.
+func TestApplyAddSubAttributeIntoAbsentMultiValuedIsInvalidPath(t *testing.T) {
+	var scimErr *scimerrors.Error
+
+	require.ErrorAs(t, apply(map[string]any{}, userSchemas(), operation(patch.OpAdd, "emails.type", `"work"`)), &scimErr)
+	assert.Equal(t, scimerrors.InvalidPath, scimErr.ScimType)
+}
+
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
 	patched, err := patch.Apply(resource, ops, schemas)
 	if err != nil {

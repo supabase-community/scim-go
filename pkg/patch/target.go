@@ -161,6 +161,8 @@ func (t *target) holders(create bool) ([]core.Object, error) {
 		return t.matchedHolders(container)
 	case t.path.SubAttribute == "":
 		return []core.Object{container}, nil
+	case create && t.parent.MultiValued:
+		return nil, scimerrors.ErrInvalidPath(`"path" targets a non-complex attribute`)
 	case create:
 		nested, err := child(container, t.path.Name)
 		return []core.Object{nested}, err
