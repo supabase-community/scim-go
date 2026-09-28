@@ -1,7 +1,5 @@
 package core
 
-import "strings"
-
 const (
 	schemaRoot      = "urn:ietf:params:scim:schemas"
 	schemaCore      = schemaRoot + ":core:2.0"
@@ -42,12 +40,7 @@ func (s Schemas) Lookup(uri SchemaURI) *Schema {
 	if uri == "" {
 		return s.Base()
 	}
-	for _, schema := range s {
-		if strings.EqualFold(string(schema.ID), string(uri)) {
-			return schema
-		}
-	}
-	return nil
+	return lookupFold(s, string(uri), func(schema *Schema) string { return string(schema.ID) })
 }
 
 // Resolve finds the attribute at [uri ":"] name ["." sub], per RFC 7644, Section 3.10.
