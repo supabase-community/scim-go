@@ -91,20 +91,13 @@ func (g *grammar) and(atom, self peg.Parser) peg.Parser {
 
 // *1"not" "(" sub ")": an optional negation around a parenthesized sub-filter.
 func (g *grammar) parenGroup(sub peg.Parser) peg.Parser {
+	group := peg.Sequence(peg.Str("("), sub, peg.Str(")"))
 	return func(c *peg.Context) (peg.ASTNode, error) {
 		start := c.Position()
 		_, err := peg.Sequence(peg.Fold("not"), peg.Optional(peg.Space()))(c)
 		negated := err == nil
-		if _, err := peg.Str("(")(c); err != nil {
-			c.Seek(start)
-			return nil, err
-		}
-		inner, err := sub(c)
+		inner, err := group(c)
 		if err != nil {
-			c.Seek(start)
-			return nil, err
-		}
-		if _, err := peg.Str(")")(c); err != nil {
 			c.Seek(start)
 			return nil, err
 		}
