@@ -7,7 +7,7 @@ import (
 )
 
 func Filter[Output any](schemas core.Schemas, text string, v Evaluator[Output]) (Output, error) {
-	return evaluate(&visitor[Output]{schemas: schemas, inner: v}, text)
+	return evaluate(newVisitor(schemas, v, false), text)
 }
 
 func evaluate[Output any](v *visitor[Output], text string) (Output, error) {

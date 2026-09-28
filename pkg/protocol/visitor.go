@@ -16,6 +16,10 @@ type visitor[Output any] struct {
 	inURI   bool
 }
 
+func newVisitor[Output any](schemas core.Schemas, inner Evaluator[Output], inURI bool) *visitor[Output] {
+	return &visitor[Output]{schemas: schemas, inner: inner, inURI: inURI}
+}
+
 func (r *visitor[Output]) VisitEquals(path filter.AttrPath, value any) (Output, error) {
 	return r.compare(path, filter.OpEquals, value)
 }
