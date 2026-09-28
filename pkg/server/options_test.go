@@ -94,14 +94,11 @@ func TestMaxBodySize(t *testing.T) {
 func TestMaxPatchOperations(t *testing.T) {
 	patchWith := func(t *testing.T, option server.Option[*server.Server], operations int) int {
 		t.Helper()
-		options := []server.Option[*server.Server]{server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...))}
+		var options []server.Option[*server.Server]
 		if option != nil {
 			options = append(options, option)
 		}
-		srv := Server(t, server.New(basePath, fullServiceProviderConfig(), options...))
-		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
-		require.Equal(t, http.StatusCreated, response.StatusCode)
-		id := ReadBodyAs[core.User](t, response).ID
+		srv, id := newUserWithID(t, core.User{UserName: "bjensen"}, options...)
 
 		request := protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}}
 		for range operations {
@@ -131,12 +128,8 @@ func TestMaxPatchOperations(t *testing.T) {
 func TestMaxPatchFilterEvaluations(t *testing.T) {
 	patchWith := func(t *testing.T, options ...server.Option[*server.Server]) int {
 		t.Helper()
-		options = append(options, server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)))
-		srv := Server(t, server.New(basePath, fullServiceProviderConfig(), options...))
 		user := core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com"}, {Value: "b@example.com"}}}
-		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, user)))
-		require.Equal(t, http.StatusCreated, response.StatusCode)
-		id := ReadBodyAs[core.User](t, response).ID
+		srv, id := newUserWithID(t, user, options...)
 
 		request := protocol.PatchRequest{
 			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
@@ -240,4 +233,13 @@ func TestWithAuthentication(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, "acme", tenant)
 	})
+}
+
+func newUserWithID(t *testing.T, user core.User, options ...server.Option[*server.Server]) (*httptest.Server, string) {
+	t.Helper()
+	options = append(options, server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)))
+	srv := Server(t, server.New(basePath, fullServiceProviderConfig(), options...))
+	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, user)))
+	require.Equal(t, http.StatusCreated, response.StatusCode)
+	return srv, ReadBodyAs[core.User](t, response).ID
 }
