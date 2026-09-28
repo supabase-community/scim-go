@@ -86,6 +86,15 @@ func TestApplyAddSkipsAnElementAlreadyPresentByValueAlone(t *testing.T) {
 	assert.Len(t, item["members"], 1)
 }
 
+// RFC 7643 Section 2.3.6: "value" is not caseExact, so an add matches an existing element regardless of case.
+func TestApplyAddSkipsAnElementAlreadyPresentByValueCaseInsensitively(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpAdd, "members", `[{"value":"U-1"}]`)))
+
+	assert.Len(t, item["members"], 1)
+}
+
 func TestApplyMissingValueRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, patch.Operation{Op: patch.OpReplace, Path: "userName"}), &err)
@@ -847,6 +856,17 @@ func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributes(t *testing.T) {
 	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
 
 	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"u-1"}]`)))
+
+	members := item["members"].([]any)
+	require.Len(t, members, 1)
+	assert.Equal(t, "User", members[0].(map[string]any)["type"])
+}
+
+// RFC 7643 Section 2.3.6: "value" is not caseExact, so it matches the stored element regardless of case.
+func TestApplyReplaceMembersMatchesTheStoredValueCaseInsensitively(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"U-1"}]`)))
 
 	members := item["members"].([]any)
 	require.Len(t, members, 1)

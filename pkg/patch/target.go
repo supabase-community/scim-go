@@ -226,11 +226,10 @@ func (t *target) fresh(candidate any) []any {
 			return value.Contains(t.attr, existing, addition)
 		})
 	}
-	stored := byValue(t.elements())
+	stored := value.ByIdentity(t.attr, t.elements())
 	return slices.DeleteFunc(elements, func(addition any) bool {
-		key, ok := value.Key(asMember(addition))
-		_, exists := stored[key]
-		return ok && exists
+		_, exists := stored[value.Identity(t.attr, asMember(addition))]
+		return exists
 	})
 }
 
