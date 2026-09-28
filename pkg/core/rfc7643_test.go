@@ -82,30 +82,36 @@ func deviations(path string, want, got core.Attributes) []string {
 			paths = append(paths, name)
 			continue
 		}
-		for _, characteristic := range []struct {
-			name string
-			same bool
-		}{
-			{"name", expected.Name == attribute.Name},
-			{"type", expected.Type == attribute.Type},
-			{"multiValued", expected.MultiValued == attribute.MultiValued},
-			{"required", expected.Required == attribute.Required},
-			{"caseExact", expected.CaseExact == attribute.CaseExact},
-			{"mutability", expected.Mutability == attribute.Mutability},
-			{"returned", expected.Returned == attribute.Returned},
-			{"uniqueness", expected.Uniqueness == "" || expected.Uniqueness == attribute.Uniqueness},
-			{"canonicalValues", slices.Equal(expected.CanonicalValues, attribute.CanonicalValues)},
-			{"referenceTypes", slices.Equal(expected.ReferenceTypes, attribute.ReferenceTypes)},
-		} {
-			if !characteristic.same {
-				paths = append(paths, name+"."+characteristic.name)
-			}
-		}
+		paths = append(paths, characteristicDiffs(name, expected, attribute)...)
 		paths = append(paths, deviations(name+".", expected.SubAttributes, attribute.SubAttributes)...)
 	}
 	for _, attribute := range want {
 		if got.Lookup(attribute.Name) == nil {
 			paths = append(paths, path+attribute.Name+".missing")
+		}
+	}
+	return paths
+}
+
+func characteristicDiffs(name string, expected, attribute *core.Attribute) []string {
+	var paths []string
+	for _, characteristic := range []struct {
+		name string
+		same bool
+	}{
+		{"name", expected.Name == attribute.Name},
+		{"type", expected.Type == attribute.Type},
+		{"multiValued", expected.MultiValued == attribute.MultiValued},
+		{"required", expected.Required == attribute.Required},
+		{"caseExact", expected.CaseExact == attribute.CaseExact},
+		{"mutability", expected.Mutability == attribute.Mutability},
+		{"returned", expected.Returned == attribute.Returned},
+		{"uniqueness", expected.Uniqueness == "" || expected.Uniqueness == attribute.Uniqueness},
+		{"canonicalValues", slices.Equal(expected.CanonicalValues, attribute.CanonicalValues)},
+		{"referenceTypes", slices.Equal(expected.ReferenceTypes, attribute.ReferenceTypes)},
+	} {
+		if !characteristic.same {
+			paths = append(paths, name+"."+characteristic.name)
 		}
 	}
 	return paths
