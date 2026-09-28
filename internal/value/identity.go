@@ -26,7 +26,7 @@ func Identity(attribute *core.Attribute, element core.Object) string {
 	return string(raw)
 }
 
-// ByIdentity indexes the elements of a multi-valued attribute by Identity; the first element with a given identity wins.
+// ByIdentity indexes the elements of a multi-valued attribute by Identity, per RFC 7643, Section 2.4.
 func ByIdentity(attribute *core.Attribute, existing any) map[string]map[string]any {
 	elements, _ := existing.([]any)
 	stored := make(map[string]map[string]any, len(elements))
