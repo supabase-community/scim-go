@@ -47,9 +47,9 @@ func dispatch[Output any](v Visitor[Output], n *Node) (Output, error) {
 
 	attr := n.AttrPath()
 	switch Operator(n.Operator()) {
-	case "and":
+	case OpAnd:
 		return visitBinary(v, n, v.VisitAnd)
-	case "or":
+	case OpOr:
 		return visitBinary(v, n, v.VisitOr)
 	case OpEquals:
 		return v.VisitEquals(attr, n.Value())
