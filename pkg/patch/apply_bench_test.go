@@ -74,8 +74,6 @@ func BenchmarkApplyManyAdds(b *testing.B) {
 	}
 }
 
-// BenchmarkApplyManyAddsWithoutAValueSubAttribute covers AUTH-1502: "addresses" has no "value"
-// sub-attribute, so fresh() used to compare every added element against every stored one.
 func BenchmarkApplyManyAddsWithoutAValueSubAttribute(b *testing.B) {
 	schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
 	for _, n := range []int{1000, 10000} {

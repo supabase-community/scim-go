@@ -869,6 +869,41 @@ func TestApplyValueFilterRecomputesLiteralPerElement(t *testing.T) {
 	assert.Less(t, large, 10*small, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
 }
 
+// RFC 7644 Section 3.5.2.1: adding many elements of an attribute without a "value" sub-attribute must not compare every addition against every stored element.
+func TestApplyAddWithoutAValueSubAttributeDoesNotScaleQuadratically(t *testing.T) {
+	addressSchemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
+
+	run := func(n int) time.Duration {
+		item := core.Object{}
+		first := make([]map[string]any, n)
+		for i := range first {
+			first[i] = map[string]any{"postalCode": fmt.Sprintf("a%d", i)}
+		}
+		raw, err := json.Marshal(first)
+		require.NoError(t, err)
+		require.NoError(t, apply(item, addressSchemas, operation(patch.OpAdd, "addresses", string(raw))))
+
+		second := make([]map[string]any, n)
+		for i := range second {
+			second[i] = map[string]any{"postalCode": fmt.Sprintf("b%d", i)}
+		}
+		raw, err = json.Marshal(second)
+		require.NoError(t, err)
+
+		start := time.Now()
+		err = apply(item, addressSchemas, operation(patch.OpAdd, "addresses", string(raw)))
+		elapsed := time.Since(start)
+
+		require.NoError(t, err)
+		return elapsed
+	}
+
+	small := run(200)
+	large := run(2000)
+
+	assert.Less(t, large, 30*small, "adding N elements without a \"value\" sub-attribute must scale close to N, not N^2")
+}
+
 // RFC 7644 Section 3.5.2: an immutable sub-attribute a replacement element omits keeps its stored value, matched by "value" to the element it replaces.
 func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributes(t *testing.T) {
 	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
