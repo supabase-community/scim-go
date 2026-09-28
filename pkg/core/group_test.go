@@ -19,9 +19,8 @@ func TestGroup(t *testing.T) {
 		DisplayName: "Tour Guides",
 		Members: []core.Member{
 			{
-				Value:   "2819c223-7f76-453a-919d-413861904646",
-				Ref:     "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
-				Display: "Babs Jensen",
+				Value: "2819c223-7f76-453a-919d-413861904646",
+				Ref:   "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
 			},
 		},
 		Meta: core.Meta{
@@ -43,8 +42,7 @@ func TestGroup(t *testing.T) {
 			"members": [
 				{
 					"value": "2819c223-7f76-453a-919d-413861904646",
-					"$ref": "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
-					"display": "Babs Jensen"
+					"$ref": "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646"
 				}
 			],
 			"meta": {

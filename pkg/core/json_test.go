@@ -88,19 +88,17 @@ func TestJSON(t *testing.T) {
 			DisplayName: "Tour Guides",
 			Members: []core.Member{
 				{
-					Value:   "2819c223-7f76-453a-919d-413861904646",
-					Ref:     "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
-					Display: "Babs Jensen",
+					Value: "2819c223-7f76-453a-919d-413861904646",
+					Ref:   "https://example.com/v2/Users/2819c223-7f76-453a-919d-413861904646",
 				},
 				{
-					Value:   "902c246b-6245-4190-8e05-00816be7344a",
-					Ref:     "https://example.com/v2/Users/902c246b-6245-4190-8e05-00816be7344a",
-					Display: "Mandy Pepperidge",
+					Value: "902c246b-6245-4190-8e05-00816be7344a",
+					Ref:   "https://example.com/v2/Users/902c246b-6245-4190-8e05-00816be7344a",
 				},
 			},
 		}
 
-		scimtest.AssertJSON(t, scimtest.RFC7643Group, group)
+		scimtest.AssertJSON(t, scimtest.RFC7643Group, group, "members[0].display", "members[1].display")
 	})
 
 	t.Run("builds the service provider configuration of Section 8.5", func(t *testing.T) {

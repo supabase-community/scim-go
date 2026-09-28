@@ -26,8 +26,9 @@ func TestRFC7643(t *testing.T) {
 		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643EnterpriseUser, &core.User{}))
 	})
 
-	t.Run("carries the Group of Section 8.4 whole", func(t *testing.T) {
-		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643Group, &core.Group{}))
+	// RFC 7643, Section 8.7.1 does not declare "display" as a members sub-attribute, so it does not round-trip.
+	t.Run("carries the Group of Section 8.4 whole, except the undeclared members.display", func(t *testing.T) {
+		assert.Equal(t, []string{"members[0].display", "members[1].display"}, scimtest.RoundTripDiff(t, scimtest.RFC7643Group, &core.Group{}))
 	})
 
 	t.Run("carries the service provider configuration of Section 8.5 whole", func(t *testing.T) {
@@ -63,7 +64,7 @@ func TestRFC7643(t *testing.T) {
 			deviations []string
 		}{
 			{schemas[0], core.UserAttributes(), []string{"addresses.primary"}},
-			{schemas[1], core.GroupAttributes(), []string{"displayName.required", "members.display"}},
+			{schemas[1], core.GroupAttributes(), []string{"displayName.required"}},
 			{schemas[2], core.EnterpriseUserAttributes(), nil},
 		} {
 			t.Run(string(tc.schema.ID), func(t *testing.T) {
