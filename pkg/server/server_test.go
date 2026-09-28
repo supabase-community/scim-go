@@ -2283,6 +2283,7 @@ func TestRFC7644GroupMemberMutability(t *testing.T) {
 		status int
 	}{
 		{"rejects a changed type", core.Member{Value: "u-1", Type: "Group", Ref: seed.Ref}, http.StatusBadRequest},
+		{"rejects a changed type when value differs only by case", core.Member{Value: "U-1", Type: "Group", Ref: seed.Ref}, http.StatusBadRequest},
 		{"allows an omitted type", core.Member{Value: "u-1", Ref: seed.Ref}, http.StatusOK},
 		{"rejects a changed $ref", core.Member{Value: "u-1", Type: "User", Ref: "https://example.com/v2/Users/other"}, http.StatusBadRequest},
 		{"allows an omitted $ref", core.Member{Value: "u-1", Type: "User"}, http.StatusOK},

@@ -108,7 +108,7 @@ func immutable(fields fields, before, after core.Object) error {
 		if !field.MultiValued || field.SubAttribute("value") == nil {
 			continue
 		}
-		if err := immutableElements(field.elements, immutableSubs(field.SubAttributes), before, after); err != nil {
+		if err := immutableElements(field, immutableSubs(field.SubAttributes), before, after); err != nil {
 			return err
 		}
 	}
@@ -120,13 +120,13 @@ func immutableSubs(subs []*core.Attribute) []*core.Attribute {
 }
 
 // RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
-func immutableElements(elements func(core.Object) []any, subs []*core.Attribute, before, after core.Object) error {
+func immutableElements(field field, subs []*core.Attribute, before, after core.Object) error {
 	signatures := map[string]map[string]struct{}{}
 	sample := map[string]core.Object{}
-	for _, element := range elements(after) {
+	for _, element := range field.elements(after) {
 		candidate := asObject(element)
-		key, ok := value.Key(candidate)
-		if !ok {
+		key := value.Identity(field.Attribute, candidate)
+		if key == "" {
 			continue
 		}
 		if signatures[key] == nil {
@@ -135,10 +135,10 @@ func immutableElements(elements func(core.Object) []any, subs []*core.Attribute,
 		}
 		signatures[key][signature(subs, candidate)] = struct{}{}
 	}
-	for _, element := range elements(before) {
+	for _, element := range field.elements(before) {
 		stored := asObject(element)
-		key, ok := value.Key(stored)
-		if !ok {
+		key := value.Identity(field.Attribute, stored)
+		if key == "" {
 			continue
 		}
 		if _, matched := signatures[key][signature(subs, stored)]; matched || signatures[key] == nil {
