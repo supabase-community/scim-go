@@ -33,6 +33,11 @@ type repository[T core.Resource] struct {
 	evaluator protocol.Evaluator[predicate]
 }
 
+type row[T core.Resource] struct {
+	item   T
+	object core.Object
+}
+
 // NewRepository stores resources in memory, for tests and reference servers.
 func NewRepository[T core.Resource](endpoint string, schemas core.Schemas) Repository[T] {
 	fields := newFields(schemas)
@@ -239,11 +244,6 @@ func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (func(core.Ob
 		}
 		return coerce(attribute, asObject(element).Get(attribute.Name))
 	}, true
-}
-
-type row[T core.Resource] struct {
-	item   T
-	object core.Object
 }
 
 func weakETag(t time.Time) string {
