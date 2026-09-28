@@ -11,8 +11,14 @@ import (
 // RFC 7644 Section 3.5.2: setting "primary" to true sets it to false for every other value of the attribute.
 func demote(elements []any, written func(int) bool) {
 	for i, element := range elements {
-		if !written(i) && value.Primary(element) {
-			core.Object(element.(map[string]any)).Set("primary", false)
+		if written(i) || !value.Primary(element) {
+			continue
+		}
+		switch e := element.(type) {
+		case map[string]any:
+			core.Object(e).Set("primary", false)
+		case core.Object:
+			e.Set("primary", false)
 		}
 	}
 }
