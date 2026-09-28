@@ -7,11 +7,11 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// RFC 7644 Section 3.5.2: an immutable sub-attribute a replacement element omits keeps its stored value, matched by "value" to the element it replaces.
+// RFC 7644 Section 3.5.2: an immutable sub-attribute a replacement element omits keeps its stored value, matched by identity to the element it replaces.
 func carryImmutable(attr *core.Attribute, kind Op, stored []any, candidate any) any {
 	elements, ok := candidate.([]any)
 	subs := immutableSubs(attr.SubAttributes)
-	if kind != OpReplace || !ok || attr.SubAttribute("value") == nil || len(subs) == 0 {
+	if kind != OpReplace || !ok || len(subs) == 0 {
 		return candidate
 	}
 	byIdentity := value.ByIdentity(attr, stored)

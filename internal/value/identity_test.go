@@ -42,6 +42,15 @@ func TestIdentity(t *testing.T) {
 		assert.Equal(t, value.Identity(attribute, core.Object{"serial": "s-1", "inspector": "a"}), value.Identity(attribute, core.Object{"serial": "s-1", "inspector": "b"}))
 		assert.NotEqual(t, value.Identity(attribute, core.Object{"serial": "s-1"}), value.Identity(attribute, core.Object{"serial": "s-2"}))
 	})
+
+	// RFC 7644 Section 3.5.1: an immutable sub-attribute must not itself be part of the key used to match elements, or a change to it looks like remove-and-add instead of a violation.
+	t.Run("ignores an immutable sub-attribute when there is no value", func(t *testing.T) {
+		attribute := core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("serial", core.TypeString),
+			core.NewAttribute("code", core.TypeString).AsImmutable(),
+		)
+		assert.Equal(t, value.Identity(attribute, core.Object{"serial": "s-1", "code": "A"}), value.Identity(attribute, core.Object{"serial": "s-1", "code": "B"}))
+	})
 }
 
 func emailsLike() *core.Attribute {

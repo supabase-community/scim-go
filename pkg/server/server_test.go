@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strconv"
@@ -3549,13 +3550,14 @@ func TestRFC7644Schemas(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.Schema]](t, response)
-		require.Equal(t, 5, list.TotalResults)
+		require.Equal(t, 6, list.TotalResults)
 		schema := list.Resources[0]
 		assert.Equal(t, core.SchemaUser, schema.ID)
 		assert.Equal(t, core.SchemaEnterpriseUser, list.Resources[1].ID)
 		assert.Equal(t, core.SchemaGroup, list.Resources[2].ID)
 		assert.Equal(t, widgetSchema, list.Resources[3].ID)
 		assert.Equal(t, kitSchema, list.Resources[4].ID)
+		assert.Equal(t, gadgetSchema, list.Resources[5].ID)
 
 		userName := schema.Attributes.Lookup("userName")
 		require.NotNil(t, userName)
@@ -3620,7 +3622,7 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.ResourceType]](t, response)
-		require.Equal(t, 4, list.TotalResults)
+		require.Equal(t, 5, list.TotalResults)
 		assert.Equal(t, core.ResourceTypeName("User"), list.Resources[0].ID)
 		assert.Equal(t, basePath+"/Users", list.Resources[0].Endpoint)
 		assert.Equal(t, core.SchemaUser, list.Resources[0].Schema)
@@ -3633,6 +3635,9 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 		assert.Equal(t, core.ResourceTypeName("Kit"), list.Resources[3].ID)
 		assert.Equal(t, basePath+"/Kits", list.Resources[3].Endpoint)
 		assert.Equal(t, kitSchema, list.Resources[3].Schema)
+		assert.Equal(t, core.ResourceTypeName("Gadget"), list.Resources[4].ID)
+		assert.Equal(t, basePath+"/Gadgets", list.Resources[4].Endpoint)
+		assert.Equal(t, gadgetSchema, list.Resources[4].Schema)
 	})
 
 	t.Run("fetches a resource type by id", func(t *testing.T) {
@@ -3719,5 +3724,60 @@ func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, response.StatusCode, "filter: %s", query.filter)
 			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType, "filter: %s", query.filter)
 		}
+	})
+}
+
+// RFC 7644 Section 3.5.1: an immutable sub-attribute must be enforced, and an omitted one kept, even when its multi-valued parent has no "value" sub-attribute to identify elements by.
+func TestRFC7644ImmutableSubAttributeWithoutAValueSubAttribute(t *testing.T) {
+	createGadget := func(t *testing.T, srv *httptest.Server) string {
+		t.Helper()
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Gadgets",
+			WithBearerToken(validToken), WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"parts":[{"serial":"s-1","code":"A"}]}`)),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+		return id
+	}
+
+	t.Run("rejects a changed code", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createGadget(t, srv)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Gadgets/"+id,
+			WithBearerToken(validToken), WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"parts":[{"serial":"s-1","code":"B"}]}`)),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("PUT omitting code keeps its stored value", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createGadget(t, srv)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Gadgets/"+id,
+			WithBearerToken(validToken), WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"parts":[{"serial":"s-1"}]}`)),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []part{{Serial: "s-1", Code: "A"}}, ReadBodyAs[gadget](t, response).Parts)
+	})
+
+	t.Run("PATCH replace omitting code keeps its stored value", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createGadget(t, srv)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Gadgets/"+id,
+			WithBearerToken(validToken), WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
+				{Op: patch.OpReplace, Path: "parts", Value: json.RawMessage(`[{"serial":"s-1"}]`)},
+			}}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []part{{Serial: "s-1", Code: "A"}}, ReadBodyAs[gadget](t, response).Parts)
 	})
 }

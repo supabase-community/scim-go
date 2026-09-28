@@ -28,6 +28,7 @@ const (
 
 	widgetSchema core.SchemaURI = "urn:test:widget"
 	kitSchema    core.SchemaURI = "urn:test:kit"
+	gadgetSchema core.SchemaURI = "urn:test:gadget"
 )
 
 var errUnreachable = errors.New("dial tcp 10.0.0.1:5432: connection refused")
@@ -94,6 +95,11 @@ type part struct {
 	Inspector string `json:",omitempty"`
 }
 
+type gadget struct {
+	core.Base
+	Parts []part
+}
+
 type racingRepository struct {
 	server.Repository[*core.User]
 	replaceGate *raceGate
@@ -138,6 +144,7 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 				core.NewSchema(widgetSchema).WithName("Widget").With(widgetAttributes()...),
 			})})),
 		server.WithResource(server.NewResource[*kit]("Kit", "/Kits", kitSchema, kitAttributes()...)),
+		server.WithResource(server.NewResource[*gadget]("Gadget", "/Gadgets", gadgetSchema, gadgetAttributes()...)),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
 	}
 	return server.New(basePath, s.config, slices.Concat(standard, s.options)...)
@@ -226,6 +233,15 @@ func kitAttributes() core.Attributes {
 		core.NewAttribute("name", core.TypeComplex).AsRequired().With(core.NewAttribute("givenName", core.TypeString)),
 		core.NewAttribute("parts", core.TypeComplex).AsMultiValued().AsRequired().With(
 			core.NewAttribute("serial", core.TypeString).AsRequired(),
+		),
+	}
+}
+
+func gadgetAttributes() core.Attributes {
+	return core.Attributes{
+		core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("serial", core.TypeString).AsRequired(),
+			core.NewAttribute("code", core.TypeString).AsImmutable(),
 		),
 	}
 }

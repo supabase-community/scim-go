@@ -105,10 +105,11 @@ func immutable(fields fields, before, after core.Object) error {
 		if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(after)) {
 			return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
 		}
-		if !field.MultiValued || field.SubAttribute("value") == nil {
+		subs := immutableSubs(field.SubAttributes)
+		if !field.MultiValued || len(subs) == 0 {
 			continue
 		}
-		if err := immutableElements(field, immutableSubs(field.SubAttributes), before, after); err != nil {
+		if err := immutableElements(field, subs, before, after); err != nil {
 			return err
 		}
 	}

@@ -6,7 +6,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// Identity returns the string that identifies element within a multi-valued attribute, per RFC 7643 Section 2.4: "value" identifies it, together with "type" when "type" is readWrite, since the same "value" MAY then repeat under a different "type"; without a "value" sub-attribute, the client-visible sub-attributes it can see and write do.
+// Identity returns the string that identifies element within a multi-valued attribute, per RFC 7643 Section 2.4: "value" identifies it, together with "type" when "type" is readWrite, since the same "value" MAY then repeat under a different "type"; without a "value" sub-attribute, its readWrite sub-attributes do.
 func Identity(attribute *core.Attribute, element core.Object) string {
 	sub := attribute.SubAttribute("value")
 	if sub == nil {
@@ -46,7 +46,7 @@ func ByIdentity(attribute *core.Attribute, existing any) map[string]map[string]a
 func compositeIdentity(attribute *core.Attribute, element core.Object) string {
 	folded := []any{}
 	for _, sub := range attribute.SubAttributes {
-		if sub.Mutability != core.MutabilityReadOnly && !Hidden(nil, sub) {
+		if sub.Mutability == core.MutabilityReadWrite && !Hidden(nil, sub) {
 			folded = append(folded, Fold(sub, element.Get(sub.Name)))
 		}
 	}

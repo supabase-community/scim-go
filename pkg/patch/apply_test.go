@@ -946,6 +946,25 @@ func TestApplyReplaceWithoutPathKeepsOmittedImmutableSubAttributes(t *testing.T)
 	assert.Equal(t, "User", members[0].(map[string]any)["type"])
 }
 
+// RFC 7644 Section 3.5.2: an omitted immutable sub-attribute keeps its stored value even when the attribute has no "value" sub-attribute to match elements by.
+func TestApplyReplaceKeepsOmittedImmutableSubAttributesWithoutAValueSubAttribute(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("serial", core.TypeString),
+				core.NewAttribute("code", core.TypeString).AsImmutable(),
+			),
+		),
+	}
+	item := core.Object{"parts": []any{map[string]any{"serial": "s-1", "code": "A"}}}
+
+	require.NoError(t, apply(item, schemas, operation(patch.OpReplace, "parts", `[{"serial":"s-1"}]`)))
+
+	parts := item["parts"].([]any)
+	require.Len(t, parts, 1)
+	assert.Equal(t, "A", parts[0].(map[string]any)["code"])
+}
+
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
 	patched, err := patch.Apply(resource, ops, schemas)
 	if err != nil {
