@@ -14,10 +14,11 @@ func merge(holder core.Object, values map[string]any, parent *core.Attribute, ki
 	for name, incoming := range values {
 		key := keys.resolve(name)
 		sub := subAttr(parent, name)
-		if err := gateImmutableWrite(sub, holder[key], shaped(incoming, sub.MultiValued)); err != nil {
+		v := shaped(incoming, sub.MultiValued)
+		if err := gateImmutableWrite(sub, holder[key], v); err != nil {
 			return err
 		}
-		holder[key] = appended(holder[key], shaped(incoming, sub.MultiValued), kind)
+		holder[key] = appended(holder[key], v, kind)
 		keys.add(key)
 	}
 	return nil

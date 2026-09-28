@@ -3,7 +3,6 @@ package patch
 import (
 	"encoding/json"
 	"slices"
-	"strconv"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -77,10 +76,11 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 		}
 		return merge(nested, values, t.attr, kind)
 	}
-	if err := t.overwritable(holder, kind, value); err != nil {
+	shapedValue := shaped(value, t.attr.MultiValued)
+	if err := t.overwritable(holder, kind, shapedValue); err != nil {
 		return err
 	}
-	set(holder, t.key(), carryImmutable(t.attr, kind, t.elements(), shaped(value, t.attr.MultiValued)), kind)
+	set(holder, t.key(), carryImmutable(t.attr, kind, t.elements(), shapedValue), kind)
 	return nil
 }
 
@@ -90,7 +90,7 @@ func (t *target) overwritable(holder core.Object, kind Op, candidate any) error 
 	if _, appends := before.([]any); appends && kind == OpAdd {
 		return nil
 	}
-	if err := gateImmutableWrite(t.attr, before, shaped(candidate, t.attr.MultiValued)); err != nil {
+	if err := gateImmutableWrite(t.attr, before, candidate); err != nil {
 		return err
 	}
 	return eachSub(t.attr, before, gateRemove)
@@ -105,12 +105,15 @@ func (t *target) remove() error {
 		return err
 	}
 	for _, holder := range holders {
-		if err := eachSub(t.attr, holder.Get(t.key()), gateRemove); err != nil {
+		held := holder.Get(t.key())
+		if err := eachSub(t.attr, held, gateRemove); err != nil {
 			return err
 		}
 		// RFC 7643 Section 7: an assigned immutable sub-attribute cannot be removed while its element survives.
-		if t.path.SubAttribute != "" && t.attr.Mutability == core.MutabilityImmutable && !value.IsUnassigned(holder.Get(t.key())) {
-			return scimerrors.ErrMutability(strconv.Quote(t.attr.Name) + " is immutable")
+		if t.path.SubAttribute != "" {
+			if err := gateImmutableWrite(t.attr, held, nil); err != nil {
+				return err
+			}
 		}
 	}
 	for _, holder := range holders {
