@@ -193,6 +193,21 @@ func TestDecodeResource(t *testing.T) {
 		assert.Equal(t, map[string]any{"employeeNumber": "E1"}, out[uri])
 	})
 
+	// RFC 7643 Section 2.1: attribute names are case insensitive, so an explicit value keyed with different case is not overwritten by carry-forward.
+	t.Run("leaves an explicit immutable extension value keyed with different case alone", func(t *testing.T) {
+		immutable := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
+			core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
+		)
+		before := map[string]any{uri: map[string]any{"employeeNumber": "E1"}}
+
+		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{"userName": "bjensen", uri: map[string]any{"EmployeeNumber": "E2"}}), before, []*core.Schema{user, immutable})
+		require.NoError(t, err)
+
+		body := out[uri].(map[string]any)
+		assert.Len(t, body, 1)
+		assert.Equal(t, "E2", core.Object(body).Get("employeeNumber"))
+	})
+
 	t.Run("does not fill in an omitted attribute that is both required and immutable", func(t *testing.T) {
 		immutable := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
 			core.NewAttribute("employeeNumber", core.TypeString).AsImmutable().AsRequired(),

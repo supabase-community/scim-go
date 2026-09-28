@@ -51,7 +51,7 @@ func writableObject(lookup func(string) *core.Attribute, body, existing map[stri
 		case attribute.Mutability == core.MutabilityReadOnly:
 			body[key] = value
 		case attribute.Mutability == core.MutabilityImmutable && !attribute.Required:
-			if _, present := body[key]; !present {
+			if !core.Object(body).Has(key) {
 				body[key] = value
 			}
 		}

@@ -3781,3 +3781,22 @@ func TestRFC7644ImmutableSubAttributeWithoutAValueSubAttribute(t *testing.T) {
 		assert.Equal(t, []part{{Serial: "s-1", Code: "A"}}, ReadBodyAs[gadget](t, response).Parts)
 	})
 }
+
+// RFC 7643 Section 2.1: attribute names are case insensitive, so a changed immutable sub-attribute keyed with different case is still rejected.
+func TestRFC7644RejectsAChangedImmutableSubAttributeKeyedWithDifferentCase(t *testing.T) {
+	srv := newTestServer(t)
+	created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+		WithBearerToken(validToken), WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+	))
+	require.Equal(t, http.StatusCreated, created.StatusCode)
+	id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+	response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+		WithBearerToken(validToken), WithContentType(protocol.MediaType),
+		WithRequestBody([]byte(`{"displayName":"eng","members":[{"value":"u-1","Type":"Group"}]}`)),
+	))
+
+	require.Equal(t, http.StatusBadRequest, response.StatusCode)
+	assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+}
