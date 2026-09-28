@@ -833,6 +833,48 @@ func TestApplyValueFilterRecomputesLiteralPerElement(t *testing.T) {
 	assert.Less(t, large, 10*small, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
 }
 
+// RFC 7644 Section 3.5.2: an immutable sub-attribute a replacement element omits keeps its stored value, matched by "value" to the element it replaces.
+func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributes(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"u-1"}]`)))
+
+	members := item["members"].([]any)
+	require.Len(t, members, 1)
+	assert.Equal(t, "User", members[0].(map[string]any)["type"])
+}
+
+func TestApplyReplaceMembersLeavesAnExplicitImmutableValueAlone(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"u-1","type":"Group"}]`)))
+
+	members := item["members"].([]any)
+	require.Len(t, members, 1)
+	assert.Equal(t, "Group", members[0].(map[string]any)["type"])
+}
+
+// RFC 7644 Section 3.5.2.1: a "value" that is a single object is treated as an array containing that value.
+func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributesFromASingleObjectValue(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `{"value":"u-1"}`)))
+
+	members := item["members"].([]any)
+	require.Len(t, members, 1)
+	assert.Equal(t, "User", members[0].(map[string]any)["type"])
+}
+
+func TestApplyReplaceWithoutPathKeepsOmittedImmutableSubAttributes(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), patch.Operation{Op: patch.OpReplace, Value: json.RawMessage(`{"members":[{"value":"u-1"}]}`)}))
+
+	members := item["members"].([]any)
+	require.Len(t, members, 1)
+	assert.Equal(t, "User", members[0].(map[string]any)["type"])
+}
+
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
 	patched, err := patch.Apply(resource, ops, schemas)
 	if err != nil {
@@ -873,6 +915,12 @@ func userSchemas() []*core.Schema {
 				core.NewAttribute("value", core.TypeString),
 			),
 		),
+	}
+}
+
+func groupSchemas() []*core.Schema {
+	return []*core.Schema{
+		(&core.Schema{ID: core.SchemaGroup, Name: "Group"}).With(core.GroupAttributes()...),
 	}
 }
 

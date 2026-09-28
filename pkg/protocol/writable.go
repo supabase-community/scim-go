@@ -45,9 +45,17 @@ func writableObject(lookup func(string) *core.Attribute, body, existing map[stri
 		}
 		return writableValue(attribute, value, core.Object(existing).Get(key)), true
 	})
+	// RFC 7644 Section 3.5.1: readOnly values SHALL be ignored; an omitted immutable value keeps its stored value so the input still matches it, unless it is also required.
 	for key, value := range existing {
-		if attribute := lookup(key); attribute != nil && attribute.Mutability == core.MutabilityReadOnly {
+		switch attribute := lookup(key); {
+		case attribute == nil:
+			continue
+		case attribute.Mutability == core.MutabilityReadOnly:
 			body[key] = value
+		case attribute.Mutability == core.MutabilityImmutable && !attribute.Required:
+			if _, present := body[key]; !present {
+				body[key] = value
+			}
 		}
 	}
 }

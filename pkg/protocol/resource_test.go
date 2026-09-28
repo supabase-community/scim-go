@@ -160,6 +160,32 @@ func TestDecodeResource(t *testing.T) {
 		assert.Equal(t, map[string]any{"department": "Ops", "employeeNumber": "701984"}, out[uri])
 	})
 
+	// RFC 7644 Section 3.5.1: an omitted immutable value keeps its stored value so the input still matches it.
+	t.Run("keeps an existing immutable extension value the body leaves out", func(t *testing.T) {
+		immutable := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
+			core.NewAttribute("department", core.TypeString),
+			core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
+		)
+		before := map[string]any{uri: map[string]any{"employeeNumber": "E1", "department": "ops"}}
+
+		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{"userName": "bjensen"}), before, []*core.Schema{user, immutable})
+		require.NoError(t, err)
+
+		assert.Equal(t, map[string]any{"employeeNumber": "E1"}, out[uri])
+	})
+
+	t.Run("does not fill in an omitted attribute that is both required and immutable", func(t *testing.T) {
+		immutable := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
+			core.NewAttribute("employeeNumber", core.TypeString).AsImmutable().AsRequired(),
+		)
+		before := map[string]any{uri: map[string]any{"employeeNumber": "E1"}}
+
+		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{"userName": "bjensen"}), before, []*core.Schema{user, immutable})
+		require.NoError(t, err)
+
+		assert.NotContains(t, out, uri)
+	})
+
 	t.Run("drops an extension that holds only readOnly values", func(t *testing.T) {
 		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{uri: map[string]any{"employeeNumber": "client"}}), nil, schemas)
 		require.NoError(t, err)

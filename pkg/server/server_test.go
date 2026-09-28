@@ -2172,22 +2172,6 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, "Jensen", ReadBodyAs[core.User](t, response).Name.FamilyName)
 	})
 
-	// RFC 7644 Section 3.5.1: an omitted immutable attribute is not asserted, so it is not compared.
-	t.Run("allows a replace that omits an immutable attribute", func(t *testing.T) {
-		srv := newTestServer(t)
-		id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
-
-		request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithHeader("If-Match", etag),
-			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-	})
-
 	// RFC 7644 Section 3.5.1: values provided for readOnly attributes SHALL be ignored.
 	t.Run("keeps the stored readOnly meta.created value", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -2274,7 +2258,23 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	})
 }
 
-// RFC 7644 Section 3.5.1: an omitted immutable sub-attribute is not asserted, so it is not compared; a different asserted value still 400s.
+// RFC 7644 Section 3.5.1: an omitted immutable attribute keeps its stored value when its container is present.
+func TestRFC7644ReplacingWithPUTKeepsAnOmittedImmutableSubAttribute(t *testing.T) {
+	srv := newTestServer(t)
+	id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "Barbara", FamilyName: "Jensen"}})
+
+	response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+		WithBearerToken(validToken),
+		WithContentType(protocol.MediaType),
+		WithHeader("If-Match", etag),
+		WithRequestBodyAs(t, core.User{UserName: "bjensen", Name: core.Name{GivenName: "Babs"}}),
+	))
+
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, "Jensen", ReadBodyAs[core.User](t, response).Name.FamilyName)
+}
+
+// RFC 7644 Section 3.5.1: an omitted immutable sub-attribute keeps its stored value; a different asserted value still 400s.
 func TestRFC7644GroupMemberMutability(t *testing.T) {
 	seed := core.Member{Value: "u-1", Type: "User", Ref: "https://example.com/v2/Users/u-1"}
 	for _, test := range []struct {
@@ -2313,7 +2313,8 @@ func TestRFC7644GroupMemberMutability(t *testing.T) {
 }
 
 func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
-	t.Run("PUT re-sending an existing member by value alone keeps the member", func(t *testing.T) {
+	// RFC 7644 Section 3.5.1: an omitted immutable sub-attribute keeps its stored value rather than being cleared.
+	t.Run("PUT re-sending an existing member by value alone keeps its stored type", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
 			WithBearerToken(validToken),
@@ -2330,10 +2331,10 @@ func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
 		))
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, []core.Member{{Value: "u-1"}}, ReadBodyAs[core.Group](t, response).Members)
+		assert.Equal(t, []core.Member{{Value: "u-1", Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
 	})
 
-	t.Run("PATCH replace members with an already-present value and no type is not a mutability error", func(t *testing.T) {
+	t.Run("PATCH replace members with an already-present value and no type keeps the stored type", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
 			WithBearerToken(validToken),
@@ -2355,6 +2356,86 @@ func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
 		))
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []core.Member{{Value: "u-1", Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
+	})
+
+	// Regression: omitting an immutable sub-attribute on a resend must not permanently waive it for later requests.
+	t.Run("a resend that omits type does not waive mutability for a later request", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		resend := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1"}}}),
+		))
+		require.Equal(t, http.StatusOK, resend.StatusCode)
+
+		change := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "Group"}}}),
+		))
+
+		require.Equal(t, http.StatusBadRequest, change.StatusCode)
+		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, change).ScimType)
+	})
+
+	t.Run("PATCH remove of an immutable sub-attribute of a matched member is still a mutability error", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{
+					{Op: patch.OpRemove, Path: `members[value eq "u-1"].type`},
+				},
+			}),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	t.Run("resending a member by value and display alone twice keeps $ref and type", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User", Ref: "https://example.com/v2/Users/u-1"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		resend := func() *http.Response {
+			return Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBody([]byte(`{"displayName":"eng","members":[{"value":"u-1","display":"alice@example.com"}]}`)),
+			))
+		}
+
+		first := resend()
+		require.Equal(t, http.StatusOK, first.StatusCode)
+
+		second := resend()
+		require.Equal(t, http.StatusOK, second.StatusCode)
+		assert.Equal(t, []core.Member{{Value: "u-1", Type: "User", Ref: "https://example.com/v2/Users/u-1"}}, ReadBodyAs[core.Group](t, second).Members)
 	})
 }
 
