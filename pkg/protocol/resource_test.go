@@ -19,6 +19,7 @@ func TestDecodeResourceKeepsReadOnlySubAttributesOfMatchingElements(t *testing.T
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
 			core.NewAttribute("keys", core.TypeComplex).AsMultiValued().With(
 				core.NewAttribute("value", core.TypeString),
+				core.NewAttribute("type", core.TypeString),
 				core.NewAttribute("fingerprint", core.TypeString).AsReadOnly(),
 			),
 			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
@@ -52,6 +53,24 @@ func TestDecodeResourceKeepsReadOnlySubAttributesOfMatchingElements(t *testing.T
 		assert.Equal(t, []any{
 			map[string]any{"value": "K1", "fingerprint": "server"},
 			map[string]any{"value": "k3"},
+		}, out["keys"])
+	})
+
+	// RFC 7643 Section 2.4: the same "value" MAY repeat under a different "type", so each keeps its own readOnly sub-attribute.
+	t.Run("matches elements with the same value by type when type is readWrite", func(t *testing.T) {
+		existing := map[string]any{"keys": []any{
+			map[string]any{"value": "k1", "type": "signing", "fingerprint": "sign-fp"},
+			map[string]any{"value": "k1", "type": "encryption", "fingerprint": "enc-fp"},
+		}}
+
+		out := decode(t, map[string]any{"keys": []any{
+			map[string]any{"value": "k1", "type": "signing"},
+			map[string]any{"value": "k1", "type": "encryption"},
+		}}, existing)
+
+		assert.Equal(t, []any{
+			map[string]any{"value": "k1", "type": "signing", "fingerprint": "sign-fp"},
+			map[string]any{"value": "k1", "type": "encryption", "fingerprint": "enc-fp"},
 		}, out["keys"])
 	})
 

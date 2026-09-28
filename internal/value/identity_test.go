@@ -1,0 +1,59 @@
+package value_test
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/supabase-community/scim-go/internal/value"
+	"github.com/supabase-community/scim-go/pkg/core"
+)
+
+func TestIdentity(t *testing.T) {
+	// RFC 7643 Section 4.2: a member's "value" alone identifies it; "type" describes the referenced resource, not a second identity.
+	t.Run("ignores type when type is immutable", func(t *testing.T) {
+		assert.Equal(t, value.Identity(membersLike(), core.Object{"value": "u-1", "type": "User"}), value.Identity(membersLike(), core.Object{"value": "u-1", "type": "Group"}))
+	})
+
+	// RFC 7643 Section 2.4: the same "value" MAY repeat under a different "type".
+	t.Run("includes type when type is readWrite", func(t *testing.T) {
+		assert.NotEqual(t, value.Identity(emailsLike(), core.Object{"value": "a@b.com", "type": "work"}), value.Identity(emailsLike(), core.Object{"value": "a@b.com", "type": "home"}))
+	})
+
+	t.Run("returns empty for a missing value regardless of type", func(t *testing.T) {
+		assert.Empty(t, value.Identity(emailsLike(), core.Object{"type": "work"}))
+		assert.Empty(t, value.Identity(membersLike(), core.Object{"type": "User"}))
+	})
+
+	// RFC 7643 Section 2.5: an unassigned "type" is equivalent to an absent one.
+	t.Run("normalizes an unassigned type", func(t *testing.T) {
+		assert.Equal(t, value.Identity(emailsLike(), core.Object{"value": "a@b.com"}), value.Identity(emailsLike(), core.Object{"value": "a@b.com", "type": ""}))
+	})
+
+	t.Run("folds the case of value and type", func(t *testing.T) {
+		assert.Equal(t, value.Identity(emailsLike(), core.Object{"value": "a@b.com", "type": "work"}), value.Identity(emailsLike(), core.Object{"value": "A@B.com", "type": "Work"}))
+	})
+
+	// RFC 7643 Section 2.4: without a "value", the client-visible sub-attributes it can see and write identify it.
+	t.Run("falls back to the writable sub-attributes when there is no value", func(t *testing.T) {
+		attribute := core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("serial", core.TypeString),
+			core.NewAttribute("inspector", core.TypeString).AsReadOnly(),
+		)
+		assert.Equal(t, value.Identity(attribute, core.Object{"serial": "s-1", "inspector": "a"}), value.Identity(attribute, core.Object{"serial": "s-1", "inspector": "b"}))
+		assert.NotEqual(t, value.Identity(attribute, core.Object{"serial": "s-1"}), value.Identity(attribute, core.Object{"serial": "s-2"}))
+	})
+}
+
+func emailsLike() *core.Attribute {
+	return core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+		core.NewAttribute("value", core.TypeString),
+		core.NewAttribute("type", core.TypeString),
+	)
+}
+
+func membersLike() *core.Attribute {
+	return core.NewAttribute("members", core.TypeComplex).AsMultiValued().With(
+		core.NewAttribute("value", core.TypeString).AsImmutable(),
+		core.NewAttribute("type", core.TypeString).AsImmutable(),
+	)
+}

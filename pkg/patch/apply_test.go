@@ -95,6 +95,24 @@ func TestApplyAddSkipsAnElementAlreadyPresentByValueCaseInsensitively(t *testing
 	assert.Len(t, item["members"], 1)
 }
 
+// RFC 7643 Section 2.4: the same "value" MAY repeat under a different "type", so adding one is not a no-op.
+func TestApplyAddDoesNotSkipTheSameValueUnderADifferentType(t *testing.T) {
+	item := core.Object{"emails": []any{map[string]any{"value": "a@b.com", "type": "work"}}}
+
+	require.NoError(t, apply(item, userSchemas(), operation(patch.OpAdd, "emails", `[{"value":"a@b.com","type":"home"}]`)))
+
+	assert.Len(t, item["emails"], 2)
+}
+
+// RFC 7644 Section 3.5.2.1: if the target already contains the (type, value) pair, no change is made.
+func TestApplyAddSkipsTheSameValueAndTypeCaseInsensitively(t *testing.T) {
+	item := core.Object{"emails": []any{map[string]any{"value": "a@b.com", "type": "work"}}}
+
+	require.NoError(t, apply(item, userSchemas(), operation(patch.OpAdd, "emails", `[{"value":"A@B.com","type":"Work"}]`)))
+
+	assert.Len(t, item["emails"], 1)
+}
+
 func TestApplyMissingValueRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, patch.Operation{Op: patch.OpReplace, Path: "userName"}), &err)
