@@ -2853,6 +2853,27 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		}
 	})
 
+	// RFC 7643 Section 4.2: a member's "value" alone identifies it, so adding one with the same value under a different type is a no-op, per RFC 7644 Section 3.5.2.1.
+	t.Run("adding a group member that repeats a value with another type is a no-op", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups", WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
+				{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"Group"}]`)},
+			}}),
+		))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+
+		patched := ReadBodyAs[core.Group](t, response)
+		require.Len(t, patched.Members, 1)
+		assert.Equal(t, core.ResourceTypeName("User"), patched.Members[0].Type)
+	})
+
 	t.Run("sets primary to false on the other values when a value becomes primary", func(t *testing.T) {
 		srv := newTestServer(t)
 		primary := true
