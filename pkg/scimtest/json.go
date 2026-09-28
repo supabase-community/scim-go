@@ -12,19 +12,12 @@ import (
 func AssertJSON(t TB, name string, value any, ignore ...string) bool {
 	t.Helper()
 
-	want, err := decode(Golden(t, name))
-	if err != nil {
-		t.Fatalf("scimtest: reading %s: %v", name, err)
+	paths, ok := goldenDiff(t, name, value)
+	if !ok {
 		return false
 	}
 
-	got, err := remarshal(value)
-	if err != nil {
-		t.Fatalf("scimtest: encoding %T: %v", value, err)
-		return false
-	}
-
-	differences := without(diff("", want, got), ignore)
+	differences := without(paths, ignore)
 	if len(differences) == 0 {
 		return true
 	}
@@ -36,27 +29,36 @@ func AssertJSON(t TB, name string, value any, ignore ...string) bool {
 func RoundTripDiff(t TB, name string, value any) []string {
 	t.Helper()
 
-	golden := Golden(t, name)
-	if err := json.Unmarshal(golden, value); err != nil {
+	if err := json.Unmarshal(Golden(t, name), value); err != nil {
 		t.Fatalf("scimtest: decoding %s into %T: %v", name, value, err)
 		return nil
 	}
 
-	want, err := decode(golden)
+	paths, ok := goldenDiff(t, name, value)
+	if !ok {
+		return nil
+	}
+
+	sort.Strings(paths)
+	return paths
+}
+
+func goldenDiff(t TB, name string, value any) ([]string, bool) {
+	t.Helper()
+
+	want, err := decode(Golden(t, name))
 	if err != nil {
 		t.Fatalf("scimtest: reading %s: %v", name, err)
-		return nil
+		return nil, false
 	}
 
 	got, err := remarshal(value)
 	if err != nil {
 		t.Fatalf("scimtest: encoding %T: %v", value, err)
-		return nil
+		return nil, false
 	}
 
-	paths := diff("", want, got)
-	sort.Strings(paths)
-	return paths
+	return diff("", want, got), true
 }
 
 func without(paths, ignore []string) []string {
