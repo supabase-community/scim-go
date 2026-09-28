@@ -33,11 +33,10 @@ func fillOmitted(attr *core.Attribute, member map[string]any, subs []*core.Attri
 	if existing == nil {
 		return
 	}
+	candidate, held := core.Object(member), core.Object(existing)
 	for _, sub := range subs {
-		if _, present := member[sub.Name]; !present {
-			if held, has := existing[sub.Name]; has {
-				member[sub.Name] = held
-			}
+		if !candidate.Has(sub.Name) && held.Has(sub.Name) {
+			candidate.Set(sub.Name, held.Get(sub.Name))
 		}
 	}
 }

@@ -891,6 +891,30 @@ func TestApplyReplaceMembersMatchesTheStoredValueCaseInsensitively(t *testing.T)
 	assert.Equal(t, "User", members[0].(map[string]any)["type"])
 }
 
+// RFC 7643 Section 2.1: attribute names are case insensitive, so a stored sub-attribute keyed with different case is still found.
+func TestApplyReplaceMembersKeepsAStoredSubAttributeKeyedWithDifferentCase(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1", "Type": "User"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"u-1"}]`)))
+
+	members := item["members"].([]any)
+	require.Len(t, members, 1)
+	assert.Equal(t, "User", core.Object(members[0].(map[string]any)).Get("type"))
+}
+
+// RFC 7643 Section 2.1: an explicit sub-attribute keyed with different case is not overwritten by carry-forward.
+func TestApplyReplaceMembersLeavesAnExplicitSubAttributeKeyedWithDifferentCaseAlone(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"u-1","Type":"Group"}]`)))
+
+	members := item["members"].([]any)
+	require.Len(t, members, 1)
+	member := core.Object(members[0].(map[string]any))
+	assert.Len(t, member, 2)
+	assert.Equal(t, "Group", member.Get("type"))
+}
+
 func TestApplyReplaceMembersLeavesAnExplicitImmutableValueAlone(t *testing.T) {
 	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
 
