@@ -46,8 +46,6 @@ func BenchmarkServerUsers(b *testing.B) {
 	b.Run("POST", func(b *testing.B) { createEach(b, handler, &created, false) })
 }
 
-// BenchmarkServerPatchManyAddresses matches the shape reported against AUTH-1502: two PATCH "add"
-// operations, each carrying N "addresses" elements, which have no "value" sub-attribute.
 func BenchmarkServerPatchManyAddresses(b *testing.B) {
 	handler := newTestHandler(b)
 	for _, n := range []int{5000, 10000} {
