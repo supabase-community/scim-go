@@ -2,7 +2,6 @@ package filter
 
 import (
 	"fmt"
-	"strings"
 )
 
 type Visitor[Output any] interface {
@@ -47,7 +46,7 @@ func dispatch[Output any](v Visitor[Output], n *Node) (Output, error) {
 	}
 
 	attr := n.AttrPath()
-	switch Operator(strings.ToLower(n.Operator())) {
+	switch Operator(n.Operator()) {
 	case "and":
 		return visitBinary(v, n, v.VisitAnd)
 	case "or":
