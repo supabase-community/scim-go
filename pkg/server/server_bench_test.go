@@ -46,6 +46,33 @@ func BenchmarkServerUsers(b *testing.B) {
 	b.Run("POST", func(b *testing.B) { createEach(b, handler, &created, false) })
 }
 
+// BenchmarkServerPatchManyAddresses matches the shape reported against AUTH-1502: two PATCH "add"
+// operations, each carrying N "addresses" elements, which have no "value" sub-attribute.
+func BenchmarkServerPatchManyAddresses(b *testing.B) {
+	handler := newTestHandler(b)
+	for _, n := range []int{5000, 10000} {
+		first := patchAddresses(n, "a")
+		second := patchAddresses(n, "b")
+		body := benchBody(b, protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{first, second},
+		})
+		location := serve(b, handler, http.MethodPost, basePath+"/Users", benchBody(b, benchUser("addr"+strconv.Itoa(n))), http.StatusCreated).Header().Get("Location")
+		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			serveEach(b, handler, http.MethodPatch, location, body, http.StatusOK)
+		})
+	}
+}
+
+func patchAddresses(n int, prefix string) patch.Operation {
+	elements := make([]map[string]any, n)
+	for i := range elements {
+		elements[i] = map[string]any{"postalCode": prefix + strconv.Itoa(i)}
+	}
+	raw, _ := json.Marshal(elements)
+	return patch.Operation{Op: patch.OpAdd, Path: "addresses", Value: raw}
+}
+
 func createEach(b *testing.B, handler http.Handler, created *int, remove bool) {
 	head, tail, _ := bytes.Cut(benchBody(b, benchUser("USERNAME")), []byte("USERNAME"))
 	body := []byte{}
