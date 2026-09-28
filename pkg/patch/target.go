@@ -87,11 +87,11 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 // RFC 7644 Section 3.5.2.2: a value that becomes unassigned and is read-only SHALL return "mutability".
 func (t *target) overwritable(holder core.Object, kind Op, candidate any) error {
 	before := holder.Get(t.key())
+	if err := gateImmutableWrite(t.attr, before, appended(before, candidate, kind)); err != nil {
+		return err
+	}
 	if _, appends := before.([]any); appends && kind == OpAdd {
 		return nil
-	}
-	if err := gateImmutableWrite(t.attr, before, candidate); err != nil {
-		return err
 	}
 	return eachSub(t.attr, before, gateRemove)
 }

@@ -1048,6 +1048,60 @@ func TestApplyAddSubAttributeIntoAbsentMultiValuedIsInvalidPath(t *testing.T) {
 	assert.Equal(t, scimerrors.InvalidPath, scimErr.ScimType)
 }
 
+// RFC 7643 Section 7: an assigned immutable attribute rejects an "add" that changes its value, even when the attribute is multi-valued.
+func TestApplyAddRejectsANewValueOntoAnAssignedImmutableMultiValuedAttribute(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("tags", core.TypeString).AsMultiValued().AsImmutable(),
+		),
+	}
+	item := core.Object{"tags": []any{"a"}}
+
+	requireMutability(t, apply(item, schemas, operation(patch.OpAdd, "tags", `["b"]`)))
+	assert.Equal(t, []any{"a"}, item["tags"])
+}
+
+// RFC 7644 Section 3.5.2.1: adding a value the target already contains makes no change, even when the attribute is immutable.
+func TestApplyAddOfAnAlreadyPresentValueOntoAnImmutableMultiValuedAttributeIsANoOp(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("tags", core.TypeString).AsMultiValued().AsImmutable(),
+		),
+	}
+	item := core.Object{"tags": []any{"a"}}
+
+	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, "tags", `["a"]`)))
+	assert.Equal(t, []any{"a"}, item["tags"])
+}
+
+// RFC 7643 Section 2.5: an empty array is unassigned, so an immutable attribute may still receive its first value via "add".
+func TestApplyAddFirstValueOntoEmptyImmutableMultiValuedAttributeSucceeds(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("tags", core.TypeString).AsMultiValued().AsImmutable(),
+		),
+	}
+	item := core.Object{"tags": []any{}}
+
+	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, "tags", `["a"]`)))
+	assert.Equal(t, []any{"a"}, item["tags"])
+}
+
+// RFC 7643 Section 7: a value-filter-matched multi-valued immutable sub-attribute also rejects an "add" that changes its value.
+func TestApplyAddRejectsANewValueOntoAnImmutableMultiValuedSubAttributeMatchedByFilter(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("serial", core.TypeString),
+				core.NewAttribute("codes", core.TypeString).AsMultiValued().AsImmutable(),
+			),
+		),
+	}
+	item := core.Object{"parts": []any{map[string]any{"serial": "s-1", "codes": []any{"A"}}}}
+
+	requireMutability(t, apply(item, schemas, operation(patch.OpAdd, `parts[serial eq "s-1"].codes`, `["B"]`)))
+}
+
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
 	patched, err := patch.Apply(resource, ops, schemas)
 	if err != nil {
