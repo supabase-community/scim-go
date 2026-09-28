@@ -751,6 +751,17 @@ func TestApplyWithin(t *testing.T) {
 			assert.Equal(t, "new@example.com", e.(map[string]any)["value"])
 		}
 	})
+
+	t.Run("charges a clause for each nested not, not only for the leaf it wraps", func(t *testing.T) {
+		nested := strings.Repeat("not(", 50) + `value eq "a"` + strings.Repeat(")", 50)
+		op := operation(patch.OpReplace, `emails[`+nested+`].type`, `"work"`)
+
+		_, err := patch.ApplyWithin(item(), []patch.Operation{op}, userSchemas(), 4)
+		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
+
+		_, err = patch.ApplyWithin(item(), []patch.Operation{op}, userSchemas(), 200)
+		require.NoError(t, err)
+	})
 }
 
 func TestApplyRemoveReadOnlyRejected(t *testing.T) {

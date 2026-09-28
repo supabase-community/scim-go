@@ -41,6 +41,7 @@ func (m matcher) VisitOr(left, right predicate) (predicate, error) {
 }
 
 func (m matcher) VisitNot(operand predicate) (predicate, error) {
+	*m.clauses++
 	return func(member map[string]any) bool { return !operand(member) }, nil
 }
 
