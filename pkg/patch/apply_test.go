@@ -1020,6 +1020,26 @@ func TestApplyReplaceMultiValuedWithNullClearsIt(t *testing.T) {
 	assert.Empty(t, item["emails"].([]any))
 }
 
+// RFC 7643 Section 2.3: a dateTime value filter compares instants, not the literal string.
+func TestApplyValueFilterDateTimeComparesTemporally(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("events", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("at", core.TypeDateTime),
+				core.NewAttribute("label", core.TypeString),
+			),
+		),
+	}
+	item := map[string]any{"events": []any{
+		map[string]any{"at": "2024-01-01T23:00:00-05:00", "label": "later by instant, earlier lexically"},
+	}}
+
+	require.NoError(t, apply(item, schemas, operation(patch.OpReplace, `events[at ge "2024-01-02T00:00:00Z"].label`, `"matched"`)))
+
+	events := item["events"].([]any)
+	assert.Equal(t, "matched", events[0].(map[string]any)["label"])
+}
+
 // RFC 7644 Section 3.5.2.1: a bare sub-attribute path cannot target a multi-valued attribute, present or absent.
 func TestApplyAddSubAttributeIntoAbsentMultiValuedIsInvalidPath(t *testing.T) {
 	var scimErr *scimerrors.Error
