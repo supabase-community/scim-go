@@ -2,7 +2,7 @@ package filter
 
 import "strings"
 
-// AttrPath is a parsed attrPath = [URI ":"] ATTRNAME *1subAttr (RFC 7644 3.4.2.2).
+// AttrPath is a parsed attrPath = [URI ":"] ATTRNAME *1subAttr, per RFC 7644 Section 3.4.2.2.
 type AttrPath struct {
 	URI          string
 	Name         string
@@ -10,7 +10,7 @@ type AttrPath struct {
 }
 
 func NewAttrPath(text string) (AttrPath, error) {
-	raw, err := defaultGrammar.run(text, defaultGrammar.attributePath())
+	raw, err := defaultGrammar.run(text, defaultGrammar.attrPath)
 	if err != nil {
 		return AttrPath{}, err
 	}

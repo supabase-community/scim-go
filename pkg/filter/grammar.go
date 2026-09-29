@@ -26,6 +26,8 @@ type grammar struct {
 	maxInputBytes int
 	filter        peg.Parser
 	valueFilter   peg.Parser
+	attrPath      peg.Parser
+	path          peg.Parser
 }
 
 func New(maxInputBytes int) Grammar {
@@ -45,13 +47,23 @@ func newGrammar(maxInputBytes int) *grammar {
 
 	g.filter = g.logExpr(filterAtom, filterRef)
 	g.valueFilter = g.logExpr(valueAtom, valueRef)
+	g.attrPath = g.attributePath()
+	// RFC 7644 Section 3.5.2: PATH = attrPath / valuePath [subAttr]
+	g.path = peg.Choice(
+		peg.Sequence(g.valuePath(valueRef), peg.Optional(peg.Tag("sub_attribute", g.subAttribute()))),
+		peg.Tag("path", g.attrPath),
+	)
 
 	return g
 }
 
-// Parse reads a SCIM filter (RFC 7644 3.4.2.2) and returns its AST
+// Parse reads a SCIM filter and returns its AST, per RFC 7644 Section 3.4.2.2.
 func (g *grammar) Parse(text string) (*Node, error) {
-	raw, err := g.run(text, g.filter)
+	return g.parse(text, g.filter)
+}
+
+func (g *grammar) parse(text string, p peg.Parser) (*Node, error) {
+	raw, err := g.run(text, p)
 	if err != nil {
 		return nil, err
 	}
