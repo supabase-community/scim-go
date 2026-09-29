@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.7.0](https://github.com/supabase-community/scim-go/compare/v0.6.0...v0.7.0) (2026-09-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **server:** make ResourceType endpoint relative to the base URL
+* **patch:** apply operations to the resource in place instead of a copy
+* describe request errors with RFC 7644 Table 9 instead of echoing client input
+* **filter:** drop the subAttribute parameter from VisitValuePath
+* **patch,protocol:** fold ApplyWithin/PatchWithin into functional options
+
+### Features
+
+* **cmd:** set the public base URL from SCIM_BASE_URL ([a3528c1](https://github.com/supabase-community/scim-go/commit/a3528c1847401577fc597c80ea7e47c89bfb31bd))
+* **patch,protocol,server:** add MaxWriteBytes as an independent PATCH write-budget cap ([9e37520](https://github.com/supabase-community/scim-go/commit/9e37520211741926508d8cbe70d12b3156240efa))
+* **patch:** apply operations to the resource in place instead of a copy ([20fbca0](https://github.com/supabase-community/scim-go/commit/20fbca0b53199c5dcc82fe50f4d30e2f11f55d8b))
+* **server,protocol:** cap the encoded size a resource may reach after a write ([a519b98](https://github.com/supabase-community/scim-go/commit/a519b98336896428a23a37d7763b603457d2b112))
+* **server:** add WithBaseURL to build meta.location from a public base URL ([674f60f](https://github.com/supabase-community/scim-go/commit/674f60fd6dae7d746e0e084104d9a99903690813))
+
+
+### Bug Fixes
+
+* **core:** make meta.resourceType caseExact ([b45bdad](https://github.com/supabase-community/scim-go/commit/b45bdad4f154e6cf7d18390336a446ce1c249eb5))
+* **decode:** reject a request body with data after the JSON value ([76847dc](https://github.com/supabase-community/scim-go/commit/76847dc314224b8b16ea03362da47aae4cbcf1d3))
+* describe request errors with RFC 7644 Table 9 instead of echoing client input ([bec8ab4](https://github.com/supabase-community/scim-go/commit/bec8ab474f24939d272cf570c8f7dc1982e9f8da))
+* **filter:** reject a PATCH path with a sub-attribute before and after a valuePath ([2020515](https://github.com/supabase-community/scim-go/commit/20205155116db8d7c629746fce33243084a50f9e))
+* **filter:** reject a sub-attribute after a valuePath in a filter ([3acd426](https://github.com/supabase-community/scim-go/commit/3acd4269fee11f168d0c03f92a28aefdcfa1a7db))
+* **filter:** reject numbers with leading zeros ([f5106ac](https://github.com/supabase-community/scim-go/commit/f5106ac4b875d32d8cdbbdf924b2dc381d80efc7))
+* **patch:** accept a pathless replace that repeats a readOnly value ([1cefeac](https://github.com/supabase-community/scim-go/commit/1cefeac14bd86b76f9e1d53ad951dd9394d195ab))
+* **patch:** dedup a merged or sub-attribute add against the value it already has ([68377c3](https://github.com/supabase-community/scim-go/commit/68377c332acc828e2888dacfc2394c754008a1be))
+* **patch:** gate a sub-attribute remove and mutable-add through an immutable parent ([8f03390](https://github.com/supabase-community/scim-go/commit/8f033906e1b2ec06ca80b99c8761047811c84e63))
+* **patch:** gate an immutable attribute's add on its resulting value, not the raw candidate ([4b1577b](https://github.com/supabase-community/scim-go/commit/4b1577b1639a9c9e7d6eb9ab409fe572f4ebad61))
+* **patch:** gate an immutable parent on sub-attribute writes and top-level removes ([b7768f5](https://github.com/supabase-community/scim-go/commit/b7768f547d5435787702c8b99ce3cd2e33452b80))
+* **patch:** give each element a value filter matches its own copy of the value ([d1d4379](https://github.com/supabase-community/scim-go/commit/d1d4379ce8363ef15ef7c18952272f6e245a6f36))
+* **protocol:** keep a filter's parent sensitivity check across the bare multi-valued substitution ([b07bd8a](https://github.com/supabase-community/scim-go/commit/b07bd8ab6a062f47fcf5efa43dc3af64e918b125))
+* **protocol:** reject case-repeated or non-ASCII names in a PATCH body ([76891ab](https://github.com/supabase-community/scim-go/commit/76891ab8c04a9344e8f895d0b2296b4009fae455))
+* **server:** make ResourceType endpoint relative to the base URL ([0c88927](https://github.com/supabase-community/scim-go/commit/0c88927ce92c87d6b6752c3b66ca2faa0a26b05d))
+* **value:** allow ordering operators on reference attributes ([a7ed994](https://github.com/supabase-community/scim-go/commit/a7ed994ab029d287321d160b7d30468472caa5dc))
+
+
+### Performance Improvements
+
+* **patch:** cache the dedup identity/set index across ops in one PATCH request ([3c7e3d9](https://github.com/supabase-community/scim-go/commit/3c7e3d9110004621063e62444577d4692f5cdfa6))
+
+
+### Code Refactoring
+
+* **filter:** drop the subAttribute parameter from VisitValuePath ([b271c47](https://github.com/supabase-community/scim-go/commit/b271c47bbac90453d0969c7e76a654ca913252fa))
+* **patch,protocol:** fold ApplyWithin/PatchWithin into functional options ([58528a7](https://github.com/supabase-community/scim-go/commit/58528a74163b3fa66e5a537365fa2fa6fdc2e3e0))
+
 ## [0.6.0](https://github.com/supabase-community/scim-go/compare/v0.5.0...v0.6.0) (2026-09-28)
 
 
