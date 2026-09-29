@@ -8,10 +8,29 @@ import (
 
 const maxOutputBytes = 8 << 20
 
+type Option func(*limits)
+
+type limits struct {
+	maxEvaluations int
+}
+
 type budget struct {
 	max         int
 	spent       int
 	outputSpent int
+}
+
+// MaxFilterEvaluations caps the value filter clause checks of one request; costlier requests are refused, and zero lifts the cap.
+func MaxFilterEvaluations(n int) Option {
+	return func(l *limits) { l.maxEvaluations = n }
+}
+
+func defaultLimits() limits {
+	return limits{}
+}
+
+func (l limits) budget() *budget {
+	return &budget{max: l.maxEvaluations}
 }
 
 func (b *budget) charge(evaluations int) error {

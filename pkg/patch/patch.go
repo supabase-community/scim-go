@@ -4,15 +4,14 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// Apply returns a copy of resource with the operations applied atomically, per RFC 7644, Section 3.5.2.
-func Apply(resource core.Object, ops []Operation, schemas core.Schemas) (core.Object, error) {
-	return ApplyWithin(resource, ops, schemas, 0)
-}
-
-// ApplyWithin is Apply that refuses the request before its value filters would check more than maxEvaluations clauses; zero lifts the cap.
-func ApplyWithin(resource core.Object, ops []Operation, schemas core.Schemas, maxEvaluations int) (core.Object, error) {
+// Apply returns a copy of resource with the operations applied atomically, per RFC 7644, Section 3.5.2; opts refine the caps enforced along the way, such as MaxFilterEvaluations.
+func Apply(resource core.Object, ops []Operation, schemas core.Schemas, opts ...Option) (core.Object, error) {
+	limits := defaultLimits()
+	for _, opt := range opts {
+		opt(&limits)
+	}
 	working := core.Object(clone(map[string]any(resource)).(map[string]any))
-	if err := (&patcher{schemas: schemas, budget: &budget{max: maxEvaluations}}).run(working, ops); err != nil {
+	if err := (&patcher{schemas: schemas, budget: limits.budget()}).run(working, ops); err != nil {
 		return nil, err
 	}
 	return working, nil

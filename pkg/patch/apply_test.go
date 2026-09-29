@@ -677,7 +677,7 @@ func TestApplyRemoveLastExtensionValueUnassignsTheExtension(t *testing.T) {
 	assert.Equal(t, map[string]any{"userName": "bjensen"}, item)
 }
 
-func TestApplyWithin(t *testing.T) {
+func TestApplyMaxFilterEvaluations(t *testing.T) {
 	item := func() map[string]any {
 		return map[string]any{"emails": []any{
 			map[string]any{"value": "a"},
@@ -689,30 +689,30 @@ func TestApplyWithin(t *testing.T) {
 	present := operation(patch.OpReplace, `emails[value pr].type`, `"home"`)
 
 	t.Run("applies a request whose value filter clauses times elements fit the budget", func(t *testing.T) {
-		_, err := patch.ApplyWithin(item(), []patch.Operation{either}, userSchemas(), 6)
+		_, err := patch.Apply(item(), []patch.Operation{either}, userSchemas(), patch.MaxFilterEvaluations(6))
 		require.NoError(t, err)
 	})
 
 	t.Run("refuses a request whose value filter clauses times elements exceed the budget with 413", func(t *testing.T) {
-		_, err := patch.ApplyWithin(item(), []patch.Operation{either}, userSchemas(), 5)
+		_, err := patch.Apply(item(), []patch.Operation{either}, userSchemas(), patch.MaxFilterEvaluations(5))
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
 
 	t.Run("spends one budget across every operation", func(t *testing.T) {
-		_, err := patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 9)
+		_, err := patch.Apply(item(), []patch.Operation{either, present}, userSchemas(), patch.MaxFilterEvaluations(9))
 		require.NoError(t, err)
 
-		_, err = patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 8)
+		_, err = patch.Apply(item(), []patch.Operation{either, present}, userSchemas(), patch.MaxFilterEvaluations(8))
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
 
 	t.Run("refuses before evaluating a filter that would match nothing", func(t *testing.T) {
-		_, err := patch.ApplyWithin(item(), []patch.Operation{operation(patch.OpReplace, `emails[value eq "z"].type`, `"work"`)}, userSchemas(), 2)
+		_, err := patch.Apply(item(), []patch.Operation{operation(patch.OpReplace, `emails[value eq "z"].type`, `"work"`)}, userSchemas(), patch.MaxFilterEvaluations(2))
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
 
 	t.Run("has no cap when the budget is zero", func(t *testing.T) {
-		_, err := patch.ApplyWithin(item(), []patch.Operation{either, present}, userSchemas(), 0)
+		_, err := patch.Apply(item(), []patch.Operation{either, present}, userSchemas(), patch.MaxFilterEvaluations(0))
 		require.NoError(t, err)
 	})
 
@@ -726,10 +726,10 @@ func TestApplyWithin(t *testing.T) {
 		require.NoError(t, err)
 
 		big := strings.Repeat("x", 6000)
-		_, err = patch.ApplyWithin(map[string]any{}, []patch.Operation{
+		_, err = patch.Apply(map[string]any{}, []patch.Operation{
 			operation(patch.OpAdd, "emails", string(raw)),
 			operation(patch.OpReplace, `emails[type eq "a"].value`, `"`+big+`"`),
-		}, userSchemas(), 10_000_000)
+		}, userSchemas(), patch.MaxFilterEvaluations(10_000_000))
 
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
@@ -740,9 +740,9 @@ func TestApplyWithin(t *testing.T) {
 			map[string]any{"type": "a", "value": "old-2"},
 		}}
 
-		patched, err := patch.ApplyWithin(resource, []patch.Operation{
+		patched, err := patch.Apply(resource, []patch.Operation{
 			operation(patch.OpReplace, `emails[type eq "a"].value`, `"new@example.com"`),
-		}, userSchemas(), 10_000_000)
+		}, userSchemas(), patch.MaxFilterEvaluations(10_000_000))
 		require.NoError(t, err)
 
 		emails := patched["emails"].([]any)
@@ -756,10 +756,10 @@ func TestApplyWithin(t *testing.T) {
 		nested := strings.Repeat("not(", 50) + `value eq "a"` + strings.Repeat(")", 50)
 		op := operation(patch.OpReplace, `emails[`+nested+`].type`, `"work"`)
 
-		_, err := patch.ApplyWithin(item(), []patch.Operation{op}, userSchemas(), 4)
+		_, err := patch.Apply(item(), []patch.Operation{op}, userSchemas(), patch.MaxFilterEvaluations(4))
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 
-		_, err = patch.ApplyWithin(item(), []patch.Operation{op}, userSchemas(), 200)
+		_, err = patch.Apply(item(), []patch.Operation{op}, userSchemas(), patch.MaxFilterEvaluations(200))
 		require.NoError(t, err)
 	})
 }

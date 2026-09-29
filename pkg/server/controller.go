@@ -9,6 +9,7 @@ import (
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -158,7 +159,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	patched, err := req.PatchWithin(existing, c.schemas, c.limits.MaxFilterEvaluations)
+	patched, err := req.Patch(existing, c.schemas, patch.MaxFilterEvaluations(c.limits.MaxFilterEvaluations))
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
