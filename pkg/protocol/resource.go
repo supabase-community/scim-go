@@ -35,13 +35,20 @@ func readDocument(r io.Reader) (map[string]any, error) {
 	if document == nil {
 		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
 	}
-	if !wellFormedNames(document) {
-		return nil, scimerrors.ErrInvalidSyntax("request body has an attribute name that is not US-ASCII or repeats in another case")
+	if err := checkNames(document); err != nil {
+		return nil, err
 	}
 	return document, nil
 }
 
 // RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.
+func checkNames(document any) error {
+	if !wellFormedNames(document) {
+		return scimerrors.ErrInvalidSyntax("request body has an attribute name that is not US-ASCII or repeats in another case")
+	}
+	return nil
+}
+
 func wellFormedNames(value any) bool {
 	switch v := value.(type) {
 	case map[string]any:

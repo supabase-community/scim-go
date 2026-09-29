@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"slices"
 	"strconv"
@@ -19,7 +21,18 @@ type PatchRequest struct {
 
 // DecodePatchRequest reads a PATCH body; RFC 7644 Section 3.5.2: it MUST contain the PatchOp "schemas" URI and one or more "Operations".
 func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
-	req, err := Decode[*PatchRequest](body)
+	raw, err := Decode[json.RawMessage](body)
+	if err != nil {
+		return nil, err
+	}
+	document, err := Decode[any](bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	if err := checkNames(document); err != nil {
+		return nil, err
+	}
+	req, err := Decode[*PatchRequest](bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
 	}

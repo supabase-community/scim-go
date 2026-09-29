@@ -65,6 +65,18 @@ func TestDecodePatchRequest(t *testing.T) {
 		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
 	})
 
+	// RFC 7643 Section 2.1: attribute names are case insensitive.
+	t.Run("rejects a name that repeats in another case", func(t *testing.T) {
+		for _, body := range []string{
+			`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"add","path":"nickName","value":"a"}],"operations":[{"op":"remove","path":"nickName"}]}`,
+			`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"add","OP":"remove","path":"nickName","value":"a"}]}`,
+		} {
+			_, err := protocol.DecodePatchRequest(strings.NewReader(body))
+
+			require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""), body)
+		}
+	})
+
 	t.Run("rejects a null body", func(t *testing.T) {
 		_, err := protocol.DecodePatchRequest(strings.NewReader("null"))
 

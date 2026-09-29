@@ -3076,6 +3076,30 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.False(t, *patched.Emails[0].Primary)
 		assert.True(t, *patched.Emails[1].Primary)
 	})
+
+	// RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.
+	t.Run("rejects a value with an attribute name that is not US-ASCII or repeats in another case", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		extension := string(core.SchemaEnterpriseUser)
+
+		for _, operation := range []patch.Operation{
+			{Op: patch.OpReplace, Value: json.RawMessage(`{"displayName":"a","DISPLAYNAME":"b"}`)},
+			{Op: patch.OpReplace, Path: "name", Value: json.RawMessage(`{"givenName":"a","GIVENNAME":"b"}`)},
+			{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"a@example.com","VALUE":"b@example.com"}]`)},
+			{Op: patch.OpAdd, Value: json.RawMessage(`{"` + extension + `":{"department":"a","DEPARTMENT":"b"}}`)},
+			{Op: patch.OpAdd, Value: json.RawMessage(`{"nick\u00e9":"x"}`)},
+		} {
+			response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{operation}}),
+			))
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, string(operation.Value))
+			assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType, string(operation.Value))
+		}
+	})
 }
 
 func TestRFC7644PatchValueFilteredWriteHasAnOutputBudget(t *testing.T) {
