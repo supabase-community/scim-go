@@ -45,12 +45,12 @@ func (c *Resource[T]) schema(basePath string) *core.Schema {
 		With(c.attributes...)
 }
 
-func (c *Resource[T]) resourceType(basePath string) *core.ResourceType {
+func (c *Resource[T]) resourceType() *core.ResourceType {
 	resourceType := &core.ResourceType{
 		Schemas:  []core.SchemaURI{core.SchemaResourceType},
 		ID:       core.ResourceTypeName(c.name),
 		Name:     core.ResourceTypeName(c.name),
-		Endpoint: basePath + c.endpoint,
+		Endpoint: c.endpoint,
 		Schema:   c.id,
 	}
 	for _, extension := range c.extensions {

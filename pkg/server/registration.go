@@ -3,7 +3,7 @@ package server
 import "github.com/supabase-community/scim-go/pkg/core"
 
 type Registration interface {
-	resourceType(basePath string) *core.ResourceType
+	resourceType() *core.ResourceType
 	schemas(basePath string) core.Schemas
 	mount(s *Server, schemas core.Schemas)
 }

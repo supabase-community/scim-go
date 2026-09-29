@@ -3941,6 +3941,7 @@ func TestRFC7644Schemas(t *testing.T) {
 
 // RFC 7644 4 Service Provider Configuration Endpoints (/ResourceTypes)
 func TestRFC7644ResourceTypes(t *testing.T) {
+	// RFC 7643 Section 6: "endpoint" is relative to the Base URL of the service provider, e.g., "Users".
 	t.Run("lists the registered resource types", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -3954,19 +3955,19 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 		list := ReadBodyAs[protocol.ListResponse[*core.ResourceType]](t, response)
 		require.Equal(t, 5, list.TotalResults)
 		assert.Equal(t, core.ResourceTypeName("User"), list.Resources[0].ID)
-		assert.Equal(t, basePath+"/Users", list.Resources[0].Endpoint)
+		assert.Equal(t, "/Users", list.Resources[0].Endpoint)
 		assert.Equal(t, core.SchemaUser, list.Resources[0].Schema)
 		assert.Equal(t, core.ResourceTypeName("Group"), list.Resources[1].ID)
-		assert.Equal(t, basePath+"/Groups", list.Resources[1].Endpoint)
+		assert.Equal(t, "/Groups", list.Resources[1].Endpoint)
 		assert.Equal(t, core.SchemaGroup, list.Resources[1].Schema)
 		assert.Equal(t, core.ResourceTypeName("Widget"), list.Resources[2].ID)
-		assert.Equal(t, basePath+"/Widgets", list.Resources[2].Endpoint)
+		assert.Equal(t, "/Widgets", list.Resources[2].Endpoint)
 		assert.Equal(t, widgetSchema, list.Resources[2].Schema)
 		assert.Equal(t, core.ResourceTypeName("Kit"), list.Resources[3].ID)
-		assert.Equal(t, basePath+"/Kits", list.Resources[3].Endpoint)
+		assert.Equal(t, "/Kits", list.Resources[3].Endpoint)
 		assert.Equal(t, kitSchema, list.Resources[3].Schema)
 		assert.Equal(t, core.ResourceTypeName("Gadget"), list.Resources[4].ID)
-		assert.Equal(t, basePath+"/Gadgets", list.Resources[4].Endpoint)
+		assert.Equal(t, "/Gadgets", list.Resources[4].Endpoint)
 		assert.Equal(t, gadgetSchema, list.Resources[4].Schema)
 	})
 
@@ -3982,7 +3983,7 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		resourceType := ReadBodyAs[core.ResourceType](t, response)
 		assert.Equal(t, core.ResourceTypeName("User"), resourceType.ID)
-		assert.Equal(t, basePath+"/Users", resourceType.Endpoint)
+		assert.Equal(t, "/Users", resourceType.Endpoint)
 		assert.Equal(t, core.SchemaUser, resourceType.Schema)
 	})
 

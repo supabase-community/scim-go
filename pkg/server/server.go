@@ -71,7 +71,7 @@ func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.
 
 func (s *Server) mount(resource Registration) {
 	schemas := resource.schemas(s.basePath)
-	s.resourceTypes = append(s.resourceTypes, resource.resourceType(s.basePath))
+	s.resourceTypes = append(s.resourceTypes, resource.resourceType())
 	s.schemas = append(s.schemas, schemas...)
 	resource.mount(s, schemas)
 }
