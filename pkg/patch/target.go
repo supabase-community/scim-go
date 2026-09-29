@@ -354,3 +354,22 @@ func subAttr(parent *core.Attribute, name string) *core.Attribute {
 	}
 	return permissiveAttr
 }
+
+func clone(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		cloned := make(map[string]any, len(typed))
+		for key, element := range typed {
+			cloned[key] = clone(element)
+		}
+		return cloned
+	case []any:
+		cloned := make([]any, len(typed))
+		for i, element := range typed {
+			cloned[i] = clone(element)
+		}
+		return cloned
+	default:
+		return typed
+	}
+}
