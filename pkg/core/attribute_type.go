@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// AttributeType is the data type of an attribute, per RFC 7643, Section 7.
+// AttributeType is the data type of an attribute, per RFC 7643 Section 2.3.
 type AttributeType string
 
 const (

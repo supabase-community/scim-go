@@ -53,37 +53,31 @@ func (a *Attribute) DescribedAs(description string) *Attribute {
 	return a
 }
 
-// AsImmutable sets "mutability" to "immutable", per RFC 7643, Section 7.
 func (a *Attribute) AsImmutable() *Attribute {
 	a.Mutability = MutabilityImmutable
 	return a
 }
 
-// AsReadOnly sets "mutability" to "readOnly", per RFC 7643, Section 7.
 func (a *Attribute) AsReadOnly() *Attribute {
 	a.Mutability = MutabilityReadOnly
 	return a
 }
 
-// AsWriteOnly sets "mutability" to "writeOnly", per RFC 7643, Section 7.
 func (a *Attribute) AsWriteOnly() *Attribute {
 	a.Mutability = MutabilityWriteOnly
 	return a
 }
 
-// ReturnedAs sets "returned", per RFC 7643, Section 7.
 func (a *Attribute) ReturnedAs(returned Returned) *Attribute {
 	a.Returned = returned
 	return a
 }
 
-// Suggesting sets "canonicalValues", per RFC 7643, Section 7.
 func (a *Attribute) Suggesting(values ...string) *Attribute {
 	a.CanonicalValues = values
 	return a
 }
 
-// Referencing sets "referenceTypes", per RFC 7643, Section 7.
 func (a *Attribute) Referencing(referenceTypes ...ReferenceType) *Attribute {
 	a.ReferenceTypes = referenceTypes
 	return a

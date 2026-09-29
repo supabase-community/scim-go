@@ -39,7 +39,6 @@ func TestRFC7643(t *testing.T) {
 		assert.Empty(t, scimtest.RoundTripDiff(t, scimtest.RFC7643ResourceTypes, &[]core.ResourceType{}))
 	})
 
-	// RFC 7643, Section 7 states an attribute characteristic only where it bears on the attribute.
 	t.Run("states attribute characteristics the schemas of Section 8.7 leave unsaid", func(t *testing.T) {
 		for _, tc := range []struct {
 			name  string
