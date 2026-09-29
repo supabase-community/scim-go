@@ -8,7 +8,6 @@ type Path struct {
 	ValueFilter *Node
 }
 
-// NewPath parses a SCIM PATCH path, per RFC 7644, Section 3.5.2.
 func NewPath(text string) (Path, error) {
 	if strings.IndexByte(text, '[') < 0 {
 		path, err := NewAttrPath(text)
@@ -17,7 +16,7 @@ func NewPath(text string) (Path, error) {
 		}
 		return Path{AttrPath: path}, nil
 	}
-	// RFC 7644 Section 3.5.2: PATH's valuePath alternative is attrPath "[" valFilter "]" [subAttr], not the general FILTER grammar, so a leading "(" or "not" here is rejected rather than silently unwrapped.
+	// RFC 7644 Section 3.5.2: PATH = attrPath / valuePath [subAttr], not FILTER.
 	raw, err := defaultGrammar.run(text, defaultGrammar.valuePath(defaultGrammar.valueFilter))
 	if err != nil {
 		return Path{}, err

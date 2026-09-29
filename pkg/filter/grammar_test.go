@@ -256,13 +256,13 @@ func TestParseRejectsOversizedInput(t *testing.T) {
 	g := filter.New(16)
 
 	t.Run("input over the cap is rejected before parsing", func(t *testing.T) {
-		_, err := g.Parse(`userName eq "bjensen"`) // 21 bytes > 16
+		_, err := g.Parse(`userName eq "bjensen"`)
 		require.ErrorIs(t, err, filter.ErrInputTooLarge)
 		assert.NotErrorIs(t, err, filter.ErrInvalidFilter)
 	})
 
 	t.Run("input within the cap still parses", func(t *testing.T) {
-		node, err := g.Parse(`a eq "1"`) // 8 bytes <= 16
+		node, err := g.Parse(`a eq "1"`)
 		require.NoError(t, err)
 		assert.Equal(t, "a", node.Attribute())
 	})
@@ -304,7 +304,7 @@ func TestGrammarDeepNestingIsLinear(t *testing.T) {
 }
 
 func TestGrammarOperatorsAreCaseInsensitive(t *testing.T) {
-	// RFC 7644 3.4.2.2: attribute operators and logical keywords are case insensitive.
+	// RFC 7644 Section 3.4.2.2 and RFC 5234 Section 2.3: operators and quoted ABNF keywords are case insensitive.
 	g := filter.New(0)
 
 	t.Run("comparison operator", func(t *testing.T) {
@@ -345,7 +345,7 @@ func TestGrammarJSONLiteralsAreCaseSensitive(t *testing.T) {
 }
 
 func TestGrammarStringEscapesAreDecoded(t *testing.T) {
-	// compValue strings follow JSON rules, so escapes must be decoded.
+	// RFC 7159 Section 7: any character may be escaped.
 	tt := []struct {
 		input string
 		want  string
@@ -393,7 +393,6 @@ func TestGrammarRejectsMalformed(t *testing.T) {
 }
 
 func TestGrammarValueFilterRejectsNestedValuePath(t *testing.T) {
-	// valFilter = attrExp / logExp / *1"not" "(" valFilter ")" -- no nested valuePath.
 	g := filter.New(0)
 
 	t.Run("nested value path is rejected", func(t *testing.T) {

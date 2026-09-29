@@ -9,7 +9,7 @@ import (
 )
 
 func TestFilterConformance(t *testing.T) {
-	// RFC 7644 3.4.2.2 filter examples, verified against filter.Parse.
+	// Adapted from RFC 7644 Section 3.4.2.2, Figure 2.
 	valid := []string{
 		`userName eq "bjensen"`,
 		`userName sw "b"`,
