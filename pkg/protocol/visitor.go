@@ -136,7 +136,7 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 		return zero, err
 	}
 	parent := r.parent(path)
-	// RFC 7644 Section 3.4.2.2: a bare multi-valued attribute name compares its "value" sub-attribute.
+	// RFC 7644 Section 3.4.2.2: Figure 2 filters a multi-valued attribute without a sub-attribute, e.g. emails co "example.com".
 	if path.SubAttribute == "" && attribute.Type == core.TypeComplex && attribute.MultiValued {
 		if sub := attribute.SubAttribute("value"); sub != nil {
 			parent, attribute = attribute, sub

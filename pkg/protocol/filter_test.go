@@ -164,7 +164,7 @@ func TestFilter(t *testing.T) {
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 
-	// RFC 7644 Section 3.4.2.2: for complex attributes, a fully qualified sub-attribute MUST be specified.
+	// RFC 7644 Section 3.4.2.2: Figure 2 filters a multi-valued attribute without a sub-attribute, e.g. emails co "example.com".
 	t.Run("compares a multi-valued attribute without a sub-attribute against its value sub-attribute", func(t *testing.T) {
 		out, err := protocol.Filter[clause](schemas, `emails co "example.com"`, sqlEvaluator{})
 		require.NoError(t, err)
@@ -242,7 +242,6 @@ func TestFilterOnHiddenAttributes(t *testing.T) {
 		}
 	})
 
-	// RFC 7644 Section 3.4.2.2: a bare multi-valued attribute compares its "value" sub-attribute, which must not drop the parent's own sensitivity.
 	t.Run("rejects any other operator with invalidFilter", func(t *testing.T) {
 		for _, text := range []string{
 			`password ne "x"`, `password co "nter"`, `password sw "hun"`, `password ew "r2"`, `password gt "a"`,
