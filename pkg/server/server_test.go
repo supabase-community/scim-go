@@ -752,6 +752,21 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, scimErr.ScimType)
 	})
 
+	t.Run("rejects a body with data after the JSON value", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		for _, body := range []string{`{"userName":"a"}garbage`, `{"userName":"b"}{"userName":"c"}`, `{"userName":"d"}]`} {
+			request := Request(t, srv, http.MethodPost, basePath+"/Users", WithBearerToken(validToken), WithRequestBody([]byte(body)))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, body)
+			assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType, body)
+		}
+
+		request := Request(t, srv, http.MethodPost, basePath+"/Users", WithBearerToken(validToken), WithRequestBody([]byte("{\"userName\":\"e\"}\r\n")))
+		assert.Equal(t, http.StatusCreated, Response(t, srv, request).StatusCode)
+	})
+
 	t.Run("rejects a body that does not match the resource", func(t *testing.T) {
 		srv := newTestServer(t)
 
