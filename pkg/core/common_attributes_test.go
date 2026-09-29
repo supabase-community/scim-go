@@ -21,3 +21,14 @@ func TestCommonAttribute(t *testing.T) {
 		assert.False(t, ok)
 	})
 }
+
+// RFC 7643 Section 3.1: resourceType has a mutability of "readOnly" and "caseExact" as "true".
+func TestCommonAttributeMetaResourceTypeIsCaseExact(t *testing.T) {
+	t.Skip("bug: meta.resourceType is not caseExact")
+	meta, ok := core.CommonAttribute("meta")
+	require.True(t, ok)
+
+	resourceType := meta.SubAttributes.Lookup("resourceType")
+	require.NotNil(t, resourceType)
+	assert.True(t, resourceType.CaseExact)
+}

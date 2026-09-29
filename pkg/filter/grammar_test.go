@@ -60,6 +60,9 @@ func TestGrammarComparisonOperatorsAndLiterals(t *testing.T) {
 		{`age le 21`, "age", "le", json.Number("21")},
 		{`salary ge 1.5e4`, "salary", "ge", json.Number("1.5e4")},
 		{`salary ge -3.5`, "salary", "ge", json.Number("-3.5")},
+		{`age eq 0`, "age", "eq", json.Number("0")},
+		{`salary eq 0.5`, "salary", "eq", json.Number("0.5")},
+		{`salary eq -0.5`, "salary", "eq", json.Number("-0.5")},
 		{`active eq true`, "active", "eq", true},
 		{`active eq false`, "active", "eq", false},
 		{`nickName eq null`, "nickName", "eq", nil},
@@ -406,4 +409,28 @@ func TestGrammarValueFilterRejectsNestedValuePath(t *testing.T) {
 		require.True(t, node.HasPath())
 		assert.True(t, node.ValueFilter().Not())
 	})
+}
+
+// RFC 7159 Section 6: leading zeros are not allowed.
+func TestGrammarRejectsNumberWithLeadingZero(t *testing.T) {
+	t.Skip("bug: reNumber accepts leading zeros")
+	g := filter.New(0)
+	for _, input := range []string{`age eq 01`, `age eq -01`, `salary eq 00.5`} {
+		t.Run(input, func(t *testing.T) {
+			_, err := g.Parse(input)
+			require.ErrorIs(t, err, filter.ErrInvalidFilter)
+		})
+	}
+}
+
+// RFC 7644 Section 3.4.2.2: FILTER = attrExp / logExp / valuePath / *1"not" "(" FILTER ")"
+func TestGrammarRejectsSubAttributeAfterValuePath(t *testing.T) {
+	t.Skip("bug: a filter accepts the PATCH-only valuePath [subAttr] form")
+	g := filter.New(0)
+	for _, input := range []string{`emails[type eq "work"].value`, `emails[type eq "work"].value eq "a@x"`} {
+		t.Run(input, func(t *testing.T) {
+			_, err := g.Parse(input)
+			require.ErrorIs(t, err, filter.ErrInvalidFilter)
+		})
+	}
 }

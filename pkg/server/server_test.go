@@ -1377,6 +1377,32 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.4.2.2: FILTER = attrExp / logExp / valuePath / *1"not" "(" FILTER ")"
+	t.Run("rejects a sub-attribute after a value path filter", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@work.com", Type: "work"}}})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`emails[type eq "work"].value`}}.Encode()
+		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	// RFC 7643 Section 3.1: resourceType has a mutability of "readOnly" and "caseExact" as "true".
+	t.Run("compares meta.resourceType case exactly", func(t *testing.T) {
+		t.Skip("bug: meta.resourceType is not caseExact")
+		srv := newTestServer(t)
+		createWidget(t, srv, &widget{Name: "bolt"})
+
+		path := basePath + "/Widgets?" + url.Values{"filter": {`meta.resourceType eq "widget"`}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, 0, ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).TotalResults)
+	})
+
 	t.Run("a value path filter negates a condition with not", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
