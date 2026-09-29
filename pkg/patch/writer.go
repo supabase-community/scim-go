@@ -8,23 +8,59 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+// merger holds the state one merge shares across its fields, per RFC 7644 Section 3.5.2.3.
+type merger struct {
+	holder core.Object
+	parent *core.Attribute
+	kind   Op
+	gate   parentGate
+}
+
+// parentGate reports whether a sub-attribute write also changes its immutable parent complex attribute, per RFC 7643 Section 7.
+type parentGate struct {
+	attr     *core.Attribute
+	assigned bool
+}
+
+func newMerger(holder core.Object, parent *core.Attribute, kind Op) merger {
+	return merger{holder: holder, parent: parent, kind: kind, gate: parentGate{attr: parent, assigned: len(holder) > 0}}
+}
+
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
-func merge(holder core.Object, values map[string]any, parent *core.Attribute, kind Op) error {
-	keys := newKeys(holder)
+func (m merger) merge(values map[string]any) error {
+	keys := newKeys(m.holder)
 	for name, incoming := range values {
 		key := keys.resolve(name)
-		sub := subAttr(parent, name)
-		v := shaped(incoming, sub.MultiValued)
-		if existing, ok := holder[key].([]any); kind == OpAdd && sub.MultiValued && ok {
-			v = freshElements(sub, existing, v.([]any))
-		}
-		if err := gateImmutableWrite(sub, holder[key], appended(holder[key], v, kind)); err != nil {
+		if err := m.field(key, name, incoming); err != nil {
 			return err
 		}
-		holder[key] = appended(holder[key], v, kind)
 		keys.add(key)
 	}
 	return nil
+}
+
+func (m merger) field(key, name string, incoming any) error {
+	sub := subAttr(m.parent, name)
+	v := shaped(incoming, sub.MultiValued)
+	if existing, ok := m.holder[key].([]any); m.kind == OpAdd && sub.MultiValued && ok {
+		v = freshElements(sub, existing, v.([]any))
+	}
+	before, final := m.holder[key], appended(m.holder[key], v, m.kind)
+	if err := gateImmutableWrite(sub, before, final); err != nil {
+		return err
+	}
+	if err := m.gate.check(sub, before, final); err != nil {
+		return err
+	}
+	m.holder[key] = final
+	return nil
+}
+
+func (g parentGate) check(sub *core.Attribute, before, final any) error {
+	if g.attr == nil || g.attr.MultiValued || g.attr.Mutability != core.MutabilityImmutable || !g.assigned || value.Equal(sub, before, final) {
+		return nil
+	}
+	return scimerrors.ErrMutability(strconv.Quote(g.attr.Name) + " is immutable")
 }
 
 // RFC 7643 Section 7: an assigned immutable sub-attribute rejects any write that would change it.

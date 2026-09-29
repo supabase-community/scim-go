@@ -68,13 +68,13 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 	values, isObject := value.(map[string]any)
 	switch {
 	case t.key() == "":
-		return merge(holder, values, t.parent, kind)
+		return newMerger(holder, t.parent, kind).merge(values)
 	case isObject && t.attr.Type == core.TypeComplex && !t.attr.MultiValued:
 		nested, err := child(holder, t.key())
 		if err != nil {
 			return err
 		}
-		return merge(nested, values, t.attr, kind)
+		return newMerger(nested, t.attr, kind).merge(values)
 	}
 	shapedValue := t.dedupedAdd(holder, kind, shaped(value, t.attr.MultiValued))
 	if err := t.overwritable(holder, kind, shapedValue); err != nil {
@@ -103,10 +103,22 @@ func (t *target) overwritable(holder core.Object, kind Op, candidate any) error 
 	if err := gateImmutableWrite(t.attr, before, final); err != nil {
 		return err
 	}
+	gate := parentGate{attr: t.subParent(), assigned: len(holder) > 0}
+	if err := gate.check(t.attr, before, final); err != nil {
+		return err
+	}
 	if _, appends := before.([]any); appends && kind == OpAdd {
 		return nil
 	}
 	return eachSub(t.attr, before, gateRemove)
+}
+
+// subParent reports the singular complex parent a sub-attribute write also changes, per RFC 7643 Section 7; nil for a plain top-level path.
+func (t *target) subParent() *core.Attribute {
+	if t.path.SubAttribute == "" {
+		return nil
+	}
+	return t.parent
 }
 
 func (t *target) remove() error {
@@ -129,14 +141,11 @@ func (t *target) remove() error {
 	return nil
 }
 
-// RFC 7643 Section 7: an assigned immutable sub-attribute cannot be removed while its element survives.
+// RFC 7643 Section 7: an assigned immutable attribute cannot be removed while its value survives.
 func (t *target) gateHolderRemoval(holder core.Object) error {
 	held := holder.Get(t.key())
 	if err := eachSub(t.attr, held, gateRemove); err != nil {
 		return err
-	}
-	if t.path.SubAttribute == "" {
-		return nil
 	}
 	return gateImmutableWrite(t.attr, held, nil)
 }

@@ -1141,6 +1141,45 @@ func TestApplyAddOfAnAlreadyPresentValueToAnImmutableFilteredSubAttributeIsANoOp
 	assert.Equal(t, []any{"A"}, parts[0].(map[string]any)["codes"])
 }
 
+// RFC 7643 Section 7: writing a sub-attribute also changes its immutable parent complex attribute once the parent is assigned.
+func TestApplyReplaceRejectsAWriteThroughAnAssignedImmutableParent(t *testing.T) {
+	item := core.Object{"badge": map[string]any{"number": "1"}}
+
+	requireMutability(t, apply(item, badgeSchema(), operation(patch.OpReplace, "badge.number", `"2"`)))
+	assert.Equal(t, "1", item["badge"].(map[string]any)["number"])
+}
+
+// RFC 7644 Section 3.5.2.1: replacing a sub-attribute with the value it already has makes no change, even through an immutable parent.
+func TestApplyReplaceOfAnEqualValueThroughAnImmutableParentIsANoOp(t *testing.T) {
+	item := core.Object{"badge": map[string]any{"number": "1"}}
+
+	require.NoError(t, apply(item, badgeSchema(), operation(patch.OpReplace, "badge.number", `"1"`)))
+	assert.Equal(t, "1", item["badge"].(map[string]any)["number"])
+}
+
+// RFC 7643 Section 7: an assigned immutable attribute cannot be removed while its value survives, even at the top level.
+func TestApplyRemoveRejectsAnAssignedTopLevelImmutableAttribute(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
+		),
+	}
+	item := core.Object{"employeeNumber": "1"}
+
+	requireMutability(t, apply(item, schemas, operation(patch.OpRemove, "employeeNumber", "")))
+	assert.Equal(t, "1", item["employeeNumber"])
+}
+
+func badgeSchema() []*core.Schema {
+	return []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("badge", core.TypeComplex).AsImmutable().With(
+				core.NewAttribute("number", core.TypeString),
+			),
+		),
+	}
+}
+
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
 	patched, err := patch.Apply(resource, ops, schemas)
 	if err != nil {
