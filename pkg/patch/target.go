@@ -96,10 +96,7 @@ func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) any {
 // RFC 7644 Section 3.5.2.2: a value that becomes unassigned and is read-only SHALL return "mutability".
 func (t *target) overwritable(holder core.Object, kind Op, candidate any) error {
 	before := holder.Get(t.key())
-	final := candidate
-	if t.attr.Mutability == core.MutabilityImmutable {
-		final = appended(before, candidate, kind)
-	}
+	final := appended(before, candidate, kind)
 	if err := gateImmutableWrite(t.attr, before, final); err != nil {
 		return err
 	}
@@ -147,7 +144,10 @@ func (t *target) gateHolderRemoval(holder core.Object) error {
 	if err := eachSub(t.attr, held, gateRemove); err != nil {
 		return err
 	}
-	return gateImmutableWrite(t.attr, held, nil)
+	if err := gateImmutableWrite(t.attr, held, nil); err != nil {
+		return err
+	}
+	return newParentGate(t.subParent(), holder).check(t.attr, held, nil)
 }
 
 // RFC 7644 Section 3.5.2.2: if no other values remain after removal, the attribute SHALL be considered unassigned.

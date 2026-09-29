@@ -1157,6 +1157,22 @@ func TestApplyReplaceOfAnEqualValueThroughAnImmutableParentIsANoOp(t *testing.T)
 	assert.Equal(t, "1", item["badge"].(map[string]any)["number"])
 }
 
+// RFC 7643 Section 7: removing a sub-attribute also changes its immutable parent complex attribute once the parent is assigned.
+func TestApplyRemoveRejectsARemovalThroughAnAssignedImmutableParent(t *testing.T) {
+	item := core.Object{"badge": map[string]any{"number": "1"}}
+
+	requireMutability(t, apply(item, badgeSchema(), operation(patch.OpRemove, "badge.number", "")))
+	assert.Equal(t, "1", item["badge"].(map[string]any)["number"])
+}
+
+// RFC 7644 Section 3.5.2.1: adding an already-present value to a mutable sub-attribute makes no change, even through an immutable parent.
+func TestApplyAddOfAnAlreadyPresentValueToAMutableSubAttributeThroughAnImmutableParentIsANoOp(t *testing.T) {
+	item := core.Object{"badge": map[string]any{"codes": []any{"A"}}}
+
+	require.NoError(t, apply(item, badgeCodesSchema(), operation(patch.OpAdd, "badge.codes", `["A"]`)))
+	assert.Equal(t, []any{"A"}, item["badge"].(map[string]any)["codes"])
+}
+
 // RFC 7643 Section 7: an assigned immutable attribute cannot be removed while its value survives, even at the top level.
 func TestApplyRemoveRejectsAnAssignedTopLevelImmutableAttribute(t *testing.T) {
 	schemas := []*core.Schema{
@@ -1175,6 +1191,16 @@ func badgeSchema() []*core.Schema {
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
 			core.NewAttribute("badge", core.TypeComplex).AsImmutable().With(
 				core.NewAttribute("number", core.TypeString),
+			),
+		),
+	}
+}
+
+func badgeCodesSchema() []*core.Schema {
+	return []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("badge", core.TypeComplex).AsImmutable().With(
+				core.NewAttribute("codes", core.TypeString).AsMultiValued(),
 			),
 		),
 	}
