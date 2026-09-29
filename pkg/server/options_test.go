@@ -232,7 +232,7 @@ func TestMaxResourceBytes(t *testing.T) {
 		assert.Equal(t, http.StatusRequestEntityTooLarge, last)
 	})
 
-	// RFC 7644 Section 3.5.2.1: a no-op patch SHALL NOT change the resource, so it must succeed even against a resource already over a cap lowered after it was created.
+	// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made to the resource.
 	t.Run("a no-op patch on an already over-cap resource still succeeds", func(t *testing.T) {
 		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
 		repository := server.NewRepository[*core.User](basePath+"/Users", schemas)

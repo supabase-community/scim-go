@@ -13,7 +13,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Repository stores resources, per RFC 7643 3.1 / RFC 7644 3.14 / RFC 7643 7: Create/Replace stamp id+meta and atomically return scimerrors.ErrUniqueness on a value collision; Replace/Delete honour a non-empty expected version.
+// Repository stores resources and enforces uniqueness atomically, per RFC 7643 Section 7.
 type Repository[T core.Resource] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Get(ctx context.Context, id string) (T, error)

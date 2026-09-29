@@ -8,7 +8,6 @@ import (
 
 type Option[T any] func(T)
 
-// ErrorHandler receives the request and the error the server hit while handling it.
 func ErrorHandler(fn func(*http.Request, error)) Option[*Server] {
 	return func(s *Server) { s.errorHandler = fn }
 }
@@ -28,7 +27,7 @@ func MaxPatchFilterEvaluations(n int) Option[*Server] {
 	return func(s *Server) { s.limits.MaxFilterEvaluations = n }
 }
 
-// MaxPatchWriteBytes caps the bytes a PATCH request's value filters may write; costlier requests get 413, and zero lifts the cap.
+// MaxPatchWriteBytes caps the bytes a PATCH request's add and replace operations may write; costlier requests get 413, and zero lifts the cap.
 func MaxPatchWriteBytes(n int) Option[*Server] {
 	return func(s *Server) { s.limits.MaxWriteBytes = n }
 }

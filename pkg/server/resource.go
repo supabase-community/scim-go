@@ -32,7 +32,6 @@ func (c *Resource[T]) WithExtension(id core.SchemaURI, attributes ...*core.Attri
 	return c
 }
 
-// WithRepository sets the datastore of the resource type; the server validates every write before it.
 func (c *Resource[T]) WithRepository(repository Repository[T]) *Resource[T] {
 	c.repository = repository
 	return c

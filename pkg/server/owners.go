@@ -64,7 +64,6 @@ func (o owners) keys(object core.Object) iter.Seq2[claims, any] {
 	}
 }
 
-// RFC 7644 Section 3.4.2.2: each value of a multi-valued attribute is compared on its own.
 func uniqueKeys(field field, object core.Object) []any {
 	keys := []any{}
 	for _, v := range field.values(object) {

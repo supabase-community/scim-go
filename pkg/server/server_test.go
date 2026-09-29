@@ -426,7 +426,7 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 	assert.Equal(t, "1234", user.EnterpriseUser.EmployeeNumber)
 	assert.Equal(t, "Tour Operations", user.EnterpriseUser.Department)
 
-	// RFC 7643 Section 6: "schemas" lists every schema, including extensions, used by the resource.
+	// RFC 7643 Section 3.3: the "schemas" attribute MAY contain additional values indicating extended schemas that are in use.
 
 	t.Run("lists the extension in the resource's own schemas array", func(t *testing.T) {
 		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, user.Schemas)
@@ -507,7 +507,7 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 		assert.Equal(t, "9", patched.EnterpriseUser.EmployeeNumber)
 	})
 
-	// RFC 7643 Section 3: "schemas" MUST only contain values present in the current JSON structure.
+	// RFC 7643 Section 3: "schemas" indicates the schemas that define the attributes present in the current JSON structure.
 	t.Run("omits the extension from schemas when no extension data is set", func(t *testing.T) {
 		plainID, _ := create(t, srv, &core.User{UserName: "plain"})
 
@@ -518,7 +518,7 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 		assert.Equal(t, []core.SchemaURI{core.SchemaUser}, ReadBodyAs[core.User](t, response).Schemas)
 	})
 
-	// RFC 7643 Section 3: "schemas" MUST only contain values present in the current JSON structure.
+	// RFC 7643 Section 3: "schemas" indicates the schemas that define the attributes present in the current JSON structure.
 	t.Run("drops the extension from schemas once a replace removes its data", func(t *testing.T) {
 		removeID, etag := create(t, srv, &core.User{UserName: "removable", EnterpriseUser: &core.EnterpriseUser{Department: "ops"}})
 
@@ -1305,7 +1305,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
-	// 3.4.2.2 Value Filters
+	// RFC 7644 Section 3.4.2.2: valuePath = attrPath "[" valFilter "]"
 	t.Run("filters using a value path expression on a multi-valued complex attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{
@@ -2259,7 +2259,6 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	})
 }
 
-// RFC 7644 Section 3.5.1: an omitted immutable attribute keeps its stored value when its container is present.
 func TestRFC7644ReplacingWithPUTKeepsAnOmittedImmutableSubAttribute(t *testing.T) {
 	srv := newTestServer(t)
 	id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "Barbara", FamilyName: "Jensen"}})
@@ -2275,7 +2274,7 @@ func TestRFC7644ReplacingWithPUTKeepsAnOmittedImmutableSubAttribute(t *testing.T
 	assert.Equal(t, "Jensen", ReadBodyAs[core.User](t, response).Name.FamilyName)
 }
 
-// RFC 7644 Section 3.5.1: an omitted immutable sub-attribute keeps its stored value; a different asserted value still 400s.
+// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match, or 400 SHOULD be returned with scimType "mutability".
 func TestRFC7644GroupMemberMutability(t *testing.T) {
 	seed := core.Member{Value: "u-1", Type: "User", Ref: "https://example.com/v2/Users/u-1"}
 	for _, test := range []struct {
@@ -2315,7 +2314,6 @@ func TestRFC7644GroupMemberMutability(t *testing.T) {
 }
 
 func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
-	// RFC 7644 Section 3.5.1: an omitted immutable sub-attribute keeps its stored value rather than being cleared.
 	t.Run("PUT re-sending an existing member by value alone keeps its stored type", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
@@ -2361,7 +2359,6 @@ func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
 		assert.Equal(t, []core.Member{{Value: "u-1", Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
 	})
 
-	// Regression: omitting an immutable sub-attribute on a resend must not permanently waive it for later requests.
 	t.Run("a resend that omits type does not waive mutability for a later request", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
@@ -2414,7 +2411,7 @@ func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
 		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
-	// RFC 7643 Section 4.2: "value" identifies a member; removing it while the member stays is still a mutability error, not a way to blank the identity undetected.
+	// RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
 	for _, path := range []string{"members.value", `members[value eq "u-1"].value`} {
 		t.Run("PATCH remove of the member value sub-attribute itself is a mutability error: "+path, func(t *testing.T) {
 			srv := newTestServer(t)
@@ -2440,7 +2437,7 @@ func TestRFC7644GroupMemberReplaceIsIdempotent(t *testing.T) {
 		})
 	}
 
-	// RFC 7643 Section 7: a matched write that would change an assigned immutable sub-attribute is a mutability error, not a silent overwrite.
+	// RFC 7643 Section 7: an immutable attribute SHALL NOT be updated.
 	for _, op := range []patch.Operation{
 		{Op: patch.OpReplace, Path: `members[value eq "u-1"].value`, Value: json.RawMessage(`"u-2"`)},
 		{Op: patch.OpReplace, Path: `members[value eq "u-1"].value`, Value: json.RawMessage(`null`)},
@@ -2932,7 +2929,6 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		}
 	})
 
-	// RFC 7643 Section 4.2: a member's "value" alone identifies it, so adding one with the same value under a different type is a no-op, per RFC 7644 Section 3.5.2.1.
 	t.Run("adding a group member that repeats a value with another type is a no-op", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups", WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})))
@@ -3195,7 +3191,7 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		}
 	})
 
-	// RFC 7644 Section 3.5.2: a value path filter compares like a search filter, so dateTime values compare as instants.
+	// RFC 7644 Section 3.4.2.2: for DateTime types, the comparison is chronological.
 	t.Run("matches a value path filter on a dateTime as an instant", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := createWidget(t, srv, &widget{Name: "gear", Parts: []part{{Serial: "s-1", Built: "2026-01-01T00:00:00Z"}}})
@@ -3586,7 +3582,6 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.Equal(t, 2, ReadBodyAs[core.ServiceProviderConfig](t, response).Filter.MaxResults)
 	})
 
-	// RFC 7643 Section 5: the config a caller builds is exactly what the server advertises.
 	t.Run("advertises a mutated config directly", func(t *testing.T) {
 		config := core.NewServiceProviderConfig().Patching().Filtering(protocol.DefaultLimits.MaxCount)
 		config.DocumentationURI = "https://example.com/help/scim.html"
@@ -3805,7 +3800,7 @@ func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 	})
 }
 
-// RFC 7644 Section 3.5.1: an immutable sub-attribute must be enforced, and an omitted one kept, even when its multi-valued parent has no "value" sub-attribute to identify elements by.
+// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match.
 func TestRFC7644ImmutableSubAttributeWithoutAValueSubAttribute(t *testing.T) {
 	createGadget := func(t *testing.T, srv *httptest.Server) string {
 		t.Helper()

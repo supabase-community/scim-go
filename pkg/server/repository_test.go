@@ -12,7 +12,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
-// RFC 7643 Section 7: "server" uniqueness holds for every attribute type.
+// RFC 7643 Section 7: a "server" unique value SHOULD be unique within the context of the current SCIM endpoint.
 func TestRepositoryUniqueness(t *testing.T) {
 	noon := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	cases := []struct {

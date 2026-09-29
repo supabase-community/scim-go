@@ -132,7 +132,6 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	return c.send(w, http.StatusOK, replaced, projection)
 }
 
-// version pins a version-less write to the version the request just validated against, per RFC 7643 Section 7, so a concurrent version-less PUT cannot commit past a stale immutability check.
 func (c *controller[T]) version(r *http.Request, existing T) string {
 	if match := c.ifMatch(r); match != "" {
 		return match
@@ -182,7 +181,6 @@ func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
 	return protocol.Send(w, http.StatusNoContent, nil)
 }
 
-// projectionFor reports ok=false when the request is invalid; err is then already written to w and must be returned as-is.
 func (c *controller[T]) projectionFor(w http.ResponseWriter, r *http.Request) (projection protocol.Projection, ok bool, err error) {
 	projection, err = protocol.ParseProjection(r.URL.Query(), c.schemas)
 	if err != nil {
@@ -191,7 +189,6 @@ func (c *controller[T]) projectionFor(w http.ResponseWriter, r *http.Request) (p
 	return projection, true, nil
 }
 
-// existing reports ok=false when the resource could not be fetched; err is then already written to w and must be returned as-is.
 func (c *controller[T]) existing(w http.ResponseWriter, r *http.Request) (resource T, ok bool, err error) {
 	resource, err = c.service.Get(r.Context(), r.PathValue("id"))
 	if err != nil {
@@ -228,7 +225,6 @@ func (c *controller[T]) persist(r *http.Request, existing, patched T) (T, error)
 	return replaced, c.lostRace(r, err)
 }
 
-// checkSize rejects a write whose resulting resource would exceed the configured cap, per RFC 7644 Section 3.12; independent of any single request's body size.
 func (c *controller[T]) checkSize(resource T) error {
 	encoded, err := json.Marshal(resource)
 	if err != nil {

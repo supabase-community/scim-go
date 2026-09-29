@@ -14,7 +14,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// characteristics enforces the attribute characteristics of RFC 7643, Section 2.2, except uniqueness, which the Repository enforces atomically with the write.
+// characteristics enforces RFC 7643 Section 2.2, except uniqueness.
 func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) Validator[T] {
 	fields := newFields(schemas)
 	constrained := slices.DeleteFunc(slices.Clone(fields), func(field field) bool { return !isConstrained(field) })
@@ -124,7 +124,6 @@ func immutableSubs(subs []*core.Attribute) []*core.Attribute {
 	return slices.DeleteFunc(slices.Clone(subs), func(sub *core.Attribute) bool { return sub.Mutability != core.MutabilityImmutable })
 }
 
-// elementIndex records, per element identity, the set of stringified sub-attribute signatures seen after the write, and a sample element to diff against.
 type elementIndex struct {
 	signatures map[string]map[string]struct{}
 	sample     map[string]core.Object
