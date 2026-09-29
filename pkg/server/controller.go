@@ -212,11 +212,15 @@ func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
 
 // persist skips the write when the patch changed nothing, per RFC 7644, Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
 func (c *controller[T]) persist(r *http.Request, existing, patched T) (T, error) {
-	same, err := unchanged(existing, patched)
+	encoded, err := json.Marshal(patched)
+	if err != nil {
+		return existing, scimerrors.ErrInternal("could not encode the resource")
+	}
+	same, err := unchanged(existing, encoded)
 	if err != nil || same {
 		return existing, err
 	}
-	if err := c.checkSize(patched); err != nil {
+	if err := c.checkEncodedSize(encoded); err != nil {
 		return existing, err
 	}
 	replaced, err := c.service.Replace(r.Context(), patched)
@@ -225,14 +229,15 @@ func (c *controller[T]) persist(r *http.Request, existing, patched T) (T, error)
 
 // checkSize rejects a write whose resulting resource would exceed the configured cap, per RFC 7644 Section 3.12; independent of any single request's body size.
 func (c *controller[T]) checkSize(resource T) error {
-	if c.limits.MaxResourceBytes <= 0 {
-		return nil
-	}
 	encoded, err := json.Marshal(resource)
 	if err != nil {
 		return scimerrors.ErrInternal("could not encode the resource")
 	}
-	if len(encoded) > c.limits.MaxResourceBytes {
+	return c.checkEncodedSize(encoded)
+}
+
+func (c *controller[T]) checkEncodedSize(encoded []byte) error {
+	if c.limits.MaxResourceBytes > 0 && len(encoded) > c.limits.MaxResourceBytes {
 		return scimerrors.ErrTooLarge("the resource would exceed " + strconv.Itoa(c.limits.MaxResourceBytes) + " bytes")
 	}
 	return nil
@@ -269,12 +274,12 @@ func (c *controller[T]) stampSchemas(resource T) error {
 	return nil
 }
 
-func unchanged(existing, patched any) (bool, error) {
+func unchanged(existing any, encodedPatched []byte) (bool, error) {
 	before, err := core.NewObject(existing)
 	if err != nil {
 		return false, err
 	}
-	after, err := core.NewObject(patched)
+	after, err := core.DecodeObject(encodedPatched)
 	if err != nil {
 		return false, err
 	}

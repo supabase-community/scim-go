@@ -153,10 +153,7 @@ func TestMaxResourceBytes(t *testing.T) {
 	big := strings.Repeat("x", 300)
 
 	t.Run("rejects an oversized resource on create", func(t *testing.T) {
-		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
-			server.MaxResourceBytes(200),
-			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
-		))
+		srv := newUserServer(t, server.MaxResourceBytes(200))
 
 		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen", DisplayName: big})))
 
@@ -164,10 +161,7 @@ func TestMaxResourceBytes(t *testing.T) {
 	})
 
 	t.Run("accepts a resource within the cap", func(t *testing.T) {
-		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
-			server.MaxResourceBytes(2000),
-			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
-		))
+		srv := newUserServer(t, server.MaxResourceBytes(2000))
 
 		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen", DisplayName: big})))
 
@@ -183,10 +177,7 @@ func TestMaxResourceBytes(t *testing.T) {
 	})
 
 	t.Run("lifts the cap when set to zero", func(t *testing.T) {
-		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
-			server.MaxResourceBytes(0),
-			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
-		))
+		srv := newUserServer(t, server.MaxResourceBytes(0))
 
 		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen", DisplayName: big})))
 
@@ -329,9 +320,14 @@ func TestWithAuthentication(t *testing.T) {
 
 func newUserWithID(t *testing.T, user core.User, options ...server.Option[*server.Server]) (*httptest.Server, string) {
 	t.Helper()
-	options = append(options, server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)))
-	srv := Server(t, server.New(basePath, fullServiceProviderConfig(), options...))
+	srv := newUserServer(t, options...)
 	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, user)))
 	require.Equal(t, http.StatusCreated, response.StatusCode)
 	return srv, ReadBodyAs[core.User](t, response).ID
+}
+
+func newUserServer(t *testing.T, options ...server.Option[*server.Server]) *httptest.Server {
+	t.Helper()
+	options = append(options, server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)))
+	return Server(t, server.New(basePath, fullServiceProviderConfig(), options...))
 }

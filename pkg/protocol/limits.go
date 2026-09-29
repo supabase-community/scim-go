@@ -9,7 +9,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4, and the most operations, value filter clause checks, and encoded resource bytes one write may cost, where a zero MaxOperations, MaxFilterEvaluations, or MaxResourceBytes lifts that cap.
+// Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4, plus the most operations, value filter clause checks, and encoded resource bytes one write may cost, where a zero MaxOperations, MaxFilterEvaluations, or MaxResourceBytes lifts that cap.
 type Limits struct {
 	DefaultCount         int
 	MaxCount             int

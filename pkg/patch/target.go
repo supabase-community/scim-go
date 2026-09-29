@@ -103,7 +103,7 @@ func (t *target) overwritable(holder core.Object, kind Op, candidate any) error 
 	if err := gateImmutableWrite(t.attr, before, final); err != nil {
 		return err
 	}
-	gate := parentGate{attr: t.subParent(), assigned: len(holder) > 0}
+	gate := newParentGate(t.subParent(), holder)
 	if err := gate.check(t.attr, before, final); err != nil {
 		return err
 	}

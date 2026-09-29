@@ -23,7 +23,11 @@ type parentGate struct {
 }
 
 func newMerger(holder core.Object, parent *core.Attribute, kind Op) merger {
-	return merger{holder: holder, parent: parent, kind: kind, gate: parentGate{attr: parent, assigned: len(holder) > 0}}
+	return merger{holder: holder, parent: parent, kind: kind, gate: newParentGate(parent, holder)}
+}
+
+func newParentGate(attr *core.Attribute, holder core.Object) parentGate {
+	return parentGate{attr: attr, assigned: len(holder) > 0}
 }
 
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
@@ -57,18 +61,23 @@ func (m merger) field(key, name string, incoming any) error {
 }
 
 func (g parentGate) check(sub *core.Attribute, before, final any) error {
-	if g.attr == nil || g.attr.MultiValued || g.attr.Mutability != core.MutabilityImmutable || !g.assigned || value.Equal(sub, before, final) {
+	if g.attr == nil || g.attr.MultiValued {
 		return nil
 	}
-	return scimerrors.ErrMutability(strconv.Quote(g.attr.Name) + " is immutable")
+	return gateUnlessUnchanged(g.attr, g.assigned, value.Equal(sub, before, final))
 }
 
 // RFC 7643 Section 7: an assigned immutable sub-attribute rejects any write that would change it.
 func gateImmutableWrite(sub *core.Attribute, before, candidate any) error {
-	if sub.Mutability != core.MutabilityImmutable || value.IsUnassigned(before) || value.Equal(sub, before, candidate) {
+	return gateUnlessUnchanged(sub, !value.IsUnassigned(before), value.Equal(sub, before, candidate))
+}
+
+// gateUnlessUnchanged rejects a write against an assigned immutable attr unless it leaves its value unchanged, per RFC 7643 Section 7.
+func gateUnlessUnchanged(attr *core.Attribute, assigned, unchanged bool) error {
+	if attr.Mutability != core.MutabilityImmutable || !assigned || unchanged {
 		return nil
 	}
-	return scimerrors.ErrMutability(strconv.Quote(sub.Name) + " is immutable")
+	return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is immutable")
 }
 
 // RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array; RFC 7643 Section 2.5 treats "null" the same as an empty array.
