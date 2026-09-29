@@ -46,7 +46,7 @@ func (t *target) write(kind Op, value any) error {
 	}
 	written := t.written(t.elements(), kind)
 	for _, holder := range holders {
-		if err := t.put(holder, kind, value); err != nil {
+		if err := t.put(holder, kind, clone(value)); err != nil {
 			return err
 		}
 	}

@@ -339,6 +339,35 @@ func TestApplyIsAtomicOnFailure(t *testing.T) {
 	assert.Equal(t, map[string]any{"userName": "keep"}, item)
 }
 
+// RFC 7644 Section 3.5.2.3: a value filter that matches several elements replaces the sub-attribute of each.
+func TestApplyValuePathGivesEachMatchedElementItsOwnValue(t *testing.T) {
+	schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString),
+			core.NewAttribute("type", core.TypeString),
+			core.NewAttribute("tags", core.TypeString).AsMultiValued(),
+		),
+	)}
+
+	for _, op := range []patch.Operation{
+		operation(patch.OpReplace, `emails[type eq "work"].tags`, `["x","y"]`),
+		operation(patch.OpReplace, `emails[type eq "work"]`, `{"tags":["x","y"]}`),
+	} {
+		item := map[string]any{"emails": []any{
+			map[string]any{"value": "a", "type": "work"},
+			map[string]any{"value": "b", "type": "work"},
+		}}
+
+		require.NoError(t, apply(item, schemas, op), op.Path)
+
+		emails := item["emails"].([]any)
+		first, second := emails[0].(map[string]any)["tags"].([]any), emails[1].(map[string]any)["tags"].([]any)
+		assert.Equal(t, []any{"x", "y"}, first, op.Path)
+		assert.Equal(t, []any{"x", "y"}, second, op.Path)
+		assert.NotSame(t, &first[0], &second[0], op.Path)
+	}
+}
+
 func TestInvalidOpRejected(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, operation(patch.Op("delete"), "userName", `"x"`)), &err)
