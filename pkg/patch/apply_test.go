@@ -1087,6 +1087,60 @@ func TestApplyAddRejectsANewValueOntoAnImmutableMultiValuedSubAttributeMatchedBy
 	requireMutability(t, apply(item, schemas, operation(patch.OpAdd, `parts[serial eq "s-1"].codes`, `["B"]`)))
 }
 
+// RFC 7644 Section 3.5.2.1: merging a value-filter-matched element must not duplicate a field the element already has.
+func TestApplyAddMergedIntoAFilteredElementSkipsAnAlreadyPresentValue(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("serial", core.TypeString),
+				core.NewAttribute("codes", core.TypeString).AsMultiValued(),
+			),
+		),
+	}
+	item := core.Object{"parts": []any{map[string]any{"serial": "s-1", "codes": []any{"A"}}}}
+
+	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, `parts[serial eq "s-1"]`, `{"codes":["A"]}`)))
+
+	parts := item["parts"].([]any)
+	assert.Equal(t, []any{"A"}, parts[0].(map[string]any)["codes"])
+}
+
+// RFC 7644 Section 3.5.2.1: adding an already-present value to a filtered sub-attribute must not duplicate it.
+func TestApplyAddToAFilteredSubAttributeSkipsAnAlreadyPresentValue(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("serial", core.TypeString),
+				core.NewAttribute("codes", core.TypeString).AsMultiValued(),
+			),
+		),
+	}
+	item := core.Object{"parts": []any{map[string]any{"serial": "s-1", "codes": []any{"A"}}}}
+
+	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, `parts[serial eq "s-1"].codes`, `["A"]`)))
+
+	parts := item["parts"].([]any)
+	assert.Equal(t, []any{"A"}, parts[0].(map[string]any)["codes"])
+}
+
+// RFC 7644 Section 3.5.2.1: the no-op re-add above must succeed even when the sub-attribute is immutable -- closes the regression flagged in 4b1577b's review.
+func TestApplyAddOfAnAlreadyPresentValueToAnImmutableFilteredSubAttributeIsANoOp(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("serial", core.TypeString),
+				core.NewAttribute("codes", core.TypeString).AsMultiValued().AsImmutable(),
+			),
+		),
+	}
+	item := core.Object{"parts": []any{map[string]any{"serial": "s-1", "codes": []any{"A"}}}}
+
+	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, `parts[serial eq "s-1"].codes`, `["A"]`)))
+
+	parts := item["parts"].([]any)
+	assert.Equal(t, []any{"A"}, parts[0].(map[string]any)["codes"])
+}
+
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
 	patched, err := patch.Apply(resource, ops, schemas)
 	if err != nil {

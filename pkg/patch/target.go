@@ -76,12 +76,21 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 		}
 		return merge(nested, values, t.attr, kind)
 	}
-	shapedValue := shaped(value, t.attr.MultiValued)
+	shapedValue := t.dedupedAdd(holder, kind, shaped(value, t.attr.MultiValued))
 	if err := t.overwritable(holder, kind, shapedValue); err != nil {
 		return err
 	}
 	set(holder, t.key(), carryImmutable(t.attr, kind, t.elements(), shapedValue), kind)
 	return nil
+}
+
+// RFC 7644 Section 3.5.2.1: an add outside the top-level path fresh() already covers must still skip a value the target already contains.
+func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) any {
+	existing, ok := holder.Get(t.key()).([]any)
+	if kind != OpAdd || !t.attr.MultiValued || !ok || t.isListAdd(kind) {
+		return shapedValue
+	}
+	return freshElements(t.attr, existing, shapedValue.([]any))
 }
 
 // RFC 7644 Section 3.5.2.2: a value that becomes unassigned and is read-only SHALL return "mutability".
@@ -237,16 +246,20 @@ func (t *target) isListAdd(kind Op) bool {
 	return kind == OpAdd && t.filter.match == nil && t.path.Name != "" && t.path.SubAttribute == "" && t.attr.MultiValued
 }
 
-// fresh drops elements already present in the target list, per RFC 7644, Section 3.5.2.1: "If the target location already contains the value specified, no changes SHOULD be made". Elements identified by a "value" sub-attribute are matched by that identity, per RFC 7643 Section 2.4.
 func (t *target) fresh(candidate any) []any {
-	elements := slices.Clone(shaped(candidate, true).([]any))
-	if t.attr.SubAttribute("value") == nil {
-		stored := value.NewSet(t.attr, t.elements())
+	return freshElements(t.attr, t.elements(), shaped(candidate, true).([]any))
+}
+
+// freshElements drops candidate elements already present in existing, per RFC 7644, Section 3.5.2.1: "If the target location already contains the value specified, no changes SHOULD be made". Elements identified by a "value" sub-attribute are matched by that identity, per RFC 7643 Section 2.4.
+func freshElements(attr *core.Attribute, existing, candidate []any) []any {
+	elements := slices.Clone(candidate)
+	if attr.SubAttribute("value") == nil {
+		stored := value.NewSet(attr, existing)
 		return slices.DeleteFunc(elements, stored.Contains)
 	}
-	stored := value.ByIdentity(t.attr, t.elements())
+	stored := value.ByIdentity(attr, existing)
 	return slices.DeleteFunc(elements, func(addition any) bool {
-		_, exists := stored[value.Identity(t.attr, asMember(addition))]
+		_, exists := stored[value.Identity(attr, asMember(addition))]
 		return exists
 	})
 }
