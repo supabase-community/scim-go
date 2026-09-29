@@ -20,7 +20,7 @@ type target struct {
 	budget    *budget
 }
 
-// filterState holds the compiled value-filter predicate and its match results; RFC 7644, Section 3.5.2: a "path" value filter targets specific elements of a multi-valued attribute.
+// RFC 7644 Section 3.5.2: the "valuePath" rule allows specific values of a complex multi-valued attribute to be selected.
 type filterState struct {
 	match   predicate
 	clauses int
@@ -84,7 +84,7 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 	return nil
 }
 
-// RFC 7644 Section 3.5.2.1: an add outside the top-level path fresh() already covers must still skip a value the target already contains.
+// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
 func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) any {
 	existing, ok := holder.Get(t.key()).([]any)
 	if kind != OpAdd || !t.attr.MultiValued || !ok || t.isListAdd(kind) {
@@ -93,7 +93,7 @@ func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) any {
 	return freshElements(t.attr, existing, shapedValue.([]any))
 }
 
-// RFC 7644 Section 3.5.2.2: a value that becomes unassigned and is read-only SHALL return "mutability".
+// RFC 7644 Section 3.5.2: an operation that is not compatible with an attribute's mutability SHALL return an error.
 func (t *target) overwritable(holder core.Object, kind Op, candidate any) error {
 	before := holder.Get(t.key())
 	final := appended(before, candidate, kind)
@@ -138,7 +138,7 @@ func (t *target) remove() error {
 	return nil
 }
 
-// RFC 7643 Section 7: an assigned immutable attribute cannot be removed while its value survives.
+// RFC 7643 Section 7: an assigned immutable attribute SHALL NOT be updated, including by removal.
 func (t *target) gateHolderRemoval(holder core.Object) error {
 	held := holder.Get(t.key())
 	if err := eachSub(t.attr, held, gateRemove); err != nil {
@@ -150,7 +150,6 @@ func (t *target) gateHolderRemoval(holder core.Object) error {
 	return newParentGate(t.subParent(), holder).check(t.attr, held, nil)
 }
 
-// RFC 7644 Section 3.5.2.2: if no other values remain after removal, the attribute SHALL be considered unassigned.
 func (t *target) unassignEmptyExtension() {
 	if container, _ := t.container(false); t.extension != "" && len(container) == 0 {
 		t.root.Remove(t.extension)
@@ -200,7 +199,6 @@ func (t *target) holders(create bool) ([]core.Object, error) {
 	return t.typedHolders(container)
 }
 
-// matchedHolders resolves a value-filtered path to the elements the filter selects, per RFC 7644, Section 3.5.2.
 func (t *target) matchedHolders(container core.Object) ([]core.Object, error) {
 	elements, _ := container.Get(t.path.Name).([]any)
 	matched, err := t.matches(elements)
@@ -211,7 +209,6 @@ func (t *target) matchedHolders(container core.Object) ([]core.Object, error) {
 	return members(elements, matched)
 }
 
-// typedHolders resolves a plain sub-attribute path by the runtime shape of its container value.
 func (t *target) typedHolders(container core.Object) ([]core.Object, error) {
 	switch value := container.Get(t.path.Name).(type) {
 	case map[string]any:
@@ -259,7 +256,7 @@ func (t *target) fresh(candidate any) []any {
 	return freshElements(t.attr, t.elements(), shaped(candidate, true).([]any))
 }
 
-// freshElements drops candidate elements already present in existing, per RFC 7644, Section 3.5.2.1: "If the target location already contains the value specified, no changes SHOULD be made". Elements identified by a "value" sub-attribute are matched by that identity, per RFC 7643 Section 2.4.
+// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
 func freshElements(attr *core.Attribute, existing, candidate []any) []any {
 	elements := slices.Clone(candidate)
 	if attr.SubAttribute("value") == nil {

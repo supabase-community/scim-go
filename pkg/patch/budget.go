@@ -27,7 +27,7 @@ func MaxFilterEvaluations(n int) Option {
 	return func(l *limits) { l.maxEvaluations = n }
 }
 
-// MaxWriteBytes caps the bytes a request's value filters may write; costlier requests are refused, and zero lifts the cap.
+// MaxWriteBytes caps the bytes one request's add and replace operations may write; costlier requests are refused, and zero lifts the cap.
 func MaxWriteBytes(n int) Option {
 	return func(l *limits) { l.maxWriteBytes = n }
 }

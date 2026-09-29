@@ -123,7 +123,7 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 	}, nil
 }
 
-// RFC 7644 Section 3.12, Table 9: a value filter names a sub-attribute of the multi-valued attribute; without schemas any name is accepted.
+// RFC 7644 Section 3.4.2.2: a value filter MUST be a valid filter expression based upon sub-attributes of the parent attribute.
 func (m matcher) resolve(path filter.AttrPath) (*core.Attribute, error) {
 	sub := m.attr.SubAttribute(path.Name)
 	if m.attr != permissiveAttr && (sub == nil || path.SubAttribute != "") {

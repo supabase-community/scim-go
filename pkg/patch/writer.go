@@ -8,7 +8,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// merger holds the state one merge shares across its fields, per RFC 7644 Section 3.5.2.3.
 type merger struct {
 	holder core.Object
 	parent *core.Attribute
@@ -16,7 +15,7 @@ type merger struct {
 	gate   parentGate
 }
 
-// parentGate reports whether a sub-attribute write also changes its immutable parent complex attribute, per RFC 7643 Section 7.
+// RFC 7643 Section 7: an immutable complex attribute SHALL NOT be updated, including through its sub-attributes.
 type parentGate struct {
 	attr     *core.Attribute
 	assigned bool
@@ -72,7 +71,6 @@ func gateImmutableWrite(sub *core.Attribute, before, candidate any) error {
 	return gateUnlessUnchanged(sub, !value.IsUnassigned(before), value.Equal(sub, before, candidate))
 }
 
-// gateUnlessUnchanged rejects a write against an assigned immutable attr unless it leaves its value unchanged, per RFC 7643 Section 7.
 func gateUnlessUnchanged(attr *core.Attribute, assigned, unchanged bool) error {
 	if attr.Mutability != core.MutabilityImmutable || !assigned || unchanged {
 		return nil
@@ -80,7 +78,7 @@ func gateUnlessUnchanged(attr *core.Attribute, assigned, unchanged bool) error {
 	return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is immutable")
 }
 
-// RFC 7644 3.5.2.1 - a value written to a multi-valued attribute is an array; RFC 7643 Section 2.5 treats "null" the same as an empty array.
+// RFC 7643 Section 2.5: the null value or an empty array SHALL be considered equivalent for a multi-valued attribute.
 func shaped(value any, multiValued bool) any {
 	if !multiValued {
 		return value

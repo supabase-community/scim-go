@@ -4,7 +4,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// Apply returns a copy of resource with the operations applied atomically, per RFC 7644, Section 3.5.2; opts refine the caps enforced along the way, such as MaxFilterEvaluations.
+// Apply returns a copy of resource with the operations applied atomically, per RFC 7644 Section 3.5.2.
 func Apply(resource core.Object, ops []Operation, schemas core.Schemas, opts ...Option) (core.Object, error) {
 	limits := defaultLimits()
 	for _, opt := range opts {

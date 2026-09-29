@@ -84,7 +84,7 @@ func (p *patcher) remove(root core.Object, op Operation) error {
 	return target.remove()
 }
 
-// RFC 7644 Section 3.5.2: without a "path" the value names attributes, possibly URN-qualified or grouped under an extension URN.
+// RFC 7644 Section 3.5.2.1: if "path" is omitted, the target location is assumed to be the resource itself.
 func (p *patcher) mergeRoot(root core.Object, values map[string]any, kind Op) error {
 	for key, value := range values {
 		if schema := p.schemas.Lookup(core.SchemaURI(key)); schema != nil {

@@ -51,7 +51,6 @@ func configFromEnv() (addr, token string) {
 	return addr, token
 }
 
-// run serves httpServer until done is closed, then shuts it down within a grace period.
 func run(done <-chan struct{}, httpServer *http.Server) {
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

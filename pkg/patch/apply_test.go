@@ -77,7 +77,7 @@ func TestApplyAddWithoutPathSkipsAValueTheTargetAlreadyContains(t *testing.T) {
 	assert.Len(t, item["emails"], 1)
 }
 
-// RFC 7643 Section 2.4: "value" identifies an element of a multi-valued attribute, so an add matching it by "value" alone is skipped, per RFC 7644 Section 3.5.2.1.
+// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
 func TestApplyAddSkipsAnElementAlreadyPresentByValueAlone(t *testing.T) {
 	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User", "$ref": "https://example.com/Users/u-1"}}}
 
@@ -86,7 +86,7 @@ func TestApplyAddSkipsAnElementAlreadyPresentByValueAlone(t *testing.T) {
 	assert.Len(t, item["members"], 1)
 }
 
-// RFC 7643 Section 2.3.6: "value" is not caseExact, so an add matches an existing element regardless of case.
+// RFC 7643 Section 2.2: caseExact defaults to false, so an add matches an existing element regardless of case.
 func TestApplyAddSkipsAnElementAlreadyPresentByValueCaseInsensitively(t *testing.T) {
 	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
 
@@ -104,7 +104,7 @@ func TestApplyAddDoesNotSkipTheSameValueUnderADifferentType(t *testing.T) {
 	assert.Len(t, item["emails"], 2)
 }
 
-// RFC 7644 Section 3.5.2.1: if the target already contains the (type, value) pair, no change is made.
+// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
 func TestApplyAddSkipsTheSameValueAndTypeCaseInsensitively(t *testing.T) {
 	item := core.Object{"emails": []any{map[string]any{"value": "a@b.com", "type": "work"}}}
 
@@ -411,7 +411,7 @@ func TestApplyValuePathPresenceFilter(t *testing.T) {
 	assert.Equal(t, "home", emails[0].(map[string]any)["type"])
 }
 
-// RFC 7644 3.5.2.1 - adding to an absent multi-valued attribute must produce an array.
+// RFC 7643 Section 2.4: multi-valued attributes contain a list of elements using the JSON array format.
 func TestApplyAddToAbsentMultiValuedWrapsInArray(t *testing.T) {
 	item := map[string]any{}
 
@@ -667,7 +667,6 @@ func TestApplyExtensionPath(t *testing.T) {
 	})
 }
 
-// RFC 7644 Section 3.5.2.2: if no other values remain after removal, the attribute SHALL be considered unassigned.
 func TestApplyRemoveLastExtensionValueUnassignsTheExtension(t *testing.T) {
 	uri := string(core.SchemaEnterpriseUser)
 	item := map[string]any{"userName": "bjensen", uri: map[string]any{"department": "eng"}}
@@ -812,7 +811,7 @@ func TestApplyDedupInvalidatedByAValueFilteredRemove(t *testing.T) {
 	assert.ElementsMatch(t, []any{map[string]any{"value": "b@x"}, map[string]any{"value": "a@x"}}, item["emails"])
 }
 
-// RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made to the resource.
+// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
 func TestApplyDedupAcrossOperationsWithoutAValueSubAttribute(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
@@ -1006,7 +1005,6 @@ func TestApplyValueFilterRecomputesLiteralPerElement(t *testing.T) {
 	assert.Less(t, large, 10*small, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
 }
 
-// RFC 7644 Section 3.5.2.1: adding many elements of an attribute without a "value" sub-attribute must not compare every addition against every stored element.
 func TestApplyAddWithoutAValueSubAttributeDoesNotScaleQuadratically(t *testing.T) {
 	addressSchemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
 
@@ -1041,7 +1039,7 @@ func TestApplyAddWithoutAValueSubAttributeDoesNotScaleQuadratically(t *testing.T
 	assert.Less(t, large, 30*small, "adding N elements without a \"value\" sub-attribute must scale close to N, not N^2")
 }
 
-// RFC 7644 Section 3.5.2: an immutable sub-attribute a replacement element omits keeps its stored value, matched by "value" to the element it replaces.
+// RFC 7644 Section 3.5.2: a client MUST NOT modify an attribute that has mutability "immutable".
 func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributes(t *testing.T) {
 	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
 
@@ -1052,7 +1050,7 @@ func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributes(t *testing.T) {
 	assert.Equal(t, "User", members[0].(map[string]any)["type"])
 }
 
-// RFC 7643 Section 2.3.6: "value" is not caseExact, so it matches the stored element regardless of case.
+// RFC 7643 Section 2.2: caseExact defaults to false, so "value" matches the stored element regardless of case.
 func TestApplyReplaceMembersMatchesTheStoredValueCaseInsensitively(t *testing.T) {
 	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
 
@@ -1097,7 +1095,6 @@ func TestApplyReplaceMembersLeavesAnExplicitImmutableValueAlone(t *testing.T) {
 	assert.Equal(t, "Group", members[0].(map[string]any)["type"])
 }
 
-// RFC 7644 Section 3.5.2.1: a "value" that is a single object is treated as an array containing that value.
 func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributesFromASingleObjectValue(t *testing.T) {
 	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User"}}}
 
@@ -1118,7 +1115,7 @@ func TestApplyReplaceWithoutPathKeepsOmittedImmutableSubAttributes(t *testing.T)
 	assert.Equal(t, "User", members[0].(map[string]any)["type"])
 }
 
-// RFC 7644 Section 3.5.2: an omitted immutable sub-attribute keeps its stored value even when the attribute has no "value" sub-attribute to match elements by.
+// RFC 7644 Section 3.5.2: a client MUST NOT modify an attribute that has mutability "immutable".
 func TestApplyReplaceKeepsOmittedImmutableSubAttributesWithoutAValueSubAttribute(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
@@ -1146,7 +1143,7 @@ func TestApplyReplaceMultiValuedWithNullClearsIt(t *testing.T) {
 	assert.Empty(t, item["emails"].([]any))
 }
 
-// RFC 7643 Section 2.3: a dateTime value filter compares instants, not the literal string.
+// RFC 7644 Section 3.4.2.2: DateTime comparison is chronological, not lexical.
 func TestApplyValueFilterDateTimeComparesTemporally(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
@@ -1166,7 +1163,6 @@ func TestApplyValueFilterDateTimeComparesTemporally(t *testing.T) {
 	assert.Equal(t, "matched", events[0].(map[string]any)["label"])
 }
 
-// RFC 7644 Section 3.5.2.1: a bare sub-attribute path cannot target a multi-valued attribute, present or absent.
 func TestApplyAddSubAttributeIntoAbsentMultiValuedIsInvalidPath(t *testing.T) {
 	var scimErr *scimerrors.Error
 
@@ -1249,7 +1245,7 @@ func TestApplyAddToAFilteredSubAttributeSkipsAnAlreadyPresentValue(t *testing.T)
 	assert.Equal(t, []any{"A"}, parts[0].(map[string]any)["codes"])
 }
 
-// RFC 7644 Section 3.5.2.1: the no-op re-add above must succeed even when the sub-attribute is immutable.
+// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made, even when immutable.
 func TestApplyAddOfAnAlreadyPresentValueToAnImmutableFilteredSubAttributeIsANoOp(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
@@ -1275,7 +1271,7 @@ func TestApplyReplaceRejectsAWriteThroughAnAssignedImmutableParent(t *testing.T)
 	assert.Equal(t, "1", item["badge"].(map[string]any)["number"])
 }
 
-// RFC 7644 Section 3.5.2.1: replacing a sub-attribute with the value it already has makes no change, even through an immutable parent.
+// RFC 7643 Section 7: an immutable attribute SHALL NOT be updated, so an unchanged write through its parent succeeds.
 func TestApplyReplaceOfAnEqualValueThroughAnImmutableParentIsANoOp(t *testing.T) {
 	item := core.Object{"badge": map[string]any{"number": "1"}}
 
@@ -1299,7 +1295,7 @@ func TestApplyAddOfAnAlreadyPresentValueToAMutableSubAttributeThroughAnImmutable
 	assert.Equal(t, []any{"A"}, item["badge"].(map[string]any)["codes"])
 }
 
-// RFC 7643 Section 7: an assigned immutable attribute cannot be removed while its value survives, even at the top level.
+// RFC 7643 Section 7: an assigned immutable attribute SHALL NOT be updated, including by removal.
 func TestApplyRemoveRejectsAnAssignedTopLevelImmutableAttribute(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(

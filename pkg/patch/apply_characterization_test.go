@@ -93,7 +93,7 @@ func TestApplyResolvesMixedCaseTopLevelKey(t *testing.T) {
 	assert.False(t, duplicated)
 }
 
-// RFC 7643 2.1 - attribute names are case insensitive; folding collisions resolve to the lowest-ordered key.
+// RFC 7643 Section 2.1: attribute names are case insensitive.
 func TestApplyResolvesDuplicateFoldingKeysDeterministically(t *testing.T) {
 	item := map[string]any{"UserName": "upper", "username": "lower"}
 
@@ -103,7 +103,7 @@ func TestApplyResolvesDuplicateFoldingKeysDeterministically(t *testing.T) {
 	assert.Equal(t, "lower", item["username"])
 }
 
-// RFC 7643 2.1 - attribute names are case insensitive; folding collisions resolve to the lowest-ordered key.
+// RFC 7643 Section 2.1: attribute names are case insensitive.
 func TestApplyMergeResolvesFoldingKeysDeterministically(t *testing.T) {
 	item := map[string]any{"name": map[string]any{"familyName": "lower", "FamilyName": "upper", "Key": "kelvin"}}
 
