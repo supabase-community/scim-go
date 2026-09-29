@@ -2,7 +2,7 @@ package value
 
 import "github.com/supabase-community/scim-go/pkg/core"
 
-// IsUnassigned reports nil, "", [] or {}; RFC 7643 Section 2.5: null or an empty array SHALL be considered equivalent to unassigned.
+// IsUnassigned reports nil, "", [] or {}, the values that RFC 7644 Section 3.4.2.2 "pr" treats as not present.
 func IsUnassigned(value any) bool {
 	switch v := value.(type) {
 	case nil:
