@@ -19,7 +19,7 @@ func Allowed(t core.AttributeType, op filter.Operator) bool {
 	case filter.OpContains, filter.OpStartsWith, filter.OpEndsWith:
 		return t == core.TypeString || t == core.TypeReference
 	case filter.OpGreaterThan, filter.OpGreaterThanEquals, filter.OpLessThan, filter.OpLessThanEquals:
-		return t == core.TypeString || t == core.TypeDateTime || t == core.TypeInteger || t == core.TypeDecimal
+		return t == core.TypeString || t == core.TypeReference || t == core.TypeDateTime || t == core.TypeInteger || t == core.TypeDecimal
 	}
 	return false
 }

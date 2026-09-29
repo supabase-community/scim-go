@@ -1563,6 +1563,37 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, 1, matches("/Users", string(core.SchemaEnterpriseUser)+`:department eq "tour"`))
 	})
 
+	// RFC 7644 Section 3.4.2.2: gt, ge, lt, and le on Boolean and Binary attributes SHALL cause a failed response with "invalidFilter".
+	t.Run("orders every attribute type except boolean and binary", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", ProfileURL: "https://a.example.com"})
+		create(t, srv, &core.User{UserName: "bob", ProfileURL: "https://b.example.com"})
+		create(t, srv, &core.User{UserName: "carol"})
+
+		search := func(filter string) *http.Response {
+			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
+			return Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+		}
+		userNames := func(filter string) []string {
+			response := search(filter)
+			require.Equal(t, http.StatusOK, response.StatusCode, filter)
+			users := ReadBodyAs[protocol.ListResponse[*core.User]](t, response).Resources
+			names := make([]string, 0, len(users))
+			for _, user := range users {
+				names = append(names, user.UserName)
+			}
+			return names
+		}
+
+		assert.Equal(t, []string{"bob"}, userNames(`profileUrl gt "https://a.example.com"`))
+		assert.Equal(t, []string{"alice"}, userNames(`profileUrl lt "https://b.example.com"`))
+		for _, filter := range []string{`active gt true`, `x509Certificates.value gt "x"`} {
+			response := search(filter)
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, filter)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType, filter)
+		}
+	})
+
 	t.Run("treats attribute names and operators as case insensitive", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "bjensen"})

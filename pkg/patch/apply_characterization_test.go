@@ -211,6 +211,7 @@ func TestApplyValuePathRejectsInvalidComparisons(t *testing.T) {
 	}{
 		{`value gt 5`, scimerrors.InvalidValue},
 		{`active gt false`, scimerrors.InvalidFilter},
+		{`cert gt "eA=="`, scimerrors.InvalidFilter},
 		{`bogus eq "x"`, scimerrors.InvalidFilter},
 	}
 	for _, tc := range cases {
@@ -231,6 +232,7 @@ func comparisonSchemas() []*core.Schema {
 				core.NewAttribute("value", core.TypeString),
 				core.NewAttribute("score", core.TypeDecimal),
 				core.NewAttribute("active", core.TypeBoolean),
+				core.NewAttribute("cert", core.TypeBinary),
 			),
 		),
 	}
