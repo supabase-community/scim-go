@@ -159,7 +159,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	patched, err := req.Patch(existing, c.schemas, patch.MaxFilterEvaluations(c.limits.MaxFilterEvaluations))
+	patched, err := req.Patch(existing, c.schemas, patch.MaxFilterEvaluations(c.limits.MaxFilterEvaluations), patch.MaxWriteBytes(c.limits.MaxWriteBytes))
 	if err != nil {
 		return protocol.SendError(w, err)
 	}

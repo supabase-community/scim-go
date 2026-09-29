@@ -764,6 +764,30 @@ func TestApplyMaxFilterEvaluations(t *testing.T) {
 	})
 }
 
+func TestApplyMaxWriteBytes(t *testing.T) {
+	item := func() map[string]any {
+		return map[string]any{"emails": []any{map[string]any{"type": "a", "value": "old"}}}
+	}
+	write := func(value string) patch.Operation {
+		return operation(patch.OpReplace, `emails[type eq "a"].value`, `"`+value+`"`)
+	}
+
+	t.Run("refuses a write once holders times value size exceed the configured budget", func(t *testing.T) {
+		_, err := patch.Apply(item(), []patch.Operation{write(strings.Repeat("x", 100))}, userSchemas(), patch.MaxWriteBytes(50))
+		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
+	})
+
+	t.Run("allows the same write within a larger configured budget", func(t *testing.T) {
+		_, err := patch.Apply(item(), []patch.Operation{write(strings.Repeat("x", 100))}, userSchemas(), patch.MaxWriteBytes(1000))
+		require.NoError(t, err)
+	})
+
+	t.Run("has no cap when the budget is zero", func(t *testing.T) {
+		_, err := patch.Apply(item(), []patch.Operation{write(strings.Repeat("x", 10<<20))}, userSchemas(), patch.MaxWriteBytes(0))
+		require.NoError(t, err)
+	})
+}
+
 func TestApplyRemoveReadOnlyRejected(t *testing.T) {
 	item := map[string]any{"groups": []any{map[string]any{"value": "g1"}}}
 

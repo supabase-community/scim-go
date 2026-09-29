@@ -28,6 +28,11 @@ func MaxPatchFilterEvaluations(n int) Option[*Server] {
 	return func(s *Server) { s.limits.MaxFilterEvaluations = n }
 }
 
+// MaxPatchWriteBytes caps the bytes a PATCH request's value filters may write; costlier requests get 413, and zero lifts the cap.
+func MaxPatchWriteBytes(n int) Option[*Server] {
+	return func(s *Server) { s.limits.MaxWriteBytes = n }
+}
+
 // MaxBodySize caps the request body; larger bodies get 413, per RFC 7644, Section 3.12.
 func MaxBodySize(n int64) Option[*Server] {
 	return func(s *Server) { s.maxBodySize = n }

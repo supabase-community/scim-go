@@ -149,6 +149,34 @@ func TestMaxPatchFilterEvaluations(t *testing.T) {
 	})
 }
 
+func TestMaxPatchWriteBytes(t *testing.T) {
+	patchWith := func(t *testing.T, value string, options ...server.Option[*server.Server]) int {
+		t.Helper()
+		user := core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com"}}}
+		srv, id := newUserWithID(t, user, options...)
+
+		encoded, err := json.Marshal(value)
+		require.NoError(t, err)
+		request := protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpReplace, Path: `emails[value eq "a@example.com"].value`, Value: encoded}},
+		}
+		return Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, WithRequestBodyAs(t, request))).StatusCode
+	}
+
+	t.Run("accepts a request within the default budget", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, patchWith(t, "b@example.com"))
+	})
+
+	t.Run("refuses a request beyond a configured budget with 413", func(t *testing.T) {
+		assert.Equal(t, http.StatusRequestEntityTooLarge, patchWith(t, strings.Repeat("x", 300), server.MaxPatchWriteBytes(100)))
+	})
+
+	t.Run("lifts the cap when set to zero", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, patchWith(t, strings.Repeat("x", 300), server.MaxPatchWriteBytes(0)))
+	})
+}
+
 func TestMaxResourceBytes(t *testing.T) {
 	big := strings.Repeat("x", 300)
 
