@@ -192,11 +192,11 @@ func qualifyName(schemas core.Schemas, raw string) (string, bool, error) {
 	}
 	path, err := filter.NewAttrPath(raw)
 	if err != nil {
-		return "", false, invalidName(raw)
+		return "", false, invalidName()
 	}
 	schema := schemas.Lookup(core.SchemaURI(path.URI))
 	if schema == nil {
-		return "", false, invalidName(raw)
+		return "", false, invalidName()
 	}
 	if _, ok := schemas.Resolve(schema.ID, path.Name, path.SubAttribute); !ok {
 		return "", false, nil
@@ -226,14 +226,14 @@ func parseAttributeParams(values url.Values) (attributes, excluded []string, err
 	}
 	for _, name := range slices.Concat(attributes, excluded) {
 		if _, err := filter.NewAttrPath(name); err != nil {
-			return nil, nil, invalidName(name)
+			return nil, nil, invalidName()
 		}
 	}
 	return attributes, excluded, nil
 }
 
-func invalidName(name string) error {
-	return scimerrors.ErrInvalidValue(`"` + name + `" is not a valid attribute name`)
+func invalidName() error {
+	return scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
 }
 
 func listParam(values url.Values, name string) []string {

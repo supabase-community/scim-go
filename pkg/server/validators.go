@@ -49,7 +49,7 @@ func conforms(field field, candidate core.Object) error {
 	for _, v := range values {
 		s, ok := v.(string)
 		if ok && s != "" && len(field.CanonicalValues) > 0 && !value.Contains(field.Attribute, field.CanonicalValues, s) {
-			return scimerrors.ErrInvalidValue(strconv.Quote(s) + " is not a canonical value for " + strconv.Quote(field.Name))
+			return scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
 		}
 	}
 	return nil

@@ -26,6 +26,19 @@ const (
 	Uniqueness     ErrorType = "uniqueness"
 )
 
+var descriptions = map[ErrorType]string{
+	InvalidFilter:  "The specified filter syntax was invalid, or the specified attribute and filter comparison combination is not supported.",
+	InvalidPath:    `The "path" attribute was invalid or malformed.`,
+	InvalidSyntax:  "The request body message structure was invalid or did not conform to the request schema.",
+	InvalidValue:   "A required value was missing, or the value specified was not compatible with the operation or attribute type, or resource schema.",
+	InvalidVersion: "The specified SCIM protocol version is not supported.",
+	Mutability:     "The attempted modification is not compatible with the target attribute's mutability or current state.",
+	NoTarget:       `The specified "path" did not yield an attribute or attribute value that could be operated on.`,
+	Sensitive:      "The specified request cannot be completed, due to the passing of sensitive (e.g., personal) information in a request URI.",
+	TooMany:        "The specified filter yields many more results than the server is willing to calculate or process.",
+	Uniqueness:     "One or more of the attribute values are already in use or are reserved.",
+}
+
 // Error is the error message form defined in RFC 7644, Section 3.12.
 type Error struct {
 	Schemas  []core.SchemaURI `json:"schemas"`
@@ -65,4 +78,9 @@ func (e *Error) StatusCode() int {
 func (e *Error) Is(target error) bool {
 	other, ok := target.(*Error)
 	return ok && other.Status == e.Status && other.ScimType == e.ScimType
+}
+
+// Description returns the RFC 7644 Table 9 description of the detail error keyword.
+func (t ErrorType) Description() string {
+	return descriptions[t]
 }

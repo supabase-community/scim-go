@@ -3460,6 +3460,68 @@ func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
 		assert.NotEmpty(t, scimErr.Detail)
 	})
 
+	t.Run("describes an error with RFC 7644 Table 9 instead of echoing the request", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		query := func(key, value string) string { return basePath + "/Users?" + url.Values{key: {value}}.Encode() }
+		patch := func(path string) Option[*http.Request] {
+			return WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: path, Value: json.RawMessage(`"x"`)}},
+			})
+		}
+
+		for _, tc := range []struct {
+			method, path string
+			body         Option[*http.Request]
+		}{
+			{http.MethodGet, query("filter", `leak eq`), nil},
+			{http.MethodGet, query("filter", `leak eq "x"`), nil},
+			{http.MethodGet, query("filter", `active eq "leak"`), nil},
+			{http.MethodGet, query("filter", `password eq "leak"`), nil},
+			{http.MethodGet, query("filter", `LEAKuserName[value eq "x"]`), nil},
+			{http.MethodGet, query("filter", `userName[value eq "leak"]`), nil},
+			{http.MethodGet, query("filter", `active gt true`), nil},
+			{http.MethodGet, query("sortBy", `leak!`), nil},
+			{http.MethodGet, query("attributes", `leak!`), nil},
+			{http.MethodPost, basePath + "/Users", WithRequestBodyAs(t, core.User{UserName: "leak", UserType: "leak"})},
+			{http.MethodPatch, basePath + "/Users/" + id, patch(`leak[`)},
+			{http.MethodPatch, basePath + "/Users/" + id, patch(`leak`)},
+			{http.MethodPatch, basePath + "/Users/" + id, patch(`urn:leak:User:userName`)},
+			{http.MethodPatch, basePath + "/Users/" + id, patch(`emails[leak eq "x"].value`)},
+			{http.MethodPatch, basePath + "/Users/" + id, patch(`emails[primary eq "leak"].value`)},
+			{http.MethodPatch, basePath + "/Users/" + id, patch(`emails[primary gt true].value`)},
+		} {
+			options := []Option[*http.Request]{WithBearerToken(validToken), WithContentType(protocol.MediaType)}
+			if tc.body != nil {
+				options = append(options, tc.body)
+			}
+			response := Response(t, srv, Request(t, srv, tc.method, tc.path, options...))
+			scimErr := ReadBodyAs[scimerrors.Error](t, response)
+
+			require.GreaterOrEqual(t, response.StatusCode, http.StatusBadRequest, tc.path)
+			require.NotEmpty(t, scimErr.ScimType, tc.path)
+			assert.Equal(t, scimErr.ScimType.Description(), scimErr.Detail, tc.path)
+			assert.NotContains(t, strings.ToLower(scimErr.Detail), "leak", tc.path)
+		}
+
+		for _, tc := range []struct{ method, path, body string }{
+			{http.MethodPost, basePath + "/Users", `{"userName":"leak`},
+			{http.MethodPost, basePath + "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":{"leak":1}}`},
+			{http.MethodPost, basePath + "/Users/.search", `{"schemas":["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],"filter":"leak eq"}`},
+			{http.MethodPost, basePath + "/Users/.search", `{"schemas":["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],"sortBy":"leak!"}`},
+			{http.MethodPost, basePath + "/Users/.search", `{"schemas":["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],"attributes":["leak!"]}`},
+			{http.MethodPatch, basePath + "/Users/" + id, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"leak","path":"userName","value":"x"}]}`},
+			{http.MethodPatch, basePath + "/Users/" + id, `{"schemas":["urn:leak"],"Operations":[{"op":"replace","path":"userName","value":"x"}]}`},
+		} {
+			response := Response(t, srv, Request(t, srv, tc.method, tc.path, WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBody([]byte(tc.body))))
+			scimErr := ReadBodyAs[scimerrors.Error](t, response)
+
+			require.GreaterOrEqual(t, response.StatusCode, http.StatusBadRequest, tc.body)
+			assert.NotContains(t, strings.ToLower(scimErr.Detail), "leak", tc.body)
+		}
+	})
+
 	t.Run("returns a SCIM error for an unknown endpoint", func(t *testing.T) {
 		srv := newTestServer(t)
 

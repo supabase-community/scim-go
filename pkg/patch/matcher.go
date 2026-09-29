@@ -3,7 +3,6 @@ package patch
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -27,7 +26,7 @@ func compile(attr *core.Attribute, node *filter.Node) (predicate, int, error) {
 	pred, err := filter.Visit[predicate](m, node)
 	var scimErr *scimerrors.Error
 	if err != nil && !errors.As(err, &scimErr) {
-		return nil, 0, scimerrors.ErrInvalidPath(err.Error())
+		return nil, 0, scimerrors.ErrInvalidPath(scimerrors.InvalidPath.Description())
 	}
 	return pred, *m.clauses, err
 }
@@ -87,7 +86,7 @@ func (m matcher) VisitPresence(path filter.AttrPath) (predicate, error) {
 		return nil, err
 	}
 	if value.Hidden(m.attr, sub) {
-		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator \"pr\" is not valid for %q", path.String()))
+		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	*m.clauses++
 	return func(member map[string]any) bool { return !value.IsUnassigned(core.Object(member).Get(path.Name)) }, nil
@@ -127,7 +126,7 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 func (m matcher) resolve(path filter.AttrPath) (*core.Attribute, error) {
 	sub := m.attr.SubAttribute(path.Name)
 	if m.attr != permissiveAttr && (sub == nil || path.SubAttribute != "") {
-		return nil, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
+		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	return sub, nil
 }
@@ -137,10 +136,10 @@ func (m matcher) check(attr *core.Attribute, path filter.AttrPath, op filter.Ope
 	case attr == nil:
 		return nil
 	case !value.Allowed(attr.Type, op) || (value.Hidden(m.attr, attr) && op != filter.OpEquals):
-		return scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
+		return scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	if _, ok := attr.Coerce(want); !ok {
-		return scimerrors.ErrInvalidValue(fmt.Sprintf("%q is not a valid value for %q", want, path.String()))
+		return scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
 	}
 	return nil
 }

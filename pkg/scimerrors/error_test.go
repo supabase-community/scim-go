@@ -132,3 +132,19 @@ func TestErrorConstructors(t *testing.T) {
 		assert.Equal(t, "Filtering is not supported on this endpoint", scimerrors.ErrInvalidFilter("Filtering is not supported on this endpoint").Detail)
 	})
 }
+
+func TestErrorTypeDescription(t *testing.T) {
+	t.Run("restates RFC 7644 Table 9 for every detail error keyword", func(t *testing.T) {
+		for _, scimType := range []scimerrors.ErrorType{
+			scimerrors.InvalidFilter, scimerrors.InvalidPath, scimerrors.InvalidSyntax, scimerrors.InvalidValue, scimerrors.InvalidVersion,
+			scimerrors.Mutability, scimerrors.NoTarget, scimerrors.Sensitive, scimerrors.TooMany, scimerrors.Uniqueness,
+		} {
+			assert.NotEmpty(t, scimType.Description(), scimType)
+		}
+		assert.Equal(t, `The "path" attribute was invalid or malformed.`, scimerrors.InvalidPath.Description())
+	})
+
+	t.Run("is empty for an unknown keyword", func(t *testing.T) {
+		assert.Empty(t, scimerrors.ErrorType("bogus").Description())
+	})
+}

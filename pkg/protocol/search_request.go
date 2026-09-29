@@ -57,7 +57,7 @@ func (s *SearchRequest) Validate(schemas core.Schemas) error {
 func (s *SearchRequest) SortAttribute(schemas core.Schemas) (parent, attribute *core.Attribute, err error) {
 	path, err := filter.NewAttrPath(s.SortBy)
 	if err != nil {
-		return nil, nil, scimerrors.ErrInvalidValue(err.Error())
+		return nil, nil, scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
 	}
 	parent, ok := schemas.Resolve(core.SchemaURI(path.URI), path.Name, "")
 	if !ok {

@@ -1,8 +1,6 @@
 package protocol
 
 import (
-	"fmt"
-
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
@@ -87,7 +85,7 @@ func (r *visitor[Output]) VisitValuePath(path filter.AttrPath, valueFilter func(
 		return zero, err
 	}
 	if !attribute.MultiValued {
-		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a value-path target", path.String()))
+		return zero, invalidFilter()
 	}
 	return r.inner.ValuePath(NewAttribute(attribute, path, nil), r.scoped(attribute, valueFilter))
 }
@@ -108,7 +106,7 @@ func (r *visitor[Output]) resolve(path filter.AttrPath) (*core.Attribute, error)
 	}
 	attribute, ok := r.schemas.Resolve(core.SchemaURI(path.URI), path.Name, path.SubAttribute)
 	if !ok {
-		return nil, unknownAttribute(path)
+		return nil, invalidFilter()
 	}
 	return attribute, nil
 }
@@ -124,7 +122,7 @@ func (r *visitor[Output]) parent(path filter.AttrPath) *core.Attribute {
 func (r *visitor[Output]) resolveWithin(path filter.AttrPath) (*core.Attribute, error) {
 	attribute := r.scope.SubAttribute(path.Name)
 	if attribute == nil || path.SubAttribute != "" {
-		return nil, unknownAttribute(path)
+		return nil, invalidFilter()
 	}
 	return attribute, nil
 }
@@ -146,11 +144,11 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 		return zero, err
 	}
 	if !value.Allowed(attribute.Type, op) {
-		return zero, invalidOperator(op, path)
+		return zero, invalidFilter()
 	}
 	coerced, ok := attribute.Coerce(literal)
 	if !ok {
-		return zero, scimerrors.ErrInvalidValue(fmt.Sprintf("%q is not a valid value for %q", literal, path.String()))
+		return zero, scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
 	}
 	return r.inner.Compare(NewAttribute(attribute, path, r.scope), op, coerced)
 }
@@ -162,17 +160,13 @@ func (r *visitor[Output]) conceal(path filter.AttrPath, parent, attribute *core.
 		return nil
 	case r.inURI && op != filter.OpPresent:
 		// RFC 7644 Section 7.5.2: a GET filter that contains sensitive information SHOULD be refused with 403.
-		return scimerrors.ErrSensitive(fmt.Sprintf("a filter on %q must not be sent in a request URI", path.String()))
+		return scimerrors.ErrSensitive(scimerrors.Sensitive.Description())
 	case op != filter.OpEquals:
-		return invalidOperator(op, path)
+		return invalidFilter()
 	}
 	return nil
 }
 
-func unknownAttribute(path filter.AttrPath) error {
-	return scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a known attribute", path.String()))
-}
-
-func invalidOperator(op filter.Operator, path filter.AttrPath) error {
-	return scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q is not valid for %q", op, path.String()))
+func invalidFilter() error {
+	return scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 }

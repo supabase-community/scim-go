@@ -56,7 +56,7 @@ func (e *evaluator) Not(operand predicate) (predicate, error) {
 func (e *evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (predicate, error)) (predicate, error) {
 	list, ok := e.lookup(attribute.Definition)
 	if !ok || !list.isList() {
-		return nil, scimerrors.ErrInvalidFilter(attribute.Path.Key() + " is not filterable")
+		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	inner, err := valueFilter()
 	if err != nil {
@@ -75,7 +75,7 @@ func (e *evaluator) reader(attribute *protocol.Attribute) (func(row any) any, er
 	if field, ok := e.lookup(definition); ok {
 		return func(row any) any { return field.value(asObject(row)) }, nil
 	}
-	return nil, scimerrors.ErrInvalidFilter(attribute.Path.Key() + " is not filterable")
+	return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 }
 
 // RFC 7644 3.4.2.2 - a multi-valued attribute matches if any value does, for every operator including ne.

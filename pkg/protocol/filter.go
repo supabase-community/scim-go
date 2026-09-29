@@ -14,7 +14,7 @@ func evaluate[Output any](v *visitor[Output], text string) (Output, error) {
 	var zero Output
 	node, err := filter.Parse(text)
 	if err != nil {
-		return zero, scimerrors.ErrInvalidFilter(err.Error())
+		return zero, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	return filter.Visit[Output](v, node)
 }

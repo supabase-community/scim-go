@@ -49,7 +49,7 @@ func (p *patcher) write(root core.Object, kind Op, op Operation) error {
 	}
 	path, err := filter.NewPath(op.Path)
 	if err != nil {
-		return scimerrors.ErrInvalidPath(err.Error())
+		return scimerrors.ErrInvalidPath(scimerrors.InvalidPath.Description())
 	}
 	if len(op.Value) == 0 {
 		return scimerrors.ErrInvalidValue(`"value" is required for "add" and "replace"`)
@@ -75,7 +75,7 @@ func (p *patcher) remove(root core.Object, op Operation) error {
 	}
 	path, err := filter.NewPath(op.Path)
 	if err != nil {
-		return scimerrors.ErrInvalidPath(err.Error())
+		return scimerrors.ErrInvalidPath(scimerrors.InvalidPath.Description())
 	}
 	target, err := p.target(root, path)
 	if err != nil {
@@ -158,13 +158,9 @@ func resolve(schemas core.Schemas, path filter.Path) (*core.Attribute, error) {
 	if len(schemas) == 0 {
 		return permissiveAttr, nil
 	}
-	uri := core.SchemaURI(path.URI)
-	if schemas.Lookup(uri) == nil {
-		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.URI) + " is not a known schema")
-	}
-	attr, ok := schemas.Resolve(uri, path.Name, path.SubAttribute)
+	attr, ok := schemas.Resolve(core.SchemaURI(path.URI), path.Name, path.SubAttribute)
 	if !ok {
-		return nil, scimerrors.ErrInvalidPath(strconv.Quote(path.String()) + " is not a known attribute")
+		return nil, scimerrors.ErrInvalidPath(scimerrors.InvalidPath.Description())
 	}
 	return attr, nil
 }
