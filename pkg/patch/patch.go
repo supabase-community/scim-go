@@ -4,17 +4,13 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// Apply returns a copy of resource with the operations applied atomically, per RFC 7644 Section 3.5.2.
-func Apply(resource core.Object, ops []Operation, schemas core.Schemas, opts ...Option) (core.Object, error) {
+// Apply applies the operations to resource in place; RFC 7644 Section 3.5.2 atomicity is left to the caller.
+func Apply(resource core.Object, ops []Operation, schemas core.Schemas, opts ...Option) error {
 	limits := defaultLimits()
 	for _, opt := range opts {
 		opt(&limits)
 	}
-	working := core.Object(clone(map[string]any(resource)).(map[string]any))
-	if err := (&patcher{schemas: schemas, budget: limits.budget()}).run(working, ops); err != nil {
-		return nil, err
-	}
-	return working, nil
+	return (&patcher{schemas: schemas, budget: limits.budget()}).run(resource, ops)
 }
 
 func clone(value any) any {

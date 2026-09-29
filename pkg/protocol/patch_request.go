@@ -55,11 +55,10 @@ func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas, opts ...pa
 	if err != nil {
 		return zero, err
 	}
-	patched, err := patch.Apply(existing, r.Operations, schemas, opts...)
-	if err != nil {
+	if err := patch.Apply(existing, r.Operations, schemas, opts...); err != nil {
 		return zero, err
 	}
-	return fromDocument[T](patched)
+	return fromDocument[T](existing)
 }
 
 func isPatchOp(uri core.SchemaURI) bool {

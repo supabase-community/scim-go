@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -278,8 +277,6 @@ func TestReadOnlyIsRejected(t *testing.T) {
 	), &err)
 
 	assert.Equal(t, scimerrors.Mutability, err.ScimType)
-	assert.Empty(t, item["groups"])
-	assert.NotContains(t, item, "userName")
 }
 
 func TestIdIsProtected(t *testing.T) {
@@ -324,19 +321,6 @@ func TestSchemaURISelectsSchema(t *testing.T) {
 	require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, string(core.SchemaUser)+":userName", `"new"`)))
 
 	assert.Equal(t, "new", item["userName"])
-}
-
-func TestApplyIsAtomicOnFailure(t *testing.T) {
-	item := map[string]any{"userName": "keep"}
-
-	var err *scimerrors.Error
-	require.ErrorAs(t, apply(item, userSchemas(),
-		operation(patch.OpReplace, "userName", `"changed"`),
-		operation(patch.OpReplace, "groups", `[{"value":"g1"}]`),
-	), &err)
-
-	assert.Equal(t, scimerrors.Mutability, err.ScimType)
-	assert.Equal(t, map[string]any{"userName": "keep"}, item)
 }
 
 // RFC 7644 Section 3.5.2.3: a value filter that matches several elements replaces the sub-attribute of each.
@@ -717,30 +701,30 @@ func TestApplyMaxFilterEvaluations(t *testing.T) {
 	present := operation(patch.OpReplace, `emails[value pr].type`, `"home"`)
 
 	t.Run("applies a request whose value filter clauses times elements fit the budget", func(t *testing.T) {
-		_, err := patch.Apply(item(), []patch.Operation{either}, userSchemas(), patch.MaxFilterEvaluations(6))
+		err := patch.Apply(item(), []patch.Operation{either}, userSchemas(), patch.MaxFilterEvaluations(6))
 		require.NoError(t, err)
 	})
 
 	t.Run("refuses a request whose value filter clauses times elements exceed the budget with 413", func(t *testing.T) {
-		_, err := patch.Apply(item(), []patch.Operation{either}, userSchemas(), patch.MaxFilterEvaluations(5))
+		err := patch.Apply(item(), []patch.Operation{either}, userSchemas(), patch.MaxFilterEvaluations(5))
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
 
 	t.Run("spends one budget across every operation", func(t *testing.T) {
-		_, err := patch.Apply(item(), []patch.Operation{either, present}, userSchemas(), patch.MaxFilterEvaluations(9))
+		err := patch.Apply(item(), []patch.Operation{either, present}, userSchemas(), patch.MaxFilterEvaluations(9))
 		require.NoError(t, err)
 
-		_, err = patch.Apply(item(), []patch.Operation{either, present}, userSchemas(), patch.MaxFilterEvaluations(8))
+		err = patch.Apply(item(), []patch.Operation{either, present}, userSchemas(), patch.MaxFilterEvaluations(8))
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
 
 	t.Run("refuses before evaluating a filter that would match nothing", func(t *testing.T) {
-		_, err := patch.Apply(item(), []patch.Operation{operation(patch.OpReplace, `emails[value eq "z"].type`, `"work"`)}, userSchemas(), patch.MaxFilterEvaluations(2))
+		err := patch.Apply(item(), []patch.Operation{operation(patch.OpReplace, `emails[value eq "z"].type`, `"work"`)}, userSchemas(), patch.MaxFilterEvaluations(2))
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
 
 	t.Run("has no cap when the budget is zero", func(t *testing.T) {
-		_, err := patch.Apply(item(), []patch.Operation{either, present}, userSchemas(), patch.MaxFilterEvaluations(0))
+		err := patch.Apply(item(), []patch.Operation{either, present}, userSchemas(), patch.MaxFilterEvaluations(0))
 		require.NoError(t, err)
 	})
 
@@ -754,7 +738,7 @@ func TestApplyMaxFilterEvaluations(t *testing.T) {
 		require.NoError(t, err)
 
 		big := strings.Repeat("x", 6000)
-		_, err = patch.Apply(map[string]any{}, []patch.Operation{
+		err = patch.Apply(map[string]any{}, []patch.Operation{
 			operation(patch.OpAdd, "emails", string(raw)),
 			operation(patch.OpReplace, `emails[type eq "a"].value`, `"`+big+`"`),
 		}, userSchemas(), patch.MaxFilterEvaluations(10_000_000))
@@ -768,12 +752,12 @@ func TestApplyMaxFilterEvaluations(t *testing.T) {
 			map[string]any{"type": "a", "value": "old-2"},
 		}}
 
-		patched, err := patch.Apply(resource, []patch.Operation{
+		err := patch.Apply(resource, []patch.Operation{
 			operation(patch.OpReplace, `emails[type eq "a"].value`, `"new@example.com"`),
 		}, userSchemas(), patch.MaxFilterEvaluations(10_000_000))
 		require.NoError(t, err)
 
-		emails := patched["emails"].([]any)
+		emails := resource["emails"].([]any)
 		require.Len(t, emails, 2)
 		for _, e := range emails {
 			assert.Equal(t, "new@example.com", e.(map[string]any)["value"])
@@ -784,10 +768,10 @@ func TestApplyMaxFilterEvaluations(t *testing.T) {
 		nested := strings.Repeat("not(", 50) + `value eq "a"` + strings.Repeat(")", 50)
 		op := operation(patch.OpReplace, `emails[`+nested+`].type`, `"work"`)
 
-		_, err := patch.Apply(item(), []patch.Operation{op}, userSchemas(), patch.MaxFilterEvaluations(4))
+		err := patch.Apply(item(), []patch.Operation{op}, userSchemas(), patch.MaxFilterEvaluations(4))
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 
-		_, err = patch.Apply(item(), []patch.Operation{op}, userSchemas(), patch.MaxFilterEvaluations(200))
+		err = patch.Apply(item(), []patch.Operation{op}, userSchemas(), patch.MaxFilterEvaluations(200))
 		require.NoError(t, err)
 	})
 }
@@ -903,17 +887,17 @@ func TestApplyMaxWriteBytes(t *testing.T) {
 	}
 
 	t.Run("refuses a write once holders times value size exceed the configured budget", func(t *testing.T) {
-		_, err := patch.Apply(item(), []patch.Operation{write(strings.Repeat("x", 100))}, userSchemas(), patch.MaxWriteBytes(50))
+		err := patch.Apply(item(), []patch.Operation{write(strings.Repeat("x", 100))}, userSchemas(), patch.MaxWriteBytes(50))
 		require.ErrorIs(t, err, scimerrors.ErrTooLarge(""))
 	})
 
 	t.Run("allows the same write within a larger configured budget", func(t *testing.T) {
-		_, err := patch.Apply(item(), []patch.Operation{write(strings.Repeat("x", 100))}, userSchemas(), patch.MaxWriteBytes(1000))
+		err := patch.Apply(item(), []patch.Operation{write(strings.Repeat("x", 100))}, userSchemas(), patch.MaxWriteBytes(1000))
 		require.NoError(t, err)
 	})
 
 	t.Run("has no cap when the budget is zero", func(t *testing.T) {
-		_, err := patch.Apply(item(), []patch.Operation{write(strings.Repeat("x", 10<<20))}, userSchemas(), patch.MaxWriteBytes(0))
+		err := patch.Apply(item(), []patch.Operation{write(strings.Repeat("x", 10<<20))}, userSchemas(), patch.MaxWriteBytes(0))
 		require.NoError(t, err)
 	})
 }
@@ -1358,13 +1342,7 @@ func badgeCodesSchema() []*core.Schema {
 }
 
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
-	patched, err := patch.Apply(resource, ops, schemas)
-	if err != nil {
-		return err
-	}
-	clear(resource)
-	maps.Copy(resource, patched)
-	return nil
+	return patch.Apply(resource, ops, schemas)
 }
 
 func operation(kind patch.Op, path, value string) patch.Operation {

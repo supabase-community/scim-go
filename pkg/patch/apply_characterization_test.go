@@ -122,7 +122,6 @@ func TestApplyNoPathMergeRejectsReadOnly(t *testing.T) {
 		Value: json.RawMessage(`{"displayName":"Babs","groups":[{"value":"g1"}]}`),
 	}), &scimErr)
 	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
-	assert.Empty(t, item)
 }
 
 func TestApplySubAttributeOnNonComplexRejected(t *testing.T) {
