@@ -40,12 +40,10 @@ func newProjection(schemas core.Schemas, attributes, excluded []string) (Project
 	return Projection{schemas: schemas, included: included, excluded: excludedNames}, nil
 }
 
-// Of renders resource through the projection when the result is marshaled to JSON.
 func (p Projection) Of(resource any) json.Marshaler {
 	return projected{projection: p, resource: resource}
 }
 
-// All renders each of resources through the projection when the result is marshaled to JSON.
 func (p Projection) All[T any](resources []T) []json.Marshaler {
 	out := make([]json.Marshaler, len(resources))
 	for i, resource := range resources {
@@ -169,8 +167,6 @@ func (v projected) MarshalJSON() ([]byte, error) {
 	return json.Marshal(document)
 }
 
-// names holds fully qualified, lowercase attribute paths: "<schema uri>:<name>[.<sub-name>]",
-// or a bare lowercase schema URI when a whole schema/extension was selected.
 type names []string
 
 func qualify(schemas core.Schemas, list []string) (names, error) {
@@ -212,16 +208,12 @@ func qualifyName(schemas core.Schemas, raw string) (string, bool, error) {
 	return qualified, true, nil
 }
 
-// covers reports whether name is selected: an exact match, or nested under a selected
-// schema ("<e>:...") or a selected complex attribute ("<e>....").
 func (n names) covers(name string) bool {
 	return slices.ContainsFunc(n, func(e string) bool {
 		return name == e || strings.HasPrefix(name, e+":") || strings.HasPrefix(name, e+".")
 	})
 }
 
-// within reports whether a selected entry reaches inside name, so name must be
-// traversed even though it is not itself selected.
 func (n names) within(name string) bool {
 	return slices.ContainsFunc(n, func(e string) bool { return strings.HasPrefix(e, name+".") })
 }
@@ -257,7 +249,6 @@ func listParam(values url.Values, name string) []string {
 	return list
 }
 
-// prune keeps each member of object that project returns, replaced by its projected value.
 func prune(object map[string]any, project func(key string, value any) (any, bool)) {
 	for key, value := range object {
 		if projected, ok := project(key, value); ok {

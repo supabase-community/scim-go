@@ -15,7 +15,7 @@ const (
 	SortDescending SortOrder = "descending"
 )
 
-// SearchRequest is the query of RFC 7644, Section 3.4.3.
+// SearchRequest is the query of RFC 7644 Sections 3.4.2 and 3.4.3.
 type SearchRequest struct {
 	Schemas            []core.SchemaURI `json:"schemas,omitempty"`
 	Attributes         []string         `json:"attributes,omitempty"`
@@ -68,7 +68,6 @@ func (s *SearchRequest) SortAttribute(schemas core.Schemas) (parent, attribute *
 	case path.SubAttribute != "":
 		attribute = parent.SubAttribute(path.SubAttribute)
 	case parent.Type == core.TypeComplex && parent.MultiValued:
-		// RFC 7644 Section 3.4.2.3: a multi-valued attribute without a sub-attribute sorts by its "value" sub-attribute.
 		attribute = parent.SubAttribute("value")
 	}
 	if attribute == nil {

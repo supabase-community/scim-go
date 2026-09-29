@@ -107,7 +107,6 @@ func TestLimitsDecodePatchRequest(t *testing.T) {
 	})
 }
 
-// RFC 7644 Section 3.5.2: a PATCH changes only the attributes it targets, and leaves the original resource untouched.
 func TestPatchRequestPatch(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(

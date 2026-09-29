@@ -17,7 +17,7 @@ type PatchRequest struct {
 	Operations []patch.Operation `json:"Operations"`
 }
 
-// DecodePatchRequest reads a PATCH request body, per RFC 7644 Section 3.5.2: it MUST be a JSON object.
+// DecodePatchRequest reads a PATCH body; RFC 7644 Section 3.5.2: it MUST contain the PatchOp "schemas" URI and one or more "Operations".
 func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	req, err := Decode[*PatchRequest](body)
 	if err != nil {
@@ -35,7 +35,7 @@ func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	return req, nil
 }
 
-// Patch returns a new resource; resource is left unchanged, per RFC 7644 Section 3.5.2; opts are forwarded to patch.Apply.
+// Patch returns a new resource; RFC 7644 Section 3.5.2: a PATCH request SHALL be treated as atomic.
 func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas, opts ...patch.Option) (T, error) {
 	var zero T
 	existing, err := core.NewObject(resource)

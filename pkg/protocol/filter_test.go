@@ -144,7 +144,7 @@ func TestFilter(t *testing.T) {
 		assert.Equal(t, []any{"bob"}, out.args)
 	})
 
-	// RFC 7644 Section 3.4.2.2: co, sw, ew match substrings, rendered here as bound LIKE patterns.
+	// RFC 7644 Section 3.4.2.2: co, sw, ew match a substring of the attribute value.
 	t.Run("renders co, sw, ew as bound LIKE patterns", func(t *testing.T) {
 		cases := map[string][]any{
 			`userName co "ob"`: {"%ob%"},
@@ -159,7 +159,6 @@ func TestFilter(t *testing.T) {
 		}
 	})
 
-	// RFC 7644 Section 3.4.2.2: co, sw, ew apply only to string or reference attributes.
 	t.Run("rejects a substring operator on a non-string attribute", func(t *testing.T) {
 		_, err := protocol.Filter[clause](schemas, `active co "x"`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))

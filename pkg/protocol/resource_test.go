@@ -13,7 +13,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// RFC 7643 Section 7: a readOnly attribute SHALL NOT be modified, so a replaced element keeps the values of the stored element it matches.
+// RFC 7643 Section 7: a readOnly attribute SHALL NOT be modified.
 func TestDecodeResourceKeepsReadOnlySubAttributesOfMatchingElements(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
@@ -38,7 +38,7 @@ func TestDecodeResourceKeepsReadOnlySubAttributesOfMatchingElements(t *testing.T
 		return out
 	}
 
-	// RFC 7643 Section 2.4: "value" identifies an element of a multi-valued attribute.
+	// RFC 7643 Section 2.4: "value" is the attribute's significant value.
 	t.Run("matches elements by value", func(t *testing.T) {
 		existing := map[string]any{"keys": []any{
 			map[string]any{"value": "k1", "fingerprint": "server"},
@@ -179,7 +179,6 @@ func TestDecodeResource(t *testing.T) {
 		assert.Equal(t, map[string]any{"department": "Ops", "employeeNumber": "701984"}, out[uri])
 	})
 
-	// RFC 7644 Section 3.5.1: an omitted immutable value keeps its stored value so the input still matches it.
 	t.Run("keeps an existing immutable extension value the body leaves out", func(t *testing.T) {
 		immutable := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
 			core.NewAttribute("department", core.TypeString),
@@ -193,7 +192,7 @@ func TestDecodeResource(t *testing.T) {
 		assert.Equal(t, map[string]any{"employeeNumber": "E1"}, out[uri])
 	})
 
-	// RFC 7643 Section 2.1: attribute names are case insensitive, so an explicit value keyed with different case is not overwritten by carry-forward.
+	// RFC 7643 Section 2.1: attribute names are case insensitive.
 	t.Run("leaves an explicit immutable extension value keyed with different case alone", func(t *testing.T) {
 		immutable := (&core.Schema{ID: core.SchemaEnterpriseUser, Name: "EnterpriseUser"}).With(
 			core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),

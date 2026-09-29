@@ -26,7 +26,7 @@ func DecodeResource[T any](body io.Reader, existing any, schemas core.Schemas) (
 	return fromDocument[T](writable(document, prior, schemas))
 }
 
-// RFC 7644 Section 3.3: the request body MUST be a JSON object.
+// RFC 7644 Section 3.1: a SCIM resource is a JSON object.
 func readDocument(r io.Reader) (map[string]any, error) {
 	document, err := Decode[map[string]any](r)
 	if err != nil {

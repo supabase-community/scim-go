@@ -9,7 +9,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4, plus the most operations, value filter clause checks, bytes a PATCH's value filters may write, and encoded resource bytes one write may cost, where a zero MaxOperations, MaxFilterEvaluations, MaxWriteBytes, or MaxResourceBytes lifts that cap.
+// Limits holds the count bounds of RFC 7644 Section 3.4.2.4 and the MaxOperations, MaxFilterEvaluations, MaxWriteBytes, and MaxResourceBytes caps that zero lifts.
 type Limits struct {
 	DefaultCount         int
 	MaxCount             int
@@ -55,7 +55,6 @@ func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {
 	}, nil
 }
 
-// DecodePatchRequest reads a PATCH request body and refuses one with more than MaxOperations operations.
 func (l Limits) DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	req, err := DecodePatchRequest(body)
 	if err != nil {
