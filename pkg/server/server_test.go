@@ -549,6 +549,28 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 		assert.Equal(t, []core.SchemaURI{core.SchemaUser}, ReadBodyAs[core.User](t, response).Schemas)
 	})
 
+	// RFC 7643 Section 3: "schemas" indicates the schemas that define the attributes present in the current JSON structure.
+	t.Run("stamps schemas from the data regardless of the schemas a client sends", func(t *testing.T) {
+		for i, schemas := range []string{
+			``,
+			`"schemas":[],`,
+			`"schemas":["urn:unknown"],`,
+			`"schemas":["http://schemas.microsoft.com/2006/11/ResourceManagement/ADSCIM/2.0/User"],`,
+			`"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],`,
+			`"schemas":["urn:ietf:params:scim:schemas:core:2.0:User","urn:ietf:params:scim:schemas:core:2.0:User"],`,
+			`"schemas":["urn:ietf:params:scim:schemas:core:2.0:User","urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"],`,
+		} {
+			response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBody([]byte(`{`+schemas+`"userName":"stamped-`+strconv.Itoa(i)+`"}`)),
+			))
+
+			require.Equal(t, http.StatusCreated, response.StatusCode, schemas)
+			assert.Equal(t, []core.SchemaURI{core.SchemaUser}, ReadBodyAs[core.User](t, response).Schemas, schemas)
+		}
+	})
+
 	// RFC 7643 Section 6: a resource type lists the schema extensions it accepts.
 	t.Run("advertises the extension on the resource type", func(t *testing.T) {
 		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User", WithBearerToken(validToken))
