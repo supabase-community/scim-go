@@ -17,6 +17,7 @@ linters:
     - bidichk
     - bodyclose
     - contextcheck
+    # - cyclop
     - dupl
     - errname
     - errorlint
@@ -38,6 +39,9 @@ linters:
     - testifylint
     - testpackage
   settings:
+    # cyclop
+    #   max-complexity: 10
+    #   package-average: 0.5
     dupl:
       threshold: 150
     funcorder:
@@ -50,9 +54,9 @@ linters:
       statements: 40
       ignore-comments: true
     gocognit:
-      min-complexity: 15
+      min-complexity: 10
     gocyclo:
-      min-complexity: 15
+      min-complexity: 10
     nestif:
       min-complexity: 4
     revive:
