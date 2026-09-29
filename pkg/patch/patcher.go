@@ -16,6 +16,7 @@ var permissiveAttr = &core.Attribute{}
 type patcher struct {
 	schemas core.Schemas
 	budget  *budget
+	indexes indexes
 }
 
 func (p *patcher) run(root core.Object, ops []Operation) error {
@@ -131,7 +132,7 @@ func (p *patcher) target(root core.Object, path filter.Path) (*target, error) {
 	if err := gate(parent); err != nil {
 		return nil, err
 	}
-	t := &target{root: root, extension: p.extension(path), parent: parent, path: path, budget: p.budget}
+	t := &target{root: root, extension: p.extension(path), parent: parent, path: path, budget: p.budget, indexes: p.indexes}
 	if path.ValueFilter != nil {
 		if t.filter.match, t.filter.clauses, err = compile(parent, path.ValueFilter); err != nil {
 			return nil, err

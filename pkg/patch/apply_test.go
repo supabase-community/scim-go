@@ -764,6 +764,73 @@ func TestApplyMaxFilterEvaluations(t *testing.T) {
 	})
 }
 
+// RFC 7644 Section 3.5.2.1: an add's no-op dedup is per element identity, not per operation, so it still applies once an earlier op has already added the value.
+func TestApplyDedupAcrossOperationsInOneRequest(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpAdd, "emails", `[{"value":"b@x"}]`),
+		operation(patch.OpAdd, "emails", `[{"value":"b@x"}]`),
+	))
+
+	assert.ElementsMatch(t, []any{map[string]any{"value": "a@x"}, map[string]any{"value": "b@x"}}, item["emails"])
+}
+
+// RFC 7644 Section 3.5.2.1: a replace of the whole attribute changes what "already contains the value" means for any add that follows it in the same request.
+func TestApplyDedupInvalidatedByAReplaceOfTheWholeAttribute(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpReplace, "emails", `[{"value":"b@x"}]`),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.ElementsMatch(t, []any{map[string]any{"value": "b@x"}, map[string]any{"value": "a@x"}}, item["emails"])
+}
+
+// RFC 7644 Section 3.5.2.1: a remove of the whole attribute changes what "already contains the value" means for any add that follows it in the same request.
+func TestApplyDedupInvalidatedByARemoveOfTheWholeAttribute(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpRemove, "emails", ""),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.Equal(t, []any{map[string]any{"value": "a@x"}}, item["emails"])
+}
+
+// RFC 7644 Section 3.5.2.1: dropping matched elements changes what "already contains the value" means for any add that follows it in the same request.
+func TestApplyDedupInvalidatedByAValueFilteredRemove(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}, map[string]any{"value": "b@x"}}}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpRemove, `emails[value eq "a@x"]`, ""),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.ElementsMatch(t, []any{map[string]any{"value": "b@x"}, map[string]any{"value": "a@x"}}, item["emails"])
+}
+
+// RFC 7643 Section 8.7.1: a member without a "value" sub-attribute dedups by its full composite identity, and that index must also survive across operations.
+func TestApplyDedupAcrossOperationsWithoutAValueSubAttribute(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("addresses", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("streetAddress", core.TypeString),
+			),
+		),
+	}
+	item := map[string]any{"addresses": []any{map[string]any{"streetAddress": "1 Main"}}}
+
+	require.NoError(t, apply(item, schemas,
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"2 Main"}]`),
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"2 Main"}]`),
+	))
+
+	assert.ElementsMatch(t, []any{map[string]any{"streetAddress": "1 Main"}, map[string]any{"streetAddress": "2 Main"}}, item["addresses"])
+}
+
 func TestApplyMaxWriteBytes(t *testing.T) {
 	item := func() map[string]any {
 		return map[string]any{"emails": []any{map[string]any{"type": "a", "value": "old"}}}

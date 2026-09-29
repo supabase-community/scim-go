@@ -28,6 +28,11 @@ func (s *Set) Contains(want any) bool {
 	return slices.ContainsFunc(bucket, func(element any) bool { return Equal(s.attribute, element, want) })
 }
 
+func (s *Set) Insert(v any) {
+	key := bucketKey(s.attribute, v)
+	s.buckets[key] = append(s.buckets[key], v)
+}
+
 func bucketKey(attribute *core.Attribute, v any) string {
 	switch value := v.(type) {
 	case map[string]any:
