@@ -12,8 +12,13 @@ func NewPath(text string) (Path, error) {
 		return Path{}, err
 	}
 	path := Path{AttrPath: node.AttrPath(), ValueFilter: node.ValueFilter()}
-	if sub := node.SubAttribute(); sub != "" {
-		path.SubAttribute = sub
+	sub := node.SubAttribute()
+	if sub == "" {
+		return path, nil
 	}
+	if path.SubAttribute != "" {
+		return Path{}, newParseError(text, len(text)-len(sub)-1)
+	}
+	path.SubAttribute = sub
 	return path, nil
 }

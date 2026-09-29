@@ -2841,6 +2841,25 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidPath, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.5.2: PATH = attrPath / valuePath [subAttr]
+	t.Run("rejects a patch path with a sub-attribute on both sides of a value filter", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: `emails.value[type eq "work"].display`, Value: json.RawMessage(`"x"`)}},
+			}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidPath, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
 	t.Run("rejects a patch that changes an immutable attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
