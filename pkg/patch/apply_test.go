@@ -1050,40 +1050,25 @@ func TestApplyAddSubAttributeIntoAbsentMultiValuedIsInvalidPath(t *testing.T) {
 
 // RFC 7643 Section 7: an assigned immutable attribute rejects an "add" that changes its value, even when the attribute is multi-valued.
 func TestApplyAddRejectsANewValueOntoAnAssignedImmutableMultiValuedAttribute(t *testing.T) {
-	schemas := []*core.Schema{
-		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("tags", core.TypeString).AsMultiValued().AsImmutable(),
-		),
-	}
 	item := core.Object{"tags": []any{"a"}}
 
-	requireMutability(t, apply(item, schemas, operation(patch.OpAdd, "tags", `["b"]`)))
+	requireMutability(t, apply(item, tagsSchema(), operation(patch.OpAdd, "tags", `["b"]`)))
 	assert.Equal(t, []any{"a"}, item["tags"])
 }
 
 // RFC 7644 Section 3.5.2.1: adding a value the target already contains makes no change, even when the attribute is immutable.
 func TestApplyAddOfAnAlreadyPresentValueOntoAnImmutableMultiValuedAttributeIsANoOp(t *testing.T) {
-	schemas := []*core.Schema{
-		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("tags", core.TypeString).AsMultiValued().AsImmutable(),
-		),
-	}
 	item := core.Object{"tags": []any{"a"}}
 
-	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, "tags", `["a"]`)))
+	require.NoError(t, apply(item, tagsSchema(), operation(patch.OpAdd, "tags", `["a"]`)))
 	assert.Equal(t, []any{"a"}, item["tags"])
 }
 
 // RFC 7643 Section 2.5: an empty array is unassigned, so an immutable attribute may still receive its first value via "add".
 func TestApplyAddFirstValueOntoEmptyImmutableMultiValuedAttributeSucceeds(t *testing.T) {
-	schemas := []*core.Schema{
-		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
-			core.NewAttribute("tags", core.TypeString).AsMultiValued().AsImmutable(),
-		),
-	}
 	item := core.Object{"tags": []any{}}
 
-	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, "tags", `["a"]`)))
+	require.NoError(t, apply(item, tagsSchema(), operation(patch.OpAdd, "tags", `["a"]`)))
 	assert.Equal(t, []any{"a"}, item["tags"])
 }
 
@@ -1123,6 +1108,14 @@ func operation(kind patch.Op, path, value string) patch.Operation {
 	return patch.Operation{
 		Op:   kind,
 		Path: path,
+	}
+}
+
+func tagsSchema() []*core.Schema {
+	return []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("tags", core.TypeString).AsMultiValued().AsImmutable(),
+		),
 	}
 }
 
