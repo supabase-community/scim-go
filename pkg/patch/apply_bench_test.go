@@ -11,7 +11,9 @@ import (
 
 func BenchmarkApplyTopLevelReplace(b *testing.B) {
 	schemas := userSchemas()
-	doc := map[string]any{"userName": "old"}
+	doc := func() map[string]any {
+		return map[string]any{"userName": "old"}
+	}
 	ops := []patch.Operation{operation(patch.OpReplace, "userName", `"new"`)}
 
 	benchApply(b, doc, ops, schemas)
@@ -19,10 +21,12 @@ func BenchmarkApplyTopLevelReplace(b *testing.B) {
 
 func BenchmarkApplyValuePathSub(b *testing.B) {
 	schemas := userSchemas()
-	doc := map[string]any{"emails": []any{
-		map[string]any{"type": "work", "value": "old@x"},
-		map[string]any{"type": "home", "value": "h@x"},
-	}}
+	doc := func() map[string]any {
+		return map[string]any{"emails": []any{
+			map[string]any{"type": "work", "value": "old@x"},
+			map[string]any{"type": "home", "value": "h@x"},
+		}}
+	}
 	ops := []patch.Operation{operation(patch.OpReplace, `emails[type eq "work"].value`, `"new@x"`)}
 
 	benchApply(b, doc, ops, schemas)
@@ -30,10 +34,12 @@ func BenchmarkApplyValuePathSub(b *testing.B) {
 
 func BenchmarkApplyValuePathMerge(b *testing.B) {
 	schemas := userSchemas()
-	doc := map[string]any{"emails": []any{
-		map[string]any{"type": "work", "value": "w@x"},
-		map[string]any{"type": "home", "value": "h@x"},
-	}}
+	doc := func() map[string]any {
+		return map[string]any{"emails": []any{
+			map[string]any{"type": "work", "value": "w@x"},
+			map[string]any{"type": "home", "value": "h@x"},
+		}}
+	}
 	ops := []patch.Operation{operation(patch.OpReplace, `emails[type eq "work"]`, `{"value":"z@x"}`)}
 
 	benchApply(b, doc, ops, schemas)
@@ -41,7 +47,9 @@ func BenchmarkApplyValuePathMerge(b *testing.B) {
 
 func BenchmarkApplyNoPathMerge(b *testing.B) {
 	schemas := userSchemas()
-	doc := map[string]any{"userName": "old", "displayName": "old"}
+	doc := func() map[string]any {
+		return map[string]any{"userName": "old", "displayName": "old"}
+	}
 	ops := []patch.Operation{{
 		Op:    patch.OpAdd,
 		Value: json.RawMessage(`{"userName":"new","displayName":"new"}`),
@@ -68,7 +76,7 @@ func BenchmarkApplyManyAdds(b *testing.B) {
 				ops[i] = operation(patch.OpAdd, c.path, fmt.Sprintf(c.value, i))
 			}
 			b.Run(fmt.Sprintf("%s/ops=%d", c.name, n), func(b *testing.B) {
-				benchApply(b, map[string]any{}, ops, c.schemas)
+				benchApply(b, func() map[string]any { return map[string]any{} }, ops, c.schemas)
 			})
 		}
 	}
@@ -90,23 +98,17 @@ func BenchmarkApplyManyAddsWithoutAValueSubAttribute(b *testing.B) {
 			{Op: patch.OpAdd, Path: "addresses", Value: secondValue},
 		}
 		b.Run(fmt.Sprintf("ops=%d", n), func(b *testing.B) {
-			benchApply(b, map[string]any{}, ops, schemas)
+			benchApply(b, func() map[string]any { return map[string]any{} }, ops, schemas)
 		})
 	}
 }
 
-func benchApply(b *testing.B, doc map[string]any, ops []patch.Operation, schemas []*core.Schema) {
+func benchApply(b *testing.B, doc func() map[string]any, ops []patch.Operation, schemas []*core.Schema) {
 	b.Helper()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		fresh, err := core.NewObject(doc)
-		if err != nil {
-			b.Fatal(err)
-		}
-		b.StartTimer()
-		if err := patch.Apply(fresh, ops, schemas); err != nil {
+		if err := patch.Apply(doc(), ops, schemas); err != nil {
 			b.Fatal(err)
 		}
 	}
