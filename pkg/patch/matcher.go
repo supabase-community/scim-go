@@ -94,7 +94,7 @@ func (m matcher) VisitPresence(path filter.AttrPath) (predicate, error) {
 }
 
 // RFC 7644 3.4.2.2 - a value filter cannot itself contain a value path.
-func (m matcher) VisitValuePath(_ filter.AttrPath, _ string, _ func() (predicate, error)) (predicate, error) {
+func (m matcher) VisitValuePath(_ filter.AttrPath, _ func() (predicate, error)) (predicate, error) {
 	return nil, scimerrors.ErrInvalidPath("value filter cannot contain a nested value path")
 }
 

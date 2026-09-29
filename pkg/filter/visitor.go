@@ -18,7 +18,7 @@ type Visitor[Output any] interface {
 	VisitLessThan(attribute AttrPath, value any) (Output, error)
 	VisitLessThanEquals(attribute AttrPath, value any) (Output, error)
 	VisitPresence(attribute AttrPath) (Output, error)
-	VisitValuePath(path AttrPath, subAttribute string, valueFilter func() (Output, error)) (Output, error)
+	VisitValuePath(path AttrPath, valueFilter func() (Output, error)) (Output, error)
 }
 
 func Visit[Output any](v Visitor[Output], n *Node) (Output, error) {
@@ -38,7 +38,7 @@ func Visit[Output any](v Visitor[Output], n *Node) (Output, error) {
 
 func dispatch[Output any](v Visitor[Output], n *Node) (Output, error) {
 	if n.HasPath() {
-		return v.VisitValuePath(n.AttrPath(), n.SubAttribute(), func() (Output, error) {
+		return v.VisitValuePath(n.AttrPath(), func() (Output, error) {
 			return Visit(v, n.ValueFilter())
 		})
 	}

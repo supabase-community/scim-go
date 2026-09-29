@@ -98,7 +98,7 @@ func (countingVisitor) VisitNotEquals(filter.AttrPath, any) (int, error)        
 func (countingVisitor) VisitOr(left, right int) (int, error)                     { return left + right, nil }
 func (countingVisitor) VisitPresence(filter.AttrPath) (int, error)               { return 1, nil }
 func (countingVisitor) VisitStartsWith(filter.AttrPath, any) (int, error)        { return 1, nil }
-func (countingVisitor) VisitValuePath(_ filter.AttrPath, _ string, valueFilter func() (int, error)) (int, error) {
+func (countingVisitor) VisitValuePath(_ filter.AttrPath, valueFilter func() (int, error)) (int, error) {
 	return valueFilter()
 }
 
@@ -178,7 +178,7 @@ func (v *scopeVisitor) VisitStartsWith(a filter.AttrPath, _ any) (string, error)
 	return v.qualify(a), nil
 }
 
-func (v *scopeVisitor) VisitValuePath(path filter.AttrPath, _ string, valueFilter func() (string, error)) (string, error) {
+func (v *scopeVisitor) VisitValuePath(path filter.AttrPath, valueFilter func() (string, error)) (string, error) {
 	v.scope = append(v.scope, path.String())
 	inner, err := valueFilter()
 	v.scope = v.scope[:len(v.scope)-1]

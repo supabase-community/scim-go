@@ -51,12 +51,8 @@ func TestStringify(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "userName pr", pr)
 
-		vp, err := filter.Stringify{}.VisitValuePath(attribute, "", func() (string, error) { return `type eq "work"`, nil })
+		vp, err := filter.Stringify{}.VisitValuePath(attribute, func() (string, error) { return `type eq "work"`, nil })
 		require.NoError(t, err)
 		assert.Equal(t, `userName[type eq "work"]`, vp)
-
-		vp, err = filter.Stringify{}.VisitValuePath(attribute, "value", func() (string, error) { return `type eq "work"`, nil })
-		require.NoError(t, err)
-		assert.Equal(t, `userName[type eq "work"].value`, vp)
 	})
 }

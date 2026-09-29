@@ -80,7 +80,7 @@ func (r *visitor[Output]) VisitNot(operand Output) (Output, error) {
 	return r.inner.Not(operand)
 }
 
-func (r *visitor[Output]) VisitValuePath(path filter.AttrPath, _ string, valueFilter func() (Output, error)) (Output, error) {
+func (r *visitor[Output]) VisitValuePath(path filter.AttrPath, valueFilter func() (Output, error)) (Output, error) {
 	var zero Output
 	attribute, err := r.resolve(path)
 	if err != nil {

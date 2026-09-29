@@ -60,15 +60,12 @@ func (Stringify) VisitPresence(attribute AttrPath) (string, error) {
 	return fmt.Sprintf("%s pr", attribute), nil
 }
 
-func (Stringify) VisitValuePath(path AttrPath, subAttribute string, valueFilter func() (string, error)) (string, error) {
+func (Stringify) VisitValuePath(path AttrPath, valueFilter func() (string, error)) (string, error) {
 	vf, err := valueFilter()
 	if err != nil {
 		return "", err
 	}
-	if subAttribute == "" {
-		return fmt.Sprintf("%s[%s]", path, vf), nil
-	}
-	return fmt.Sprintf("%s[%s].%s", path, vf, subAttribute), nil
+	return fmt.Sprintf("%s[%s]", path, vf), nil
 }
 
 func compareString(attribute AttrPath, operator string, value any) string {
