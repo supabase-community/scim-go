@@ -5,7 +5,7 @@ var commonAttributes = Attributes{
 	NewAttribute("id", TypeString).AsCaseExact().AsReadOnly().ReturnedAs(ReturnedAlways),
 	NewAttribute("externalId", TypeString).AsCaseExact(),
 	NewAttribute("meta", TypeComplex).AsReadOnly().With(
-		NewAttribute("resourceType", TypeString).AsReadOnly(),
+		NewAttribute("resourceType", TypeString).AsCaseExact().AsReadOnly(),
 		NewAttribute("created", TypeDateTime).AsReadOnly(),
 		NewAttribute("lastModified", TypeDateTime).AsReadOnly(),
 		NewAttribute("location", TypeReference).AsCaseExact().AsReadOnly(),

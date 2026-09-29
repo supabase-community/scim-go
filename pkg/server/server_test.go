@@ -1392,7 +1392,6 @@ func TestRFC7644Filtering(t *testing.T) {
 
 	// RFC 7643 Section 3.1: resourceType has a mutability of "readOnly" and "caseExact" as "true".
 	t.Run("compares meta.resourceType case exactly", func(t *testing.T) {
-		t.Skip("bug: meta.resourceType is not caseExact")
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "bolt"})
 
