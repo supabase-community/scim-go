@@ -3077,6 +3077,31 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.True(t, *patched.Emails[1].Primary)
 	})
 
+	// RFC 7644 Section 3.5.2: the body of each request MAY contain multiple operations and SHALL be treated as atomic.
+	t.Run("leaves the resource unchanged when a later operation fails", func(t *testing.T) {
+		srv := newTestServer(t)
+		primary := true
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", DisplayName: "Babs", Emails: []core.Email{{Value: "a@example.com", Primary: &primary}}})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
+				{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Changed"`)},
+				{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"b@example.com","primary":true}]`)},
+				{Op: patch.OpReplace, Path: "groups", Value: json.RawMessage(`[{"value":"g-1"}]`)},
+			}}),
+		))
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+
+		fetched := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		require.Equal(t, http.StatusOK, fetched.StatusCode)
+		user := ReadBodyAs[core.User](t, fetched)
+		assert.Equal(t, "Babs", user.DisplayName)
+		assert.Equal(t, []core.Email{{Value: "a@example.com", Primary: &primary}}, user.Emails)
+	})
+
 	// RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.
 	t.Run("rejects a value with an attribute name that is not US-ASCII or repeats in another case", func(t *testing.T) {
 		srv := newTestServer(t)
