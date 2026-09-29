@@ -413,7 +413,6 @@ func TestGrammarValueFilterRejectsNestedValuePath(t *testing.T) {
 
 // RFC 7159 Section 6: leading zeros are not allowed.
 func TestGrammarRejectsNumberWithLeadingZero(t *testing.T) {
-	t.Skip("bug: reNumber accepts leading zeros")
 	g := filter.New(0)
 	for _, input := range []string{`age eq 01`, `age eq -01`, `salary eq 00.5`} {
 		t.Run(input, func(t *testing.T) {

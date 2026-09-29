@@ -13,7 +13,7 @@ var ErrInputTooLarge = errors.New("scim: filter exceeds the max input size")
 
 var (
 	reAttributeName = regexp.MustCompile(`\A[a-zA-Z][a-zA-Z0-9_\-]*`)
-	reNumber        = regexp.MustCompile(`\A-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?`)
+	reNumber        = regexp.MustCompile(`\A-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?`)
 	reString        = regexp.MustCompile(`\A"(?:[^"\\]|\\.)*"`)
 	reSchemaURI     = regexp.MustCompile(`\A[A-Za-z][A-Za-z0-9.\-]*(?::[A-Za-z0-9.\-]+)*:`)
 )
