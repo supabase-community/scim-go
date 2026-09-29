@@ -764,6 +764,108 @@ func TestApplyMaxFilterEvaluations(t *testing.T) {
 	})
 }
 
+// RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made to the resource.
+func TestApplyDedupAcrossOperationsInOneRequest(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpAdd, "emails", `[{"value":"b@x"}]`),
+		operation(patch.OpAdd, "emails", `[{"value":"b@x"}]`),
+	))
+
+	assert.ElementsMatch(t, []any{map[string]any{"value": "a@x"}, map[string]any{"value": "b@x"}}, item["emails"])
+}
+
+// RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made to the resource.
+func TestApplyDedupInvalidatedByAReplaceOfTheWholeAttribute(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpReplace, "emails", `[{"value":"b@x"}]`),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.ElementsMatch(t, []any{map[string]any{"value": "b@x"}, map[string]any{"value": "a@x"}}, item["emails"])
+}
+
+// RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made to the resource.
+func TestApplyDedupInvalidatedByARemoveOfTheWholeAttribute(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpRemove, "emails", ""),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.Equal(t, []any{map[string]any{"value": "a@x"}}, item["emails"])
+}
+
+// RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made to the resource.
+func TestApplyDedupInvalidatedByAValueFilteredRemove(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}, map[string]any{"value": "b@x"}}}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpRemove, `emails[value eq "a@x"]`, ""),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.ElementsMatch(t, []any{map[string]any{"value": "b@x"}, map[string]any{"value": "a@x"}}, item["emails"])
+}
+
+// RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made to the resource.
+func TestApplyDedupAcrossOperationsWithoutAValueSubAttribute(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("addresses", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("streetAddress", core.TypeString),
+			),
+		),
+	}
+	item := map[string]any{"addresses": []any{map[string]any{"streetAddress": "1 Main"}}}
+
+	require.NoError(t, apply(item, schemas,
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"2 Main"}]`),
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"2 Main"}]`),
+	))
+
+	assert.ElementsMatch(t, []any{map[string]any{"streetAddress": "1 Main"}, map[string]any{"streetAddress": "2 Main"}}, item["addresses"])
+}
+
+func TestApplyDedupAfterAValueFilteredReplaceOfAMatchedElement(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpAdd, "emails", `[{"value":"b@x"}]`),
+		operation(patch.OpReplace, `emails[value eq "a@x"].value`, `"c@x"`),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.ElementsMatch(t, []any{map[string]any{"value": "c@x"}, map[string]any{"value": "b@x"}, map[string]any{"value": "a@x"}}, item["emails"])
+}
+
+func TestApplyDedupAfterDemoteOfAnExistingElement(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("addresses", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("streetAddress", core.TypeString),
+				core.NewAttribute("primary", core.TypeBoolean),
+			),
+		),
+	}
+	item := map[string]any{}
+
+	require.NoError(t, apply(item, schemas,
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"1","primary":true}]`),
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"2","primary":true}]`),
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"1","primary":false}]`),
+	))
+
+	assert.ElementsMatch(t, []any{
+		map[string]any{"streetAddress": "1", "primary": false},
+		map[string]any{"streetAddress": "2", "primary": true},
+	}, item["addresses"])
+}
+
 func TestApplyMaxWriteBytes(t *testing.T) {
 	item := func() map[string]any {
 		return map[string]any{"emails": []any{map[string]any{"type": "a", "value": "old"}}}
