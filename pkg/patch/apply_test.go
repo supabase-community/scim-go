@@ -1123,7 +1123,7 @@ func TestApplyAddToAFilteredSubAttributeSkipsAnAlreadyPresentValue(t *testing.T)
 	assert.Equal(t, []any{"A"}, parts[0].(map[string]any)["codes"])
 }
 
-// RFC 7644 Section 3.5.2.1: the no-op re-add above must succeed even when the sub-attribute is immutable -- closes the regression flagged in 4b1577b's review.
+// RFC 7644 Section 3.5.2.1: the no-op re-add above must succeed even when the sub-attribute is immutable.
 func TestApplyAddOfAnAlreadyPresentValueToAnImmutableFilteredSubAttributeIsANoOp(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
