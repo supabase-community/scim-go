@@ -183,6 +183,17 @@ func TestSearchRequest(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 7.5.2: a GET filter that would disclose a sensitive value in the URI must be refused, not merely restricted to eq.
+	t.Run("refuses a query filter on a bare multi-valued writeOnly attribute with sensitive", func(t *testing.T) {
+		schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("secrets", core.TypeComplex).AsMultiValued().AsWriteOnly().With(core.NewAttribute("value", core.TypeString)),
+		)}
+		for _, text := range []string{`secrets sw "a"`, `secrets co "a"`, `secrets gt "a"`} {
+			err := (&protocol.SearchRequest{Filter: text}).Validate(schemas)
+			require.ErrorIs(t, err, scimerrors.ErrSensitive(""), text)
+		}
+	})
+
 	t.Run("serializes as the SearchRequest of RFC 7644, Section 3.4.3", func(t *testing.T) {
 		request := &protocol.SearchRequest{
 			Schemas:            []core.SchemaURI{protocol.SchemaSearchRequest},

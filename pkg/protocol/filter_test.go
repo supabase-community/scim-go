@@ -237,16 +237,18 @@ func TestFilterOnHiddenAttributes(t *testing.T) {
 	)}
 
 	t.Run("allows eq", func(t *testing.T) {
-		for _, text := range []string{`password eq "hunter2"`, `keys.value eq "k3y"`, `keys[value eq "k3y"]`} {
+		for _, text := range []string{`password eq "hunter2"`, `keys.value eq "k3y"`, `keys[value eq "k3y"]`, `keys eq "k3y"`} {
 			_, err := protocol.Filter[clause](schemas, text, sqlEvaluator{})
 			require.NoError(t, err, text)
 		}
 	})
 
+	// RFC 7644 Section 3.4.2.2: a bare multi-valued attribute compares its "value" sub-attribute, which must not drop the parent's own sensitivity.
 	t.Run("rejects any other operator with invalidFilter", func(t *testing.T) {
 		for _, text := range []string{
 			`password ne "x"`, `password co "nter"`, `password sw "hun"`, `password ew "r2"`, `password gt "a"`,
 			`password pr`, `not (password pr)`, `keys.value sw "k"`, `keys.value pr`, `keys[value sw "k"]`, `keys[value pr]`,
+			`keys sw "k"`, `keys co "k"`, `keys ew "k"`, `keys gt "k"`, `keys pr`,
 		} {
 			_, err := protocol.Filter[clause](schemas, text, sqlEvaluator{})
 			require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""), text)

@@ -62,7 +62,7 @@ func (r *visitor[Output]) VisitPresence(path filter.AttrPath) (Output, error) {
 	if err != nil {
 		return zero, err
 	}
-	if err := r.conceal(path, attribute, filter.OpPresent); err != nil {
+	if err := r.conceal(path, r.parent(path), attribute, filter.OpPresent); err != nil {
 		return zero, err
 	}
 	return r.inner.Present(NewAttribute(attribute, path, r.scope))
@@ -135,13 +135,14 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 	if err != nil {
 		return zero, err
 	}
+	parent := r.parent(path)
 	// RFC 7644 Section 3.4.2.2: a bare multi-valued attribute name compares its "value" sub-attribute.
 	if path.SubAttribute == "" && attribute.Type == core.TypeComplex && attribute.MultiValued {
 		if sub := attribute.SubAttribute("value"); sub != nil {
-			attribute = sub
+			parent, attribute = attribute, sub
 		}
 	}
-	if err := r.conceal(path, attribute, op); err != nil {
+	if err := r.conceal(path, parent, attribute, op); err != nil {
 		return zero, err
 	}
 	if !value.Allowed(attribute.Type, op) {
@@ -155,9 +156,9 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 }
 
 // RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
-func (r *visitor[Output]) conceal(path filter.AttrPath, attribute *core.Attribute, op filter.Operator) error {
+func (r *visitor[Output]) conceal(path filter.AttrPath, parent, attribute *core.Attribute, op filter.Operator) error {
 	switch {
-	case !value.Hidden(r.parent(path), attribute):
+	case !value.Hidden(parent, attribute):
 		return nil
 	case r.inURI && op != filter.OpPresent:
 		// RFC 7644 Section 7.5.2: a GET filter that contains sensitive information SHOULD be refused with 403.
