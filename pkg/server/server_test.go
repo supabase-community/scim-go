@@ -3340,6 +3340,36 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
+
+	// RFC 7643 Section 7: readOnly means "The attribute SHALL NOT be modified."
+	t.Run("accepts a pathless replace that repeats the current id", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "Old"}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id := ReadBodyAs[core.Group](t, created).ID
+
+		rename := func(id, groupID string) *http.Response {
+			return Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
+					{Op: patch.OpReplace, Value: json.RawMessage(`{"id":"` + groupID + `","displayName":"New"}`)},
+				}}),
+			))
+		}
+
+		changed := rename(id, "other")
+		require.Equal(t, http.StatusBadRequest, changed.StatusCode)
+		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, changed).ScimType)
+
+		response := rename(id, id)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, "New", ReadBodyAs[core.Group](t, response).DisplayName)
+	})
 }
 
 // RFC 7644 3.6 Deleting Resources

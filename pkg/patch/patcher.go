@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/supabase-community/scim-go/internal/decode"
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -93,11 +94,21 @@ func (p *patcher) mergeRoot(root core.Object, values map[string]any, kind Op) er
 			}
 			continue
 		}
-		if err := p.writeAt(root, p.keyPath(key), kind, value); err != nil {
+		path := p.keyPath(key)
+		if p.repeatsReadOnly(root, path, value) {
+			continue
+		}
+		if err := p.writeAt(root, path, kind, value); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// RFC 7643 Section 7: readOnly means "The attribute SHALL NOT be modified."
+func (p *patcher) repeatsReadOnly(root core.Object, path filter.Path, incoming any) bool {
+	attr, err := resolve(p.schemas, path)
+	return err == nil && attr.Mutability == core.MutabilityReadOnly && root.Has(path.Name) && value.Equal(attr, root.Get(path.Name), incoming)
 }
 
 func (p *patcher) mergeSchema(root core.Object, schema *core.Schema, value any, kind Op) error {
