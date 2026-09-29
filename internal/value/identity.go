@@ -6,7 +6,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// Identity returns the string that identifies element within a multi-valued attribute, per RFC 7643 Section 2.4: "value" identifies it, together with "type" when "type" is readWrite, since the same "value" MAY then repeat under a different "type"; without a "value" sub-attribute, its readWrite sub-attributes do.
+// Identity returns the key of element within a multi-valued attribute; RFC 7643 Section 2.4: the same "value" MAY repeat with a different "type".
 func Identity(attribute *core.Attribute, element core.Object) string {
 	sub := attribute.SubAttribute("value")
 	if sub == nil {
@@ -30,7 +30,6 @@ func Identity(attribute *core.Attribute, element core.Object) string {
 	return string(raw)
 }
 
-// ByIdentity indexes the elements of a multi-valued attribute by Identity, per RFC 7643, Section 2.4.
 func ByIdentity(attribute *core.Attribute, existing any) map[string]map[string]any {
 	elements, _ := existing.([]any)
 	stored := make(map[string]map[string]any, len(elements))

@@ -11,7 +11,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/filter"
 )
 
-// Allowed reports whether op applies to an attribute of type t, per RFC 7644, Section 3.4.2.2.
+// Allowed reports whether op applies to type t; RFC 7644 Section 3.4.2.2: gt/ge/lt/le on boolean or binary SHALL cause a failed response.
 func Allowed(t core.AttributeType, op filter.Operator) bool {
 	switch op {
 	case filter.OpEquals, filter.OpNotEquals:
@@ -33,7 +33,6 @@ func Fold(attribute *core.Attribute, value any) any {
 	return strings.ToLower(s)
 }
 
-// Equal reports whether a and b are the same value of attribute, per RFC 7643, Section 2.3.
 func Equal(attribute *core.Attribute, a, b any) bool {
 	if order, ok := Compare(Fold(attribute, a), Fold(attribute, b)); ok {
 		return order == 0
@@ -41,7 +40,6 @@ func Equal(attribute *core.Attribute, a, b any) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-// Contains reports whether elements holds a value equal to want, per RFC 7643, Section 2.3.
 func Contains[E any](attribute *core.Attribute, elements []E, want any) bool {
 	return slices.ContainsFunc(elements, func(element E) bool { return Equal(attribute, element, want) })
 }
@@ -56,7 +54,6 @@ func Match(op filter.Operator, got, want any) bool {
 	return ok && holds(op, order)
 }
 
-// Compare orders two folded values of the same type; ok is false when their types differ.
 func Compare(a, b any) (int, bool) {
 	switch x := a.(type) {
 	case string:

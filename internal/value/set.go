@@ -8,7 +8,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// Set buckets elements so Contains, per RFC 7643, Section 2.3, checks a candidate against its bucket instead of every element.
 type Set struct {
 	attribute *core.Attribute
 	buckets   map[string][]any

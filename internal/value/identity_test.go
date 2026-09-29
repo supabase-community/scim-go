@@ -9,7 +9,7 @@ import (
 )
 
 func TestIdentity(t *testing.T) {
-	// RFC 7643 Section 4.2: a member's "value" alone identifies it; "type" describes the referenced resource, not a second identity.
+	// RFC 7643 Section 4.2: sub-attributes of members are "immutable".
 	t.Run("ignores type when type is immutable", func(t *testing.T) {
 		assert.Equal(t, value.Identity(membersLike(), core.Object{"value": "u-1", "type": "User"}), value.Identity(membersLike(), core.Object{"value": "u-1", "type": "Group"}))
 	})
@@ -24,7 +24,6 @@ func TestIdentity(t *testing.T) {
 		assert.Empty(t, value.Identity(membersLike(), core.Object{"type": "User"}))
 	})
 
-	// RFC 7643 Section 2.5: an unassigned "type" is equivalent to an absent one.
 	t.Run("normalizes an unassigned type", func(t *testing.T) {
 		assert.Equal(t, value.Identity(emailsLike(), core.Object{"value": "a@b.com"}), value.Identity(emailsLike(), core.Object{"value": "a@b.com", "type": ""}))
 	})
@@ -33,7 +32,6 @@ func TestIdentity(t *testing.T) {
 		assert.Equal(t, value.Identity(emailsLike(), core.Object{"value": "a@b.com", "type": "work"}), value.Identity(emailsLike(), core.Object{"value": "A@B.com", "type": "Work"}))
 	})
 
-	// RFC 7643 Section 2.4: without a "value", the client-visible sub-attributes it can see and write identify it.
 	t.Run("falls back to the writable sub-attributes when there is no value", func(t *testing.T) {
 		attribute := core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
 			core.NewAttribute("serial", core.TypeString),
@@ -43,7 +41,7 @@ func TestIdentity(t *testing.T) {
 		assert.NotEqual(t, value.Identity(attribute, core.Object{"serial": "s-1"}), value.Identity(attribute, core.Object{"serial": "s-2"}))
 	})
 
-	// RFC 7644 Section 3.5.1: an immutable sub-attribute must not itself be part of the key used to match elements, or a change to it looks like remove-and-add instead of a violation.
+	// RFC 7644 Section 3.5.1: immutable input values MUST match, or HTTP status code 400 SHOULD be returned.
 	t.Run("ignores an immutable sub-attribute when there is no value", func(t *testing.T) {
 		attribute := core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
 			core.NewAttribute("serial", core.TypeString),

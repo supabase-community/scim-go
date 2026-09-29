@@ -2,7 +2,7 @@ package value
 
 import "github.com/supabase-community/scim-go/pkg/core"
 
-// IsUnassigned reports a null or empty value, equivalent in state to an unassigned attribute, per RFC 7643, Section 2.5.
+// IsUnassigned reports nil, "", [] or {}; RFC 7643 Section 2.5: null or an empty array SHALL be considered equivalent to unassigned.
 func IsUnassigned(value any) bool {
 	switch v := value.(type) {
 	case nil:
@@ -23,7 +23,6 @@ func Key(element core.Object) (string, bool) {
 	return key, ok && key != ""
 }
 
-// Primary reports an element of a multi-valued attribute whose "primary" sub-attribute is true, per RFC 7643, Section 2.4.
 func Primary(element any) bool {
 	switch e := element.(type) {
 	case core.Object:
