@@ -26,34 +26,38 @@ type TokenValidator func(ctx context.Context, token string) (context.Context, er
 func RequireBearerToken(validate TokenValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
-
-			if !strings.EqualFold(scheme, "Bearer") {
-				w.Header().Set("WWW-Authenticate", schemeWithRealm)
-				_ = protocol.SendError(w, scimerrors.ErrUnauthorized("authentication required"))
-				return
-			}
-
-			if token == "" {
-				challenge(w, "invalid_request", "missing bearer token")
-				_ = protocol.SendError(w, scimerrors.ErrInvalidSyntax("missing bearer token"))
-				return
-			}
-
-			ctx, err := validate(r.Context(), token)
-			if errors.Is(err, ErrInvalidToken) {
-				challenge(w, "invalid_token", invalidTokenDescription)
-				_ = protocol.SendError(w, scimerrors.ErrUnauthorized(invalidTokenDescription))
-				return
-			}
-			if err != nil {
-				report(r, protocol.SendError(w, err))
-				return
-			}
-
-			next.ServeHTTP(w, r.WithContext(ctx))
+			requireBearerToken(w, r, next, validate)
 		})
 	}
+}
+
+func requireBearerToken(w http.ResponseWriter, r *http.Request, next http.Handler, validate TokenValidator) {
+	scheme, token, _ := strings.Cut(r.Header.Get("Authorization"), " ")
+
+	if !strings.EqualFold(scheme, "Bearer") {
+		w.Header().Set("WWW-Authenticate", schemeWithRealm)
+		_ = protocol.SendError(w, scimerrors.ErrUnauthorized("authentication required"))
+		return
+	}
+
+	if token == "" {
+		challenge(w, "invalid_request", "missing bearer token")
+		_ = protocol.SendError(w, scimerrors.ErrInvalidSyntax("missing bearer token"))
+		return
+	}
+
+	ctx, err := validate(r.Context(), token)
+	if errors.Is(err, ErrInvalidToken) {
+		challenge(w, "invalid_token", invalidTokenDescription)
+		_ = protocol.SendError(w, scimerrors.ErrUnauthorized(invalidTokenDescription))
+		return
+	}
+	if err != nil {
+		report(r, protocol.SendError(w, err))
+		return
+	}
+
+	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
 // challenge sets the WWW-Authenticate header, whose scheme MUST carry an auth-param, per RFC 6750, Section 3.

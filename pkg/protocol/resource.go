@@ -45,19 +45,29 @@ func readDocument(r io.Reader) (map[string]any, error) {
 func wellFormedNames(value any) bool {
 	switch v := value.(type) {
 	case map[string]any:
-		seen := make(map[string]struct{}, len(v))
-		for name, element := range v {
-			folded := strings.ToLower(name)
-			if _, repeated := seen[folded]; repeated || !ascii(name) || !wellFormedNames(element) {
-				return false
-			}
-			seen[folded] = struct{}{}
-		}
+		return wellFormedFields(v)
 	case []any:
-		for _, element := range v {
-			if !wellFormedNames(element) {
-				return false
-			}
+		return wellFormedElements(v)
+	}
+	return true
+}
+
+func wellFormedFields(fields map[string]any) bool {
+	seen := make(map[string]struct{}, len(fields))
+	for name, element := range fields {
+		folded := strings.ToLower(name)
+		if _, repeated := seen[folded]; repeated || !ascii(name) || !wellFormedNames(element) {
+			return false
+		}
+		seen[folded] = struct{}{}
+	}
+	return true
+}
+
+func wellFormedElements(elements []any) bool {
+	for _, element := range elements {
+		if !wellFormedNames(element) {
+			return false
 		}
 	}
 	return true

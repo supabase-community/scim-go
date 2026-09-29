@@ -98,58 +98,78 @@ func previous[T core.Resource](ctx context.Context, repo Repository[T], candidat
 // immutable rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7644, Section 3.5.1.
 func immutable(fields fields, before, after core.Object) error {
 	for _, field := range fields {
-		if field.parent != nil && field.parent.MultiValued {
-			continue
-		}
-		assigned := field.value(before)
-		if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(after)) {
-			return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
-		}
-		subs := immutableSubs(field.SubAttributes)
-		if !field.MultiValued || len(subs) == 0 {
-			continue
-		}
-		if err := immutableElements(field, subs, before, after); err != nil {
+		if err := immutableField(field, before, after); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+func immutableField(field field, before, after core.Object) error {
+	if field.parent != nil && field.parent.MultiValued {
+		return nil
+	}
+	assigned := field.value(before)
+	if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(after)) {
+		return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
+	}
+	subs := immutableSubs(field.SubAttributes)
+	if !field.MultiValued || len(subs) == 0 {
+		return nil
+	}
+	return immutableElements(field, subs, before, after)
+}
+
 func immutableSubs(subs []*core.Attribute) []*core.Attribute {
 	return slices.DeleteFunc(slices.Clone(subs), func(sub *core.Attribute) bool { return sub.Mutability != core.MutabilityImmutable })
 }
 
+// elementIndex records, per element identity, the set of stringified sub-attribute signatures seen after the write, and a sample element to diff against.
+type elementIndex struct {
+	signatures map[string]map[string]struct{}
+	sample     map[string]core.Object
+}
+
 // RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
 func immutableElements(field field, subs []*core.Attribute, before, after core.Object) error {
-	signatures := map[string]map[string]struct{}{}
-	sample := map[string]core.Object{}
+	index := newElementIndex(field, subs, after)
+	sub := changedElement(field, subs, before, index)
+	if sub == nil {
+		return nil
+	}
+	return scimerrors.ErrMutability(strconv.Quote(sub.Name) + " is immutable")
+}
+
+func newElementIndex(field field, subs []*core.Attribute, after core.Object) elementIndex {
+	index := elementIndex{signatures: map[string]map[string]struct{}{}, sample: map[string]core.Object{}}
 	for _, element := range field.elements(after) {
 		candidate := asObject(element)
 		key := value.Identity(field.Attribute, candidate)
 		if key == "" {
 			continue
 		}
-		if signatures[key] == nil {
-			signatures[key] = map[string]struct{}{}
-			sample[key] = candidate
+		if index.signatures[key] == nil {
+			index.signatures[key] = map[string]struct{}{}
+			index.sample[key] = candidate
 		}
-		signatures[key][signature(subs, candidate)] = struct{}{}
+		index.signatures[key][signature(subs, candidate)] = struct{}{}
 	}
+	return index
+}
+
+func changedElement(field field, subs []*core.Attribute, before core.Object, index elementIndex) *core.Attribute {
 	for _, element := range field.elements(before) {
 		stored := asObject(element)
 		key := value.Identity(field.Attribute, stored)
 		if key == "" {
 			continue
 		}
-		if _, matched := signatures[key][signature(subs, stored)]; matched || signatures[key] == nil {
+		if _, matched := index.signatures[key][signature(subs, stored)]; matched || index.signatures[key] == nil {
 			continue
 		}
-		sub := changed(subs, stored, sample[key])
-		if sub == nil {
-			continue
+		if sub := changed(subs, stored, index.sample[key]); sub != nil {
+			return sub
 		}
-		return scimerrors.ErrMutability(strconv.Quote(sub.Name) + " is immutable")
 	}
 	return nil
 }

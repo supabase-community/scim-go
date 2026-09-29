@@ -55,6 +55,8 @@ linters:
       ignore-comments: true
     gocognit:
       min-complexity: 10
+    # gocritic:
+    #   enable-all: true
     gocyclo:
       min-complexity: 10
     nestif:
@@ -71,6 +73,8 @@ linters:
           - dupl
           - funlen
           - goconst
+          - gocognit
+          - gocyclo
           - gosec
           - revive
       - linters:

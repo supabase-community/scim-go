@@ -41,6 +41,7 @@ cover-check: cover
 fmt:
 	gofmt -l -w .
 	go tool goimports -w .
+	golangci-lint fmt
 
 .PHONY: vet
 vet:

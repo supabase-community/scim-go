@@ -37,40 +37,46 @@ func Visit[Output any](v Visitor[Output], n *Node) (Output, error) {
 }
 
 func dispatch[Output any](v Visitor[Output], n *Node) (Output, error) {
-	var zero Output
-
 	if n.HasPath() {
 		return v.VisitValuePath(n.AttrPath(), n.SubAttribute(), func() (Output, error) {
 			return Visit(v, n.ValueFilter())
 		})
 	}
 
-	attr := n.AttrPath()
 	switch Operator(n.Operator()) {
 	case OpAnd:
 		return visitBinary(v, n, v.VisitAnd)
 	case OpOr:
 		return visitBinary(v, n, v.VisitOr)
-	case OpEquals:
-		return v.VisitEquals(attr, n.Value())
-	case OpNotEquals:
-		return v.VisitNotEquals(attr, n.Value())
-	case OpContains:
-		return v.VisitContains(attr, n.Value())
-	case OpStartsWith:
-		return v.VisitStartsWith(attr, n.Value())
-	case OpEndsWith:
-		return v.VisitEndsWith(attr, n.Value())
-	case OpGreaterThan:
-		return v.VisitGreaterThan(attr, n.Value())
-	case OpGreaterThanEquals:
-		return v.VisitGreaterThanEquals(attr, n.Value())
-	case OpLessThan:
-		return v.VisitLessThan(attr, n.Value())
-	case OpLessThanEquals:
-		return v.VisitLessThanEquals(attr, n.Value())
 	case OpPresent:
-		return v.VisitPresence(attr)
+		return v.VisitPresence(n.AttrPath())
+	}
+	return dispatchComparison(v, n)
+}
+
+func dispatchComparison[Output any](v Visitor[Output], n *Node) (Output, error) {
+	var zero Output
+
+	attr, val := n.AttrPath(), n.Value()
+	switch Operator(n.Operator()) {
+	case OpEquals:
+		return v.VisitEquals(attr, val)
+	case OpNotEquals:
+		return v.VisitNotEquals(attr, val)
+	case OpContains:
+		return v.VisitContains(attr, val)
+	case OpStartsWith:
+		return v.VisitStartsWith(attr, val)
+	case OpEndsWith:
+		return v.VisitEndsWith(attr, val)
+	case OpGreaterThan:
+		return v.VisitGreaterThan(attr, val)
+	case OpGreaterThanEquals:
+		return v.VisitGreaterThanEquals(attr, val)
+	case OpLessThan:
+		return v.VisitLessThan(attr, val)
+	case OpLessThanEquals:
+		return v.VisitLessThanEquals(attr, val)
 	default:
 		return zero, fmt.Errorf("scim: unrecognized node shape: %+v", n.raw)
 	}

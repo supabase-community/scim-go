@@ -109,15 +109,8 @@ func (t *target) remove() error {
 		return err
 	}
 	for _, holder := range holders {
-		held := holder.Get(t.key())
-		if err := eachSub(t.attr, held, gateRemove); err != nil {
+		if err := t.gateHolderRemoval(holder); err != nil {
 			return err
-		}
-		// RFC 7643 Section 7: an assigned immutable sub-attribute cannot be removed while its element survives.
-		if t.path.SubAttribute != "" {
-			if err := gateImmutableWrite(t.attr, held, nil); err != nil {
-				return err
-			}
 		}
 	}
 	for _, holder := range holders {
@@ -125,6 +118,18 @@ func (t *target) remove() error {
 	}
 	t.unassignEmptyExtension()
 	return nil
+}
+
+// RFC 7643 Section 7: an assigned immutable sub-attribute cannot be removed while its element survives.
+func (t *target) gateHolderRemoval(holder core.Object) error {
+	held := holder.Get(t.key())
+	if err := eachSub(t.attr, held, gateRemove); err != nil {
+		return err
+	}
+	if t.path.SubAttribute == "" {
+		return nil
+	}
+	return gateImmutableWrite(t.attr, held, nil)
 }
 
 // RFC 7644 Section 3.5.2.2: if no other values remain after removal, the attribute SHALL be considered unassigned.
@@ -286,16 +291,26 @@ func members(elements []any, matched []bool) ([]core.Object, error) {
 func eachSub(attr *core.Attribute, value any, visit func(sub *core.Attribute, held any) error) error {
 	switch v := value.(type) {
 	case map[string]any:
-		for name, held := range v {
-			if err := visit(subAttr(attr, name), held); err != nil {
-				return err
-			}
-		}
+		return eachSubField(attr, v, visit)
 	case []any:
-		for _, element := range v {
-			if err := eachSub(attr, element, visit); err != nil {
-				return err
-			}
+		return eachSubElement(attr, v, visit)
+	}
+	return nil
+}
+
+func eachSubField(attr *core.Attribute, fields map[string]any, visit func(sub *core.Attribute, held any) error) error {
+	for name, held := range fields {
+		if err := visit(subAttr(attr, name), held); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func eachSubElement(attr *core.Attribute, elements []any, visit func(sub *core.Attribute, held any) error) error {
+	for _, element := range elements {
+		if err := eachSub(attr, element, visit); err != nil {
+			return err
 		}
 	}
 	return nil

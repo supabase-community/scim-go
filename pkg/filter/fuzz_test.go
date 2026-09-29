@@ -29,27 +29,31 @@ func FuzzParse(f *testing.F) {
 
 	g := filter.New(8192)
 	f.Fuzz(func(t *testing.T, input string) {
-		if len(input) > 4096 {
-			return
-		}
-		node, err := g.Parse(input)
-		if err != nil {
-			return
-		}
-		if node == nil {
-			t.Fatalf("nil node with nil error for %q", input)
-		}
-
-		text, err := filter.Visit[string](filter.Stringify{}, node)
-		if err != nil {
-			return
-		}
-		reparsed, err := g.Parse(text)
-		if err != nil {
-			t.Fatalf("stringified %q -> %q failed to reparse: %v", input, text, err)
-		}
-		if !reflect.DeepEqual(node, reparsed) {
-			t.Fatalf("round-trip changed the AST: %q -> %q", input, text)
-		}
+		checkRoundTrip(t, g, input)
 	})
+}
+
+func checkRoundTrip(t *testing.T, g filter.Grammar, input string) {
+	if len(input) > 4096 {
+		return
+	}
+	node, err := g.Parse(input)
+	if err != nil {
+		return
+	}
+	if node == nil {
+		t.Fatalf("nil node with nil error for %q", input)
+	}
+
+	text, err := filter.Visit[string](filter.Stringify{}, node)
+	if err != nil {
+		return
+	}
+	reparsed, err := g.Parse(text)
+	if err != nil {
+		t.Fatalf("stringified %q -> %q failed to reparse: %v", input, text, err)
+	}
+	if !reflect.DeepEqual(node, reparsed) {
+		t.Fatalf("round-trip changed the AST: %q -> %q", input, text)
+	}
 }
