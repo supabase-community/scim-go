@@ -385,6 +385,9 @@ func TestGrammarRejectsMalformed(t *testing.T) {
 		{"no space before and", `userName eq "a"and title pr`},
 		{"no space after or", `userName pr or(title pr)`},
 		{"juxtaposed expressions", `userName pr oregon pr`},
+		{"leading zero, per RFC 7159 Section 6", `age eq 01`},
+		{"negative leading zero, per RFC 7159 Section 6", `age eq -01`},
+		{"fraction with leading zero, per RFC 7159 Section 6", `salary eq 00.5`},
 	}
 	g := filter.New(0)
 	for _, tc := range tt {
@@ -409,17 +412,6 @@ func TestGrammarValueFilterRejectsNestedValuePath(t *testing.T) {
 		require.True(t, node.HasPath())
 		assert.True(t, node.ValueFilter().Not())
 	})
-}
-
-// RFC 7159 Section 6: leading zeros are not allowed.
-func TestGrammarRejectsNumberWithLeadingZero(t *testing.T) {
-	g := filter.New(0)
-	for _, input := range []string{`age eq 01`, `age eq -01`, `salary eq 00.5`} {
-		t.Run(input, func(t *testing.T) {
-			_, err := g.Parse(input)
-			require.ErrorIs(t, err, filter.ErrInvalidFilter)
-		})
-	}
 }
 
 // RFC 7644 Section 3.4.2.2: FILTER = attrExp / logExp / valuePath / *1"not" "(" FILTER ")"

@@ -369,6 +369,22 @@ func TestRFC7643CommonAttributes(t *testing.T) {
 		}
 	})
 
+	// RFC 7643 Section 3.1: resourceType has a mutability of "readOnly" and "caseExact" as "true".
+	t.Run("compares meta.resourceType case exactly", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "bjensen"})
+
+		matches := func(filter string) int {
+			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
+			response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+			require.Equal(t, http.StatusOK, response.StatusCode, filter)
+			return ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).TotalResults
+		}
+
+		assert.Equal(t, 1, matches(`meta.resourceType eq "User"`))
+		assert.Equal(t, 0, matches(`meta.resourceType eq "user"`))
+	})
+
 	t.Run("sets the Content-Location header on discovery documents", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1388,18 +1404,6 @@ func TestRFC7644Filtering(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
-	})
-
-	// RFC 7643 Section 3.1: resourceType has a mutability of "readOnly" and "caseExact" as "true".
-	t.Run("compares meta.resourceType case exactly", func(t *testing.T) {
-		srv := newTestServer(t)
-		createWidget(t, srv, &widget{Name: "bolt"})
-
-		path := basePath + "/Widgets?" + url.Values{"filter": {`meta.resourceType eq "widget"`}}.Encode()
-		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, 0, ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).TotalResults)
 	})
 
 	t.Run("a value path filter negates a condition with not", func(t *testing.T) {
