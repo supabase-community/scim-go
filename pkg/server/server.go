@@ -15,6 +15,7 @@ type Server struct {
 	mux           *http.ServeMux
 	handler       http.Handler
 	basePath      string
+	baseURL       string
 	resourceTypes []*core.ResourceType
 	schemas       []*core.Schema
 	config        *core.ServiceProviderConfig
@@ -26,7 +27,6 @@ type Server struct {
 
 func New(basePath string, config *core.ServiceProviderConfig, options ...Option[*Server]) *Server {
 	mux := http.NewServeMux()
-	config.Meta.Location = cmp.Or(config.Meta.Location, basePath+"/ServiceProviderConfig")
 	s := &Server{
 		mux:          mux,
 		basePath:     basePath,
@@ -39,6 +39,7 @@ func New(basePath string, config *core.ServiceProviderConfig, options ...Option[
 	for _, option := range options {
 		option(s)
 	}
+	config.Meta.Location = cmp.Or(config.Meta.Location, s.base()+"/ServiceProviderConfig")
 	for _, resource := range s.registrations {
 		s.mount(resource)
 	}
@@ -70,10 +71,14 @@ func (s *Server) handle(fn func(http.ResponseWriter, *http.Request) error) http.
 }
 
 func (s *Server) mount(resource Registration) {
-	schemas := resource.schemas(s.basePath)
+	schemas := resource.schemas(s.base())
 	s.resourceTypes = append(s.resourceTypes, resource.resourceType())
 	s.schemas = append(s.schemas, schemas...)
 	resource.mount(s, schemas)
+}
+
+func (s *Server) base() string {
+	return cmp.Or(s.baseURL, s.basePath)
 }
 
 // route answers a request no endpoint matches with a SCIM error, per RFC 7644, Section 3.12.

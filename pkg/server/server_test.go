@@ -394,6 +394,32 @@ func TestRFC7643CommonAttributes(t *testing.T) {
 			assert.Equal(t, basePath+path, response.Header.Get("Content-Location"), path)
 		}
 	})
+
+	t.Run("builds meta.location from the base URL while routing under the base path", func(t *testing.T) {
+		baseURL := "https://example.com/auth/v1" + basePath
+		srv := newTestServer(t, withOption(server.WithBaseURL(baseURL)))
+
+		for _, path := range []string{
+			"/ServiceProviderConfig",
+			"/Schemas/" + string(core.SchemaUser),
+			"/Schemas/" + string(core.SchemaEnterpriseUser),
+		} {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+path, WithBearerToken(validToken)))
+			require.Equal(t, http.StatusOK, response.StatusCode, path)
+			assert.Equal(t, baseURL+path, ReadBodyAs[map[string]any](t, response)["meta"].(map[string]any)["location"], path)
+			assert.Equal(t, baseURL+path, response.Header.Get("Content-Location"), path)
+		}
+
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "Admins"}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		group := ReadBodyAs[core.Group](t, created)
+		assert.Equal(t, baseURL+"/Groups/"+group.ID, group.Meta.Location)
+		assert.Equal(t, group.Meta.Location, created.Header.Get("Location"))
+	})
 }
 
 // RFC 7643 4.2 "Group" Resource Schema

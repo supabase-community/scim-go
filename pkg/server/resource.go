@@ -37,11 +37,11 @@ func (c *Resource[T]) WithRepository(repository Repository[T]) *Resource[T] {
 	return c
 }
 
-func (c *Resource[T]) schema(basePath string) *core.Schema {
+func (c *Resource[T]) schema(base string) *core.Schema {
 	return core.NewSchema(c.id).
 		WithName(core.ResourceTypeName(c.name)).
 		WithDescription(c.description).
-		WithLocation(basePath + "/Schemas/" + string(c.id)).
+		WithLocation(base + "/Schemas/" + string(c.id)).
 		With(c.attributes...)
 }
 
@@ -59,12 +59,12 @@ func (c *Resource[T]) resourceType() *core.ResourceType {
 	return resourceType
 }
 
-func (c *Resource[T]) schemas(basePath string) core.Schemas {
+func (c *Resource[T]) schemas(base string) core.Schemas {
 	schemas := make(core.Schemas, 1, 1+len(c.extensions))
-	schemas[0] = c.schema(basePath)
+	schemas[0] = c.schema(base)
 	for _, extension := range c.extensions {
 		schemas = append(schemas, core.NewSchema(extension.id).
-			WithLocation(basePath+"/Schemas/"+string(extension.id)).
+			WithLocation(base+"/Schemas/"+string(extension.id)).
 			With(extension.attributes...))
 	}
 	return schemas
@@ -74,7 +74,7 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	path := s.basePath + c.endpoint
 	repository := c.repository
 	if repository == nil {
-		repository = NewRepository[T](path, schemas)
+		repository = NewRepository[T](s.base()+c.endpoint, schemas)
 	}
 	service := NewService(repository, characteristics(schemas, repository))
 	controller := NewController(service, schemas, s.limits, s.config)

@@ -42,6 +42,11 @@ func MaxResourceBytes(n int) Option[*Server] {
 	return func(s *Server) { s.limits.MaxResourceBytes = n }
 }
 
+// WithBaseURL sets the public base URL that each generated meta.location starts with, per RFC 7643, Section 3.1.
+func WithBaseURL(baseURL string) Option[*Server] {
+	return func(s *Server) { s.baseURL = baseURL }
+}
+
 func WithResource(resource Registration) Option[*Server] {
 	return func(s *Server) { s.registrations = append(s.registrations, resource) }
 }
