@@ -21,11 +21,11 @@ import (
 const basePath = "/scim/v2"
 
 func main() {
-	addr, token := configFromEnv()
+	addr, token, baseURL := configFromEnv()
 	config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning()
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           newServer(config, token),
+		Handler:           newServer(config, token, baseURL),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -39,7 +39,7 @@ func main() {
 	run(ctx.Done(), httpServer)
 }
 
-func configFromEnv() (addr, token string) {
+func configFromEnv() (addr, token, baseURL string) {
 	addr = ":8080"
 	if port := os.Getenv("PORT"); port != "" {
 		addr = ":" + port
@@ -48,7 +48,7 @@ func configFromEnv() (addr, token string) {
 	if token == "" {
 		log.Fatal("SCIM_BEARER_TOKEN must be set")
 	}
-	return addr, token
+	return addr, token, os.Getenv("SCIM_BASE_URL")
 }
 
 func run(done <-chan struct{}, httpServer *http.Server) {
@@ -66,12 +66,13 @@ func run(done <-chan struct{}, httpServer *http.Server) {
 	}
 }
 
-func newServer(config *core.ServiceProviderConfig, token string) http.Handler {
+func newServer(config *core.ServiceProviderConfig, token, baseURL string) http.Handler {
 	errorHandler := func(r *http.Request, err error) {
 		log.Printf("%s %s: %v\n", strconv.Quote(r.Method), strconv.Quote(r.URL.Path), err)
 	}
 	return server.New(basePath, config,
 		server.ErrorHandler(errorHandler),
+		server.WithBaseURL(baseURL),
 		server.WithResource(server.
 			NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
 			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...),
