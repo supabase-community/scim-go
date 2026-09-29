@@ -2,6 +2,7 @@ package patch
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -17,7 +18,6 @@ type target struct {
 	path      filter.Path
 	filter    filterState
 	budget    *budget
-	indexes   indexes
 }
 
 // filterState holds the compiled value-filter predicate and its match results; RFC 7644, Section 3.5.2: a "path" value filter targets specific elements of a multi-valued attribute.
@@ -68,20 +68,17 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 	values, isObject := value.(map[string]any)
 	switch {
 	case t.key() == "":
-		return newMerger(holder, t.parent, kind, t.indexes).merge(values)
+		return newMerger(holder, t.parent, kind).merge(values)
 	case isObject && t.attr.Type == core.TypeComplex && !t.attr.MultiValued:
 		nested, err := child(holder, t.key())
 		if err != nil {
 			return err
 		}
-		return newMerger(nested, t.attr, kind, t.indexes).merge(values)
+		return newMerger(nested, t.attr, kind).merge(values)
 	}
 	shapedValue := t.dedupedAdd(holder, kind, shaped(value, t.attr.MultiValued))
 	if err := t.overwritable(holder, kind, shapedValue); err != nil {
 		return err
-	}
-	if kind != OpAdd {
-		t.indexes.invalidate(holder, t.key())
 	}
 	set(holder, t.key(), carryImmutable(t.attr, kind, t.elements(), shapedValue), kind)
 	return nil
@@ -89,11 +86,11 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 
 // RFC 7644 Section 3.5.2.1: an add outside the top-level path fresh() already covers must still skip a value the target already contains.
 func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) any {
-	_, ok := holder.Get(t.key()).([]any)
+	existing, ok := holder.Get(t.key()).([]any)
 	if kind != OpAdd || !t.attr.MultiValued || !ok || t.isListAdd(kind) {
 		return shapedValue
 	}
-	return t.indexes.fresh(holder, t.key(), t.attr, shapedValue.([]any))
+	return freshElements(t.attr, existing, shapedValue.([]any))
 }
 
 // RFC 7644 Section 3.5.2.2: a value that becomes unassigned and is read-only SHALL return "mutability".
@@ -136,7 +133,6 @@ func (t *target) remove() error {
 	}
 	for _, holder := range holders {
 		holder.Remove(t.key())
-		t.indexes.invalidate(holder, t.key())
 	}
 	t.unassignEmptyExtension()
 	return nil
@@ -182,7 +178,6 @@ func (t *target) drop() error {
 		return nil // RFC 7644 Section 3.5.2.2: a filter matching no value makes no change and still succeeds.
 	}
 	container.Set(t.path.Name, kept)
-	t.indexes.invalidate(container, t.path.Name)
 	return nil
 }
 
@@ -261,8 +256,21 @@ func (t *target) isListAdd(kind Op) bool {
 }
 
 func (t *target) fresh(candidate any) []any {
-	container, _ := t.container(false)
-	return t.indexes.fresh(container, t.path.Name, t.attr, shaped(candidate, true).([]any))
+	return freshElements(t.attr, t.elements(), shaped(candidate, true).([]any))
+}
+
+// freshElements drops candidate elements already present in existing, per RFC 7644, Section 3.5.2.1: "If the target location already contains the value specified, no changes SHOULD be made". Elements identified by a "value" sub-attribute are matched by that identity, per RFC 7643 Section 2.4.
+func freshElements(attr *core.Attribute, existing, candidate []any) []any {
+	elements := slices.Clone(candidate)
+	if attr.SubAttribute("value") == nil {
+		stored := value.NewSet(attr, existing)
+		return slices.DeleteFunc(elements, stored.Contains)
+	}
+	stored := value.ByIdentity(attr, existing)
+	return slices.DeleteFunc(elements, func(addition any) bool {
+		_, exists := stored[value.Identity(attr, asMember(addition))]
+		return exists
+	})
 }
 
 func (t *target) written(elements []any, kind Op) func(int) bool {

@@ -10,11 +10,10 @@ import (
 
 // merger holds the state one merge shares across its fields, per RFC 7644 Section 3.5.2.3.
 type merger struct {
-	holder  core.Object
-	parent  *core.Attribute
-	kind    Op
-	gate    parentGate
-	indexes indexes
+	holder core.Object
+	parent *core.Attribute
+	kind   Op
+	gate   parentGate
 }
 
 // parentGate reports whether a sub-attribute write also changes its immutable parent complex attribute, per RFC 7643 Section 7.
@@ -23,8 +22,8 @@ type parentGate struct {
 	assigned bool
 }
 
-func newMerger(holder core.Object, parent *core.Attribute, kind Op, indexes indexes) merger {
-	return merger{holder: holder, parent: parent, kind: kind, gate: newParentGate(parent, holder), indexes: indexes}
+func newMerger(holder core.Object, parent *core.Attribute, kind Op) merger {
+	return merger{holder: holder, parent: parent, kind: kind, gate: newParentGate(parent, holder)}
 }
 
 func newParentGate(attr *core.Attribute, holder core.Object) parentGate {
@@ -47,8 +46,8 @@ func (m merger) merge(values map[string]any) error {
 func (m merger) field(key, name string, incoming any) error {
 	sub := subAttr(m.parent, name)
 	v := shaped(incoming, sub.MultiValued)
-	if _, ok := m.holder[key].([]any); m.kind == OpAdd && sub.MultiValued && ok {
-		v = m.indexes.fresh(m.holder, key, sub, v.([]any))
+	if existing, ok := m.holder[key].([]any); m.kind == OpAdd && sub.MultiValued && ok {
+		v = freshElements(sub, existing, v.([]any))
 	}
 	before, final := m.holder[key], appended(m.holder[key], v, m.kind)
 	if err := gateImmutableWrite(sub, before, final); err != nil {
@@ -56,9 +55,6 @@ func (m merger) field(key, name string, incoming any) error {
 	}
 	if err := m.gate.check(sub, before, final); err != nil {
 		return err
-	}
-	if m.kind != OpAdd {
-		m.indexes.invalidate(m.holder, key)
 	}
 	m.holder[key] = final
 	return nil

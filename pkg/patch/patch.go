@@ -11,7 +11,7 @@ func Apply(resource core.Object, ops []Operation, schemas core.Schemas, opts ...
 		opt(&limits)
 	}
 	working := core.Object(clone(map[string]any(resource)).(map[string]any))
-	if err := (&patcher{schemas: schemas, budget: limits.budget(), indexes: make(indexes)}).run(working, ops); err != nil {
+	if err := (&patcher{schemas: schemas, budget: limits.budget()}).run(working, ops); err != nil {
 		return nil, err
 	}
 	return working, nil
