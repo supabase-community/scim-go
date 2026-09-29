@@ -23,7 +23,7 @@ func TestConcurrentParse(t *testing.T) {
 	g := filter.New(0)
 	inputs := []string{
 		`userName eq "bjensen"`,
-		`emails[type eq "work" and primary eq true].value`,
+		`emails[type eq "work" and primary eq true]`,
 		`not (a eq "1" or b pr) and urn:ietf:params:scim:schemas:core:2.0:User:x eq "q"`,
 	}
 	var wg sync.WaitGroup

@@ -80,13 +80,13 @@ func (r *visitor[Output]) VisitNot(operand Output) (Output, error) {
 	return r.inner.Not(operand)
 }
 
-func (r *visitor[Output]) VisitValuePath(path filter.AttrPath, subAttribute string, valueFilter func() (Output, error)) (Output, error) {
+func (r *visitor[Output]) VisitValuePath(path filter.AttrPath, _ string, valueFilter func() (Output, error)) (Output, error) {
 	var zero Output
 	attribute, err := r.resolve(path)
 	if err != nil {
 		return zero, err
 	}
-	if !attribute.MultiValued || subAttribute != "" {
+	if !attribute.MultiValued {
 		return zero, scimerrors.ErrInvalidFilter(fmt.Sprintf("%q is not a value-path target", path.String()))
 	}
 	return r.inner.ValuePath(NewAttribute(attribute, path, nil), r.scoped(attribute, valueFilter))

@@ -229,14 +229,6 @@ func TestGrammarValuePath(t *testing.T) {
 		assert.Equal(t, "work", node.ValueFilter().Value())
 	})
 
-	t.Run("with a trailing sub-attribute", func(t *testing.T) {
-		node, err := g.Parse(`emails[type eq "work"].value`)
-
-		require.NoError(t, err)
-		assert.Equal(t, "emails", node.Path())
-		assert.Equal(t, "value", node.SubAttribute())
-	})
-
 	t.Run("value filter supports and/or", func(t *testing.T) {
 		node, err := g.Parse(`emails[type eq "work" and primary eq true]`)
 
@@ -388,6 +380,8 @@ func TestGrammarRejectsMalformed(t *testing.T) {
 		{"leading zero, per RFC 7159 Section 6", `age eq 01`},
 		{"negative leading zero, per RFC 7159 Section 6", `age eq -01`},
 		{"fraction with leading zero, per RFC 7159 Section 6", `salary eq 00.5`},
+		{"sub-attribute after a value path, per RFC 7644 Section 3.4.2.2", `emails[type eq "work"].value`},
+		{"comparison after a value path sub-attribute, per RFC 7644 Section 3.4.2.2", `emails[type eq "work"].value eq "a@x"`},
 	}
 	g := filter.New(0)
 	for _, tc := range tt {
@@ -412,16 +406,4 @@ func TestGrammarValueFilterRejectsNestedValuePath(t *testing.T) {
 		require.True(t, node.HasPath())
 		assert.True(t, node.ValueFilter().Not())
 	})
-}
-
-// RFC 7644 Section 3.4.2.2: FILTER = attrExp / logExp / valuePath / *1"not" "(" FILTER ")"
-func TestGrammarRejectsSubAttributeAfterValuePath(t *testing.T) {
-	t.Skip("bug: a filter accepts the PATCH-only valuePath [subAttr] form")
-	g := filter.New(0)
-	for _, input := range []string{`emails[type eq "work"].value`, `emails[type eq "work"].value eq "a@x"`} {
-		t.Run(input, func(t *testing.T) {
-			_, err := g.Parse(input)
-			require.ErrorIs(t, err, filter.ErrInvalidFilter)
-		})
-	}
 }

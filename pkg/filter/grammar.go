@@ -120,14 +120,13 @@ func (g *grammar) parenGroup(sub peg.Parser) peg.Parser {
 	}
 }
 
-// RFC 7644 Section 3.5.2: PATH = attrPath / valuePath [subAttr].
+// RFC 7644 Section 3.4.2.2: valuePath = attrPath "[" valFilter "]"
 func (g *grammar) valuePath(valueFilter peg.Parser) peg.Parser {
 	return peg.Sequence(
 		peg.Tag("path", g.attributePath()),
 		peg.Str("["),
 		peg.Tag("value_filter", valueFilter),
 		peg.Str("]"),
-		peg.Optional(peg.Tag("sub_attribute", g.subAttribute())),
 	)
 }
 

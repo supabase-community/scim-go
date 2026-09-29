@@ -28,7 +28,6 @@ func TestStringifyVisitorRoundTrip(t *testing.T) {
 		`not (not (userName pr))`,
 		`(a eq "1" or b eq "2") and c eq "3"`,
 		`emails[type eq "work"]`,
-		`emails[type eq "work"].value`,
 		`emails[type eq "work" and primary eq true]`,
 	}
 
