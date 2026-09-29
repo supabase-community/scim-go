@@ -1,9 +1,11 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"reflect"
+	"strconv"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -89,6 +91,9 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err := c.stampSchemas(resource); err != nil {
 		return protocol.SendError(w, err)
 	}
+	if err := c.checkSize(resource); err != nil {
+		return protocol.SendError(w, err)
+	}
 	created, err := c.service.Create(r.Context(), resource)
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -113,6 +118,9 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	}
 	resource.Common().Meta = core.Meta{Version: c.version(r, existing)}
 	if err := c.stampSchemas(resource); err != nil {
+		return protocol.SendError(w, err)
+	}
+	if err := c.checkSize(resource); err != nil {
 		return protocol.SendError(w, err)
 	}
 	replaced, err := c.service.Replace(r.Context(), resource)
@@ -208,8 +216,26 @@ func (c *controller[T]) persist(r *http.Request, existing, patched T) (T, error)
 	if err != nil || same {
 		return existing, err
 	}
+	if err := c.checkSize(patched); err != nil {
+		return existing, err
+	}
 	replaced, err := c.service.Replace(r.Context(), patched)
 	return replaced, c.lostRace(r, err)
+}
+
+// checkSize rejects a write whose resulting resource would exceed the configured cap, per RFC 7644 Section 3.12; independent of any single request's body size.
+func (c *controller[T]) checkSize(resource T) error {
+	if c.limits.MaxResourceBytes <= 0 {
+		return nil
+	}
+	encoded, err := json.Marshal(resource)
+	if err != nil {
+		return scimerrors.ErrInternal("could not encode the resource")
+	}
+	if len(encoded) > c.limits.MaxResourceBytes {
+		return scimerrors.ErrTooLarge("the resource would exceed " + strconv.Itoa(c.limits.MaxResourceBytes) + " bytes")
+	}
+	return nil
 }
 
 func (c *controller[T]) lostRace(r *http.Request, err error) error {

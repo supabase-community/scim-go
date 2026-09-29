@@ -9,15 +9,16 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4, and the most operations and value filter clause checks one PATCH may cost, where a zero MaxOperations or MaxFilterEvaluations lifts that cap.
+// Limits are the pagination bounds of one provider, per Table 6 of RFC 7644, Section 3.4.2.4, and the most operations, value filter clause checks, and encoded resource bytes one write may cost, where a zero MaxOperations, MaxFilterEvaluations, or MaxResourceBytes lifts that cap.
 type Limits struct {
 	DefaultCount         int
 	MaxCount             int
 	MaxOperations        int
 	MaxFilterEvaluations int
+	MaxResourceBytes     int
 }
 
-var DefaultLimits = Limits{DefaultCount: 100, MaxCount: 100, MaxOperations: 100, MaxFilterEvaluations: 10_000_000}
+var DefaultLimits = Limits{DefaultCount: 100, MaxCount: 100, MaxOperations: 100, MaxFilterEvaluations: 10_000_000, MaxResourceBytes: 10 << 20}
 
 // ParseSearchRequest reads the query parameters of RFC 7644, Section 3.4.2.
 func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {

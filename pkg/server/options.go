@@ -33,6 +33,11 @@ func MaxBodySize(n int64) Option[*Server] {
 	return func(s *Server) { s.maxBodySize = n }
 }
 
+// MaxResourceBytes caps the encoded size a resource may reach after a write; larger results get 413, and zero lifts the cap.
+func MaxResourceBytes(n int) Option[*Server] {
+	return func(s *Server) { s.limits.MaxResourceBytes = n }
+}
+
 func WithResource(resource Registration) Option[*Server] {
 	return func(s *Server) { s.registrations = append(s.registrations, resource) }
 }

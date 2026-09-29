@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -144,6 +146,96 @@ func TestMaxPatchFilterEvaluations(t *testing.T) {
 
 	t.Run("refuses a request beyond a configured budget with 413", func(t *testing.T) {
 		assert.Equal(t, http.StatusRequestEntityTooLarge, patchWith(t, server.MaxPatchFilterEvaluations(1)))
+	})
+}
+
+func TestMaxResourceBytes(t *testing.T) {
+	big := strings.Repeat("x", 300)
+
+	t.Run("rejects an oversized resource on create", func(t *testing.T) {
+		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+			server.MaxResourceBytes(200),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
+		))
+
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen", DisplayName: big})))
+
+		assert.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode)
+	})
+
+	t.Run("accepts a resource within the cap", func(t *testing.T) {
+		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+			server.MaxResourceBytes(2000),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
+		))
+
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen", DisplayName: big})))
+
+		assert.Equal(t, http.StatusCreated, response.StatusCode)
+	})
+
+	t.Run("rejects an oversized replace", func(t *testing.T) {
+		srv, id := newUserWithID(t, core.User{UserName: "bjensen"}, server.MaxResourceBytes(200))
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id, WithRequestBodyAs(t, core.User{UserName: "bjensen", DisplayName: big})))
+
+		assert.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode)
+	})
+
+	t.Run("lifts the cap when set to zero", func(t *testing.T) {
+		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+			server.MaxResourceBytes(0),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
+		))
+
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen", DisplayName: big})))
+
+		assert.Equal(t, http.StatusCreated, response.StatusCode)
+	})
+
+	t.Run("rejects incremental patch growth once the resource crosses the cap", func(t *testing.T) {
+		srv, id := newUserWithID(t, core.User{UserName: "bjensen"}, server.MaxResourceBytes(500))
+
+		var last int
+		for i := range 20 {
+			request := protocol.PatchRequest{
+				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{
+					{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(fmt.Sprintf(`[{"value":"user-%d@example.com"}]`, i))},
+				},
+			}
+			last = Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, WithRequestBodyAs(t, request))).StatusCode
+			if last == http.StatusRequestEntityTooLarge {
+				break
+			}
+		}
+
+		assert.Equal(t, http.StatusRequestEntityTooLarge, last)
+	})
+
+	// RFC 7644 Section 3.5.2.1: a no-op patch SHALL NOT change the resource, so it must succeed even against a resource already over a cap lowered after it was created.
+	t.Run("a no-op patch on an already over-cap resource still succeeds", func(t *testing.T) {
+		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
+		repository := server.NewRepository[*core.User](basePath+"/Users", schemas)
+		bigSrv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
+		))
+		created := ReadBodyAs[core.User](t, Response(t, bigSrv, Request(t, bigSrv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen", DisplayName: big}))))
+
+		smallSrv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+			server.MaxResourceBytes(200),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
+		))
+		value, err := json.Marshal(big)
+		require.NoError(t, err)
+		request := protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpReplace, Path: "displayName", Value: value}},
+		}
+
+		response := Response(t, smallSrv, Request(t, smallSrv, http.MethodPatch, basePath+"/Users/"+created.ID, WithRequestBodyAs(t, request)))
+
+		assert.Equal(t, http.StatusOK, response.StatusCode)
 	})
 }
 
