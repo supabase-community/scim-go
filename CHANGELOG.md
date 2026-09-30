@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.4](https://github.com/supabase-community/scim-go/compare/v0.7.3...v0.7.4) (2026-09-30)
+
+
+### Performance Improvements
+
+* **patch:** keep the dedup index across a primary promotion of a value-keyed list ([7aed407](https://github.com/supabase-community/scim-go/commit/7aed407d59131fd9ee3c13b0129cabd4c0a1b904))
+* **patch:** reuse the dedup index across sequential list adds ([206a216](https://github.com/supabase-community/scim-go/commit/206a216577987acb5c677d15e3ba101b1178cd87))
+
 ## [0.7.3](https://github.com/supabase-community/scim-go/compare/v0.7.2...v0.7.3) (2026-09-30)
 
 
