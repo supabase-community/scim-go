@@ -3367,6 +3367,25 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 		assert.Nil(t, patched.Active)
 	})
 
+	t.Run("rejects a remove that carries a value", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com"}, {Value: "b@example.com"}}})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpRemove, Path: "emails", Value: json.RawMessage(`[{"value":"a@example.com"}]`)}},
+			}),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		stored := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		assert.Len(t, ReadBodyAs[core.User](t, stored).Emails, 2)
+	})
+
 	// RFC 7644 Section 3.5.2.2: if a read-only attribute is removed or becomes unassigned, the server SHALL return "mutability".
 	t.Run("rejects a remove that unassigns a readOnly sub-attribute", func(t *testing.T) {
 		srv := newTestServer(t)

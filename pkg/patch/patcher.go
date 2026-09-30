@@ -75,6 +75,9 @@ func (p *patcher) remove(root core.Object, op Operation) error {
 	if op.Path == "" {
 		return scimerrors.ErrNoTarget(`"remove" requires a "path"`)
 	}
+	if op.hasValue() {
+		return scimerrors.ErrInvalidSyntax(`"remove" does not take a "value"`)
+	}
 	path, err := filter.NewPath(op.Path)
 	if err != nil {
 		return scimerrors.ErrInvalidPath(scimerrors.InvalidPath.Description())

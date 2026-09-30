@@ -136,6 +136,24 @@ func TestApplyRemoveAttribute(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestApplyRemoveWithAValueRejected(t *testing.T) {
+	item := core.Object{"emails": []any{map[string]any{"value": "a@b.com"}, map[string]any{"value": "c@d.com"}}}
+
+	var err *scimerrors.Error
+	require.ErrorAs(t, apply(item, userSchemas(), operation(patch.OpRemove, "emails", `[{"value":"a@b.com"}]`)), &err)
+
+	assert.Equal(t, scimerrors.InvalidSyntax, err.ScimType)
+	assert.Len(t, item["emails"], 2)
+}
+
+func TestApplyRemoveWithANullValue(t *testing.T) {
+	item := core.Object{"nickName": "Babs"}
+
+	require.NoError(t, apply(item, nil, operation(patch.OpRemove, "nickName", ` null `)))
+
+	assert.False(t, item.Has("nickName"))
+}
+
 func TestRemoveWithoutPathIsNoTarget(t *testing.T) {
 	var err *scimerrors.Error
 	require.ErrorAs(t, apply(map[string]any{}, nil, patch.Operation{Op: patch.OpRemove}), &err)
