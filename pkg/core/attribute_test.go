@@ -279,6 +279,17 @@ func TestAttributeCoerce(t *testing.T) {
 		assert.Equal(t, "aGVsbG8=", b)
 	})
 
+	t.Run("accepts a base64 value without trailing padding for a binary attribute", func(t *testing.T) {
+		b, ok := core.NewAttribute("cert", core.TypeBinary).Coerce("aGVsbG8")
+		require.True(t, ok)
+		assert.Equal(t, "aGVsbG8", b)
+	})
+
+	t.Run("rejects a base64 value with wrong trailing padding for a binary attribute", func(t *testing.T) {
+		_, ok := core.NewAttribute("cert", core.TypeBinary).Coerce("aGVsbG8==")
+		require.False(t, ok)
+	})
+
 	t.Run("rejects a non-base64 value for a binary attribute", func(t *testing.T) {
 		_, ok := core.NewAttribute("cert", core.TypeBinary).Coerce("not base64!")
 		require.False(t, ok)

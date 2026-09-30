@@ -28,11 +28,7 @@ func (a AttributeType) coerce(value any) (any, bool) {
 		return s, ok
 	case TypeBinary:
 		s, ok := value.(string)
-		if !ok {
-			return nil, false
-		}
-		// RFC 7643 Section 2.3.6: binary values are base64 encoded.
-		if _, err := base64.StdEncoding.DecodeString(s); err != nil {
+		if !ok || !isBase64(s) {
 			return nil, false
 		}
 		return s, true
@@ -82,4 +78,13 @@ func integer(value any) (any, bool) {
 		return int64(n), n == math.Trunc(n)
 	}
 	return nil, false
+}
+
+// RFC 7643 Section 2.3.6: base64 per RFC 4648 Section 4, trailing padding MAY be omitted.
+func isBase64(s string) bool {
+	if _, err := base64.StdEncoding.DecodeString(s); err == nil {
+		return true
+	}
+	_, err := base64.RawStdEncoding.DecodeString(s)
+	return err == nil
 }
