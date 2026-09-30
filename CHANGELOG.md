@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/supabase-community/scim-go/compare/v0.7.2...v0.7.3) (2026-09-30)
+
+
+### Bug Fixes
+
+* **filter:** match eq null and ne null against unassigned attributes ([20d8952](https://github.com/supabase-community/scim-go/commit/20d89521aa52239824996f496f240943c22a55e4))
+
 ## [0.7.2](https://github.com/supabase-community/scim-go/compare/v0.7.1...v0.7.2) (2026-09-30)
 
 
