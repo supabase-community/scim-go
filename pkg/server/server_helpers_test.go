@@ -109,6 +109,11 @@ type inspectingRepository struct {
 	server.Repository[*widget]
 }
 
+type projectingRepository struct {
+	server.Repository[*core.User]
+	returned []bool
+}
+
 func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 	t.Helper()
 
@@ -177,6 +182,20 @@ func (r inspectingRepository) Create(ctx context.Context, w *widget) (*widget, e
 		w.Parts[i].Inspector = "qa-bot"
 	}
 	return r.Repository.Create(ctx, w)
+}
+
+func (r *projectingRepository) Get(ctx context.Context, id string) (*core.User, error) {
+	r.record(ctx)
+	return r.Repository.Get(ctx, id)
+}
+
+func (r *projectingRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
+	r.record(ctx)
+	return r.Repository.List(ctx, query)
+}
+
+func (r *projectingRepository) record(ctx context.Context) {
+	r.returned = append(r.returned, protocol.ProjectionFrom(ctx).Returns("emails"))
 }
 
 func validate(ctx context.Context, token string) (context.Context, error) {

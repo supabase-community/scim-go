@@ -1,8 +1,10 @@
 package protocol_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -169,6 +171,49 @@ func TestZeroProjection(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"id":"2819c223","userName":"bjensen"}`, string(raw))
+}
+
+func TestProjectionReturns(t *testing.T) {
+	schemas := core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)}
+	group := map[string]any{"members": []any{map[string]any{"value": "2819c223", "type": "User"}}}
+	for query, want := range map[string]bool{
+		"":                           true,
+		"excludedAttributes=members": false,
+		"excludedAttributes=MEMBERS": false,
+		"excludedAttributes=urn:ietf:params:scim:schemas:core:2.0:Group:members": false,
+		"excludedAttributes=displayName":                                         true,
+		"excludedAttributes=members.display":                                     true,
+		"attributes=displayName":                                                 false,
+		"attributes=members":                                                     true,
+		"attributes=members.value":                                               true,
+		"attributes=members.type":                                                true,
+		"attributes=urn:ietf:params:scim:schemas:core:2.0:Group:Members":         true,
+	} {
+		values, err := url.ParseQuery(query)
+		require.NoError(t, err)
+		projection, err := protocol.ParseProjection(values, schemas)
+		require.NoError(t, err, query)
+		raw, err := json.Marshal(projection.Of(group))
+		require.NoError(t, err)
+
+		assert.Equal(t, want, protocol.ProjectionFrom(protocol.WithProjection(context.Background(), projection)).Returns("members"), query)
+		assert.Equal(t, want, strings.Contains(string(raw), `"members"`), query)
+	}
+	assert.True(t, protocol.ProjectionFrom(context.Background()).Returns("members"))
+}
+
+func TestProjectionReturnsAnExtensionAttribute(t *testing.T) {
+	schemas := core.Schemas{
+		core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
+		core.NewSchema(core.SchemaEnterpriseUser).With(core.EnterpriseUserAttributes()...),
+	}
+	manager := string(core.SchemaEnterpriseUser) + ":manager"
+	projection, err := protocol.ParseProjection(url.Values{"excludedAttributes": {manager}}, schemas)
+	require.NoError(t, err)
+
+	assert.False(t, projection.Returns(manager))
+	assert.True(t, projection.Returns(string(core.SchemaEnterpriseUser)+":department"))
+	assert.True(t, projection.Returns("bogus"))
 }
 
 func TestProjectionFillsSchemasAndResourceType(t *testing.T) {

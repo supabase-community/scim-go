@@ -2213,6 +2213,31 @@ func TestRFC7644Attributes(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(ReadBodyAs[map[string]any](t, response)))
 	})
+
+	t.Run("hands the repository the projection of a read but never of a write", func(t *testing.T) {
+		schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
+		repository := &projectingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas)}
+		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
+		))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id+"?excludedAttributes=emails"))
+		Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?excludedAttributes=emails"))
+		require.Equal(t, []bool{false, false}, repository.returned)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id+"?excludedAttributes=emails",
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"b@example.com"}]`)}},
+			}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		require.NotEmpty(t, repository.returned[2:])
+		assert.NotContains(t, repository.returned[2:], false)
+	})
 }
 
 // RFC 7644 3.4.3 Querying Resources Using HTTP POST

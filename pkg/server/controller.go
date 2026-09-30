@@ -59,7 +59,7 @@ func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	items, total, err := c.service.List(r.Context(), query)
+	items, total, err := c.service.List(protocol.WithProjection(r.Context(), projection), query)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -72,7 +72,7 @@ func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return err
 	}
-	resource, ok, err := c.existing(w, r)
+	resource, ok, err := c.existing(w, r.WithContext(protocol.WithProjection(r.Context(), projection)))
 	if !ok {
 		return err
 	}

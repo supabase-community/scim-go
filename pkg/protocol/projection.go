@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"context"
 	"encoding/json"
 	"net/url"
 	"slices"
@@ -19,6 +20,8 @@ type Projection struct {
 	excluded names
 }
 
+type projectionKey struct{}
+
 // ParseProjection reads "attributes"/"excludedAttributes"; RFC 7644 Section 3.9: they are mutually exclusive.
 func ParseProjection(values url.Values, schemas core.Schemas) (Projection, error) {
 	attributes, excluded, err := parseAttributeParams(values)
@@ -26,6 +29,15 @@ func ParseProjection(values url.Values, schemas core.Schemas) (Projection, error
 		return Projection{}, err
 	}
 	return newProjection(schemas, attributes, excluded)
+}
+
+func WithProjection(ctx context.Context, projection Projection) context.Context {
+	return context.WithValue(ctx, projectionKey{}, projection)
+}
+
+func ProjectionFrom(ctx context.Context) Projection {
+	projection, _ := ctx.Value(projectionKey{}).(Projection)
+	return projection
 }
 
 func newProjection(schemas core.Schemas, attributes, excluded []string) (Projection, error) {
@@ -38,6 +50,17 @@ func newProjection(schemas core.Schemas, attributes, excluded []string) (Project
 		return Projection{}, err
 	}
 	return Projection{schemas: schemas, included: included, excluded: excludedNames}, nil
+}
+
+// Returns reports whether any part of an attribute, named as in RFC 7644 Section 3.10, can appear in a response.
+func (p Projection) Returns(name string) bool {
+	path, err := filter.NewAttrPath(name)
+	if err != nil || p.schemas == nil {
+		return true
+	}
+	uri := core.SchemaURI(path.URI)
+	attribute, ok := p.schemas.Resolve(uri, path.Name, "")
+	return !ok || p.returns(attribute, qualifiedKey(p.schemas.Lookup(uri).ID, attribute.Name))
 }
 
 func (p Projection) Of(resource any) json.Marshaler {
