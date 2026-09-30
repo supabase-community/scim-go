@@ -620,6 +620,16 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 
 // RFC 7643 5 Service Provider Configuration Schema
 func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
+	t.Run("authenticationSchemes is accessible without prior authentication", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/ServiceProviderConfig"))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.NotEmpty(t, ReadBodyAs[core.ServiceProviderConfig](t, response).AuthenticationSchemes)
+		assert.Equal(t, http.StatusUnauthorized, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Schemas")).StatusCode)
+	})
+
 	t.Run("PATCH is declined when Patch.Supported is false", func(t *testing.T) {
 		config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Versioning()
 		srv := newTestServer(t, withConfig(config))

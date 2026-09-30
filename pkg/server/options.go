@@ -51,10 +51,13 @@ func WithResource(resource Registration) Option[*Server] {
 	return func(s *Server) { s.registrations = append(s.registrations, resource) }
 }
 
-// WithAuthentication advertises and enforces scheme, per RFC 7643, Section 5.
+// WithAuthentication advertises scheme and enforces it on every endpoint but /ServiceProviderConfig, per RFC 7643, Section 5.
 func WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.Handler) http.Handler) Option[*Server] {
 	return func(s *Server) {
 		s.config.Authentication(scheme)
-		s.handler = middleware(s.handler)
+		mux := http.NewServeMux()
+		mux.Handle("/", middleware(s.handler))
+		mux.Handle("GET "+s.basePath+"/ServiceProviderConfig", s.handler)
+		s.handler = mux
 	}
 }
