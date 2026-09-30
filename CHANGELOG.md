@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/supabase-community/scim-go/compare/v0.7.0...v0.7.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* **server:** serve /ServiceProviderConfig without authentication ([2cd955c](https://github.com/supabase-community/scim-go/commit/2cd955c5860a015869956a89f3281c9ef9099b7e))
+
 ## [0.7.0](https://github.com/supabase-community/scim-go/compare/v0.6.0...v0.7.0) (2026-09-29)
 
 
