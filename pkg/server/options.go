@@ -55,9 +55,7 @@ func WithResource(resource Registration) Option[*Server] {
 func WithAuthentication(scheme *core.AuthenticationScheme, middleware func(http.Handler) http.Handler) Option[*Server] {
 	return func(s *Server) {
 		s.config.Authentication(scheme)
-		mux := http.NewServeMux()
-		mux.Handle("/", middleware(s.handler))
-		mux.Handle("GET "+s.basePath+"/ServiceProviderConfig", s.handler)
-		s.handler = mux
+		previous := s.authenticate
+		s.authenticate = func(next http.Handler) http.Handler { return middleware(previous(next)) }
 	}
 }

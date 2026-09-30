@@ -14,6 +14,7 @@ const DefaultMaxBodySize = 1 << 20
 type Server struct {
 	mux           *http.ServeMux
 	handler       http.Handler
+	authenticate  func(http.Handler) http.Handler
 	basePath      string
 	baseURL       string
 	resourceTypes []*core.ResourceType
@@ -34,11 +35,16 @@ func New(basePath string, config *core.ServiceProviderConfig, options ...Option[
 		limits:       limitsFrom(config),
 		maxBodySize:  DefaultMaxBodySize,
 		errorHandler: func(*http.Request, error) {},
+		authenticate: func(next http.Handler) http.Handler { return next },
 	}
-	s.handler = http.HandlerFunc(s.route)
 	for _, option := range options {
 		option(s)
 	}
+	routes := http.HandlerFunc(s.route)
+	root := http.NewServeMux()
+	root.Handle("/", s.authenticate(routes))
+	root.Handle("GET "+s.basePath+"/ServiceProviderConfig", routes)
+	s.handler = root
 	config.Meta.Location = cmp.Or(config.Meta.Location, s.base()+"/ServiceProviderConfig")
 	for _, resource := range s.registrations {
 		s.mount(resource)

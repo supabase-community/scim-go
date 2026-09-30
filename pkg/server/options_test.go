@@ -326,6 +326,27 @@ func TestWithAuthentication(t *testing.T) {
 		assert.NoError(t, reported)
 	})
 
+	t.Run("stacks each middleware", func(t *testing.T) {
+		var calls []string
+		track := func(name string) func(http.Handler) http.Handler {
+			return func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					calls = append(calls, name)
+					next.ServeHTTP(w, r)
+				})
+			}
+		}
+		srv := newUserServer(t,
+			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), track("first")),
+			server.WithAuthentication(core.NewOAuthBearerToken(), track("second")),
+		)
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users"))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []string{"second", "first"}, calls)
+	})
+
 	t.Run("passes the validator's context to the repository", func(t *testing.T) {
 		var tenant string
 		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
