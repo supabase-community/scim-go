@@ -260,6 +260,43 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 	})
 }
 
+// RFC 7643 2.3.6 Binary
+func TestRFC7643Binary(t *testing.T) {
+	t.Run("rejects a value that is not base64 on create, replace, and patch", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		user := core.User{UserName: "jsmith", X509Certificates: []core.X509Certificate{{Value: "!!!not base64"}}}
+		add := protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpAdd, Path: "x509Certificates", Value: json.RawMessage(`[{"value":"!!!not base64"}]`)}},
+		}
+
+		for _, test := range []struct {
+			method, path string
+			body         Option[*http.Request]
+		}{
+			{http.MethodPost, "/Users", WithRequestBodyAs(t, user)},
+			{http.MethodPut, "/Users/" + id, WithRequestBodyAs(t, user)},
+			{http.MethodPatch, "/Users/" + id, WithRequestBodyAs(t, add)},
+		} {
+			response := Response(t, srv, Request(t, srv, test.method, basePath+test.path,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				test.body,
+			))
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, test.method)
+			assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType, test.method)
+		}
+	})
+
+	t.Run("accepts a value with its trailing padding omitted", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		create(t, srv, &core.User{UserName: "bjensen", X509Certificates: []core.X509Certificate{{Value: "YQ"}}})
+	})
+}
+
 // RFC 7643 2.4 Multi-Valued Attributes
 func TestRFC7643MultiValuedAttributes(t *testing.T) {
 	t.Run("rejects more than one primary value on create and replace", func(t *testing.T) {

@@ -36,7 +36,7 @@ func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) 
 	}
 }
 
-// conforms rejects a missing "required" value or a value outside "canonicalValues" (RFC 7643, Section 7), or more than one "primary" (Section 2.4).
+// conforms rejects a missing "required" value or a value outside "canonicalValues" (RFC 7643, Section 7), more than one "primary" (Section 2.4), or a binary value that is not base64 (Section 2.3.6).
 func conforms(field field, candidate core.Object) error {
 	raw := field.value(candidate)
 	values := valuesOf(raw)
@@ -46,21 +46,35 @@ func conforms(field field, candidate core.Object) error {
 	if isPrimaryField(field) && count(values, true) > 1 {
 		return scimerrors.ErrInvalidValue(`"primary" may be true for at most one value`)
 	}
-	for _, v := range values {
-		s, ok := v.(string)
-		if ok && s != "" && len(field.CanonicalValues) > 0 && !value.Contains(field.Attribute, field.CanonicalValues, s) {
-			return scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
-		}
+	if field.Type == core.TypeBinary && !isEncoded(field, candidate) {
+		return scimerrors.ErrInvalidValue(strconv.Quote(field.Name) + " must be base64 encoded")
+	}
+	if !isCanonical(field, values) {
+		return scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
 	}
 	return nil
 }
 
 func isConstrained(field field) bool {
-	return field.Required || isPrimaryField(field) || len(field.CanonicalValues) > 0
+	return field.Required || isPrimaryField(field) || len(field.CanonicalValues) > 0 || field.Type == core.TypeBinary
 }
 
 func isPrimaryField(field field) bool {
 	return strings.EqualFold(field.Name, "primary")
+}
+
+func isCanonical(field field, values []any) bool {
+	return len(field.CanonicalValues) == 0 || !slices.ContainsFunc(values, func(v any) bool {
+		s, ok := v.(string)
+		return ok && s != "" && !value.Contains(field.Attribute, field.CanonicalValues, s)
+	})
+}
+
+func isEncoded(field field, candidate core.Object) bool {
+	return !slices.ContainsFunc(valuesOf(field.raw(candidate)), func(v any) bool {
+		_, ok := field.Coerce(v)
+		return !ok
+	})
 }
 
 func isMissing(attribute *core.Attribute, raw any) bool {
