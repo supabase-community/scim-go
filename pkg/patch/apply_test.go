@@ -1006,7 +1006,7 @@ func TestApplyValueFilterRecomputesLiteralPerElement(t *testing.T) {
 			),
 		),
 	}
-	const elementCount = 2000
+	const elementCount = 20000
 	elements := make([]map[string]any, elementCount)
 	for i := range elements {
 		elements[i] = map[string]any{}
@@ -1029,7 +1029,7 @@ func TestApplyValueFilterRecomputesLiteralPerElement(t *testing.T) {
 	small := run(base64.StdEncoding.EncodeToString([]byte("x")))
 	large := run(base64.StdEncoding.EncodeToString([]byte(strings.Repeat("x", 6000))))
 
-	assert.Less(t, large, 10*small, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
+	assert.Less(t, large, 5*small, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
 }
 
 func TestApplyAddWithoutAValueSubAttributeDoesNotScaleQuadratically(t *testing.T) {
