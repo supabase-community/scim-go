@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/supabase-community/scim-go/compare/v0.7.5...v0.8.0) (2026-09-30)
+
+
+### Features
+
+* **protocol:** hand the GET projection to the repository ([e4a7336](https://github.com/supabase-community/scim-go/commit/e4a73361cead0ca97aaf7995ffd855be2d9ac43a))
+
+
+### Bug Fixes
+
+* **patch:** reject a remove that carries a value ([4002c1d](https://github.com/supabase-community/scim-go/commit/4002c1d5543bbbcb5be717619a3b45521cf52746))
+
 ## [0.7.5](https://github.com/supabase-community/scim-go/compare/v0.7.4...v0.7.5) (2026-09-30)
 
 
