@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.5](https://github.com/supabase-community/scim-go/compare/v0.7.4...v0.7.5) (2026-09-30)
+
+
+### Bug Fixes
+
+* **server:** reject a binary value that is not base64 on write ([2333c41](https://github.com/supabase-community/scim-go/commit/2333c418479fb8377aae03eefbd643033c269baf))
+
 ## [0.7.4](https://github.com/supabase-community/scim-go/compare/v0.7.3...v0.7.4) (2026-09-30)
 
 
