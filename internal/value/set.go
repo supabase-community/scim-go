@@ -14,12 +14,16 @@ type Set struct {
 }
 
 func NewSet(attribute *core.Attribute, elements []any) *Set {
-	buckets := make(map[string][]any, len(elements))
+	s := &Set{attribute: attribute, buckets: make(map[string][]any, len(elements))}
+	s.Add(elements...)
+	return s
+}
+
+func (s *Set) Add(elements ...any) {
 	for _, element := range elements {
-		key := bucketKey(attribute, element)
-		buckets[key] = append(buckets[key], element)
+		key := bucketKey(s.attribute, element)
+		s.buckets[key] = append(s.buckets[key], element)
 	}
-	return &Set{attribute: attribute, buckets: buckets}
 }
 
 func (s *Set) Contains(want any) bool {

@@ -10,5 +10,5 @@ func Apply(resource core.Object, ops []Operation, schemas core.Schemas, opts ...
 	for _, opt := range opts {
 		opt(&limits)
 	}
-	return (&patcher{schemas: schemas, budget: limits.budget()}).run(resource, ops)
+	return (&patcher{schemas: schemas, budget: limits.budget(), indexes: indexCache{}}).run(resource, ops)
 }

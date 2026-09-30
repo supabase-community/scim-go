@@ -3,6 +3,7 @@ package patch_test
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -79,6 +80,23 @@ func BenchmarkApplyManyAdds(b *testing.B) {
 				benchApply(b, func() map[string]any { return map[string]any{} }, ops, c.schemas)
 			})
 		}
+	}
+}
+
+func BenchmarkApplyManyAddsToALargeGroup(b *testing.B) {
+	schemas := groupSchemas()
+	ops := make([]patch.Operation, 100)
+	for i := range ops {
+		ops[i] = operation(patch.OpAdd, "members", fmt.Sprintf(`{"value":"new-%d"}`, i))
+	}
+	for _, n := range []int{1000, 10000} {
+		members := make([]any, n)
+		for i := range members {
+			members[i] = map[string]any{"value": fmt.Sprintf("m-%d", i)}
+		}
+		b.Run(fmt.Sprintf("members=%d/ops=100", n), func(b *testing.B) {
+			benchApply(b, func() map[string]any { return map[string]any{"members": slices.Clone(members)} }, ops, schemas)
+		})
 	}
 }
 

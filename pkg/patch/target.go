@@ -2,7 +2,6 @@ package patch
 
 import (
 	"encoding/json"
-	"slices"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -18,6 +17,7 @@ type target struct {
 	path      filter.Path
 	filter    filterState
 	budget    *budget
+	indexes   indexCache
 }
 
 // RFC 7644 Section 3.5.2: the "valuePath" rule allows specific values of a complex multi-valued attribute to be selected.
@@ -53,6 +53,7 @@ func (t *target) write(kind Op, value any) error {
 	if promotes(t.key(), value) {
 		demote(t.elements(), written)
 	}
+	t.record(kind, value)
 	return nil
 }
 
@@ -90,7 +91,7 @@ func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) any {
 	if kind != OpAdd || !t.attr.MultiValued || !ok || t.isListAdd(kind) {
 		return shapedValue
 	}
-	return freshElements(t.attr, existing, shapedValue.([]any))
+	return newIndex(t.attr, existing).fresh(shapedValue.([]any))
 }
 
 // RFC 7644 Section 3.5.2: an operation that is not compatible with an attribute's mutability SHALL return an error.
@@ -119,6 +120,7 @@ func (t *target) subParent() *core.Attribute {
 }
 
 func (t *target) remove() error {
+	clear(t.indexes)
 	if t.filter.match != nil && t.path.SubAttribute == "" {
 		return t.drop()
 	}
@@ -253,21 +255,21 @@ func (t *target) isListAdd(kind Op) bool {
 }
 
 func (t *target) fresh(candidate any) []any {
-	return freshElements(t.attr, t.elements(), shaped(candidate, true).([]any))
+	return t.index(t.elements()).fresh(shaped(candidate, true).([]any))
 }
 
-// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
-func freshElements(attr *core.Attribute, existing, candidate []any) []any {
-	elements := slices.Clone(candidate)
-	if attr.SubAttribute("value") == nil {
-		stored := value.NewSet(attr, existing)
-		return slices.DeleteFunc(elements, stored.Contains)
+func (t *target) record(kind Op, added any) {
+	if !t.isListAdd(kind) || promotes(t.key(), added) {
+		clear(t.indexes)
+		return
 	}
-	stored := value.ByIdentity(attr, existing)
-	return slices.DeleteFunc(elements, func(addition any) bool {
-		_, exists := stored[value.Identity(attr, asMember(addition))]
-		return exists
-	})
+	elements := t.elements()
+	stored := len(elements) - len(added.([]any))
+	t.index(elements[:stored]).add(elements[stored:])
+}
+
+func (t *target) index(elements []any) *index {
+	return t.indexes.lookup(t.extension, t.path.Name, t.attr, elements)
 }
 
 func (t *target) written(elements []any, kind Op) func(int) bool {

@@ -807,6 +807,7 @@ func TestApplyDedupInvalidatedByAReplaceOfTheWholeAttribute(t *testing.T) {
 	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
 
 	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpAdd, "emails", `[{"value":"c@x"}]`),
 		operation(patch.OpReplace, "emails", `[{"value":"b@x"}]`),
 		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
 	))
@@ -819,6 +820,7 @@ func TestApplyDedupInvalidatedByARemoveOfTheWholeAttribute(t *testing.T) {
 	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
 
 	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpAdd, "emails", `[{"value":"c@x"}]`),
 		operation(patch.OpRemove, "emails", ""),
 		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
 	))
@@ -831,11 +833,12 @@ func TestApplyDedupInvalidatedByAValueFilteredRemove(t *testing.T) {
 	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}, map[string]any{"value": "b@x"}}}
 
 	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpAdd, "emails", `[{"value":"c@x"}]`),
 		operation(patch.OpRemove, `emails[value eq "a@x"]`, ""),
 		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
 	))
 
-	assert.ElementsMatch(t, []any{map[string]any{"value": "b@x"}, map[string]any{"value": "a@x"}}, item["emails"])
+	assert.ElementsMatch(t, []any{map[string]any{"value": "b@x"}, map[string]any{"value": "c@x"}, map[string]any{"value": "a@x"}}, item["emails"])
 }
 
 // RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
@@ -890,6 +893,48 @@ func TestApplyDedupAfterDemoteOfAnExistingElement(t *testing.T) {
 		map[string]any{"streetAddress": "1", "primary": false},
 		map[string]any{"streetAddress": "2", "primary": true},
 	}, item["addresses"])
+}
+
+func TestApplyDedupAfterARemoveOfASubAttribute(t *testing.T) {
+	item := map[string]any{}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpAdd, "emails", `[{"type":"work","value":"a@x"}]`),
+		operation(patch.OpRemove, "emails.type", ""),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.Equal(t, []any{map[string]any{"value": "a@x"}}, item["emails"])
+}
+
+func TestApplyDedupPerCaseVariantKey(t *testing.T) {
+	item := map[string]any{
+		"emails": []any{map[string]any{"value": "a@x"}},
+		"Emails": []any{map[string]any{"value": "b@x"}, map[string]any{"value": "c@x"}},
+	}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpAdd, "emails", `[{"value":"d@x"}]`),
+		operation(patch.OpAdd, "Emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.Equal(t, []any{map[string]any{"value": "b@x"}, map[string]any{"value": "c@x"}, map[string]any{"value": "a@x"}}, item["Emails"])
+}
+
+func TestApplyDedupPerExtension(t *testing.T) {
+	schemas := append(userSchemas(), (&core.Schema{ID: core.SchemaEnterpriseUser}).With(
+		core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("value", core.TypeString),
+		),
+	))
+	item := map[string]any{string(core.SchemaEnterpriseUser): map[string]any{"emails": []any{map[string]any{"value": "b@x"}}}}
+
+	require.NoError(t, apply(item, schemas,
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+		operation(patch.OpAdd, string(core.SchemaEnterpriseUser)+":emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.Equal(t, []any{map[string]any{"value": "b@x"}, map[string]any{"value": "a@x"}}, extension(item)["emails"])
 }
 
 func TestApplyMaxWriteBytes(t *testing.T) {
