@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/supabase-community/scim-go/compare/v0.7.1...v0.7.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* **core:** accept unpadded base64 for binary attributes ([20914a2](https://github.com/supabase-community/scim-go/commit/20914a20f63b4ca495fbd48702d64b789ba7f3ed))
+
 ## [0.7.1](https://github.com/supabase-community/scim-go/compare/v0.7.0...v0.7.1) (2026-09-30)
 
 
