@@ -46,8 +46,10 @@ func Contains[E any](attribute *core.Attribute, elements []E, want any) bool {
 
 // Match reports whether got op want holds for two folded values, per RFC 7644, Section 3.4.2.2.
 func Match(op filter.Operator, got, want any) bool {
-	switch op {
-	case filter.OpContains, filter.OpStartsWith, filter.OpEndsWith:
+	switch {
+	case want == nil:
+		return matchNull(op, got)
+	case op == filter.OpContains, op == filter.OpStartsWith, op == filter.OpEndsWith:
 		return substring(op, got, want)
 	}
 	order, ok := Compare(got, want)
@@ -91,6 +93,17 @@ func rank(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// RFC 7643 Section 2.5: unassigned attributes and the null value SHALL be considered equivalent.
+func matchNull(op filter.Operator, got any) bool {
+	switch op {
+	case filter.OpEquals:
+		return IsUnassigned(got)
+	case filter.OpNotEquals:
+		return !IsUnassigned(got)
+	}
+	return false
 }
 
 func substring(op filter.Operator, got, want any) bool {

@@ -81,7 +81,7 @@ func (e *evaluator) reader(attribute *protocol.Attribute) (func(row any) any, er
 // RFC 7644 3.4.2.2 - a multi-valued attribute matches if any value does, for every operator including ne.
 func anyMatch(raw any, pred func(any) bool) bool {
 	list, ok := raw.([]any)
-	if !ok {
+	if !ok || len(list) == 0 {
 		return pred(raw)
 	}
 	return slices.ContainsFunc(list, pred)

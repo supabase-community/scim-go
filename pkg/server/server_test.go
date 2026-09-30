@@ -1183,6 +1183,32 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "bob", list.Resources[0].UserName)
 	})
 
+	// RFC 7643 Section 2.5: unassigned attributes and the null value SHALL be considered equivalent.
+	t.Run("filters with eq null and ne null as unassigned and assigned", func(t *testing.T) {
+		srv := newTestServer(t)
+		active := true
+		create(t, srv, &core.User{UserName: "alice", NickName: "al", Active: &active, Emails: []core.Email{{Value: "alice@example.com"}}})
+		create(t, srv, &core.User{UserName: "bob"})
+
+		for filter, want := range map[string]string{
+			`nickName eq null`:     "bob",
+			`nickName ne null`:     "alice",
+			`active eq null`:       "bob",
+			`emails eq null`:       "bob",
+			`emails ne null`:       "alice",
+			`emails.value eq null`: "bob",
+		} {
+			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
+			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
+			response := Response(t, srv, request)
+
+			require.Equal(t, http.StatusOK, response.StatusCode, filter)
+			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+			require.Equal(t, 1, list.TotalResults, filter)
+			assert.Equal(t, want, list.Resources[0].UserName, filter)
+		}
+	})
+
 	t.Run("filters with the pr operator for presence", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})

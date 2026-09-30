@@ -46,6 +46,27 @@ func TestCompare(t *testing.T) {
 	})
 }
 
+func TestMatch(t *testing.T) {
+	// RFC 7643 Section 2.5: unassigned attributes and the null value SHALL be considered equivalent.
+	t.Run("eq null matches an unassigned value and ne null matches an assigned one", func(t *testing.T) {
+		for _, got := range []any{nil, "", []any{}} {
+			assert.True(t, value.Match(filter.OpEquals, got, nil), "%#v", got)
+			assert.False(t, value.Match(filter.OpNotEquals, got, nil), "%#v", got)
+		}
+		for _, got := range []any{"a", false, []any{"a"}} {
+			assert.False(t, value.Match(filter.OpEquals, got, nil), "%#v", got)
+			assert.True(t, value.Match(filter.OpNotEquals, got, nil), "%#v", got)
+		}
+	})
+
+	t.Run("other operators never match null", func(t *testing.T) {
+		for _, op := range []filter.Operator{filter.OpContains, filter.OpGreaterThan, filter.OpLessThanEquals} {
+			assert.False(t, value.Match(op, nil, nil), op)
+			assert.False(t, value.Match(op, "a", nil), op)
+		}
+	})
+}
+
 func TestKey(t *testing.T) {
 	key, ok := value.Key(core.Object{"Value": "a@b.com"})
 	assert.True(t, ok)

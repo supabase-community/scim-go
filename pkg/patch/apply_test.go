@@ -545,6 +545,20 @@ func TestApplyValuePathRemoveNoMatchIsANoOp(t *testing.T) {
 	assert.Len(t, item["emails"].([]any), 1)
 }
 
+// RFC 7643 Section 2.5: unassigned attributes and the null value SHALL be considered equivalent.
+func TestApplyValuePathNullFilter(t *testing.T) {
+	item := map[string]any{"emails": []any{
+		map[string]any{"type": "work", "value": "w@x"},
+		map[string]any{"type": "home"},
+	}}
+
+	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[value eq null]`, "")))
+
+	emails := item["emails"].([]any)
+	require.Len(t, emails, 1)
+	assert.Equal(t, "work", emails[0].(map[string]any)["type"])
+}
+
 func TestApplyValuePathNumericFilterNativeInt(t *testing.T) {
 	item := map[string]any{"scores": []any{
 		map[string]any{"kind": "a", "n": 10},
