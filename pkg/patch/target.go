@@ -259,7 +259,7 @@ func (t *target) fresh(candidate any) []any {
 }
 
 func (t *target) record(kind Op, added any) {
-	if !t.isListAdd(kind) || promotes(t.key(), added) {
+	if !t.isListAdd(kind) || promotes(t.key(), added) && !keyedByValue(t.attr) {
 		clear(t.indexes)
 		return
 	}

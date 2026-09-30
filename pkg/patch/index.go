@@ -19,10 +19,10 @@ type indexCache map[string]*index
 
 func newIndex(attr *core.Attribute, existing []any) *index {
 	ix := &index{attr: attr}
-	if attr.SubAttribute("value") == nil {
-		ix.set = value.NewSet(attr, nil)
-	} else {
+	if keyedByValue(attr) {
 		ix.ids = make(map[string]bool, len(existing))
+	} else {
+		ix.set = value.NewSet(attr, nil)
 	}
 	ix.add(existing)
 	return ix
@@ -60,4 +60,8 @@ func (c indexCache) lookup(extension, name string, attr *core.Attribute, element
 	}
 	c[key] = newIndex(attr, elements)
 	return c[key]
+}
+
+func keyedByValue(attr *core.Attribute) bool {
+	return attr.SubAttribute("value") != nil
 }

@@ -907,6 +907,32 @@ func TestApplyDedupAfterARemoveOfASubAttribute(t *testing.T) {
 	assert.Equal(t, []any{map[string]any{"value": "a@x"}}, item["emails"])
 }
 
+func TestApplyDedupAfterDemoteOfAnElementWithAValue(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+				core.NewAttribute("value", core.TypeString),
+				core.NewAttribute("primary", core.TypeBoolean),
+			),
+		),
+	}
+	item := map[string]any{}
+
+	require.NoError(t, apply(item, schemas,
+		operation(patch.OpAdd, "emails", `[{"value":"a@x","primary":true}]`),
+		operation(patch.OpAdd, "emails", `[{"value":"b@x","primary":true}]`),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+		operation(patch.OpAdd, "emails", `[{"value":"b@x","primary":true}]`),
+		operation(patch.OpAdd, "emails", `[{"value":"c@x"}]`),
+	))
+
+	assert.Equal(t, []any{
+		map[string]any{"value": "a@x", "primary": false},
+		map[string]any{"value": "b@x", "primary": true},
+		map[string]any{"value": "c@x"},
+	}, item["emails"])
+}
+
 func TestApplyDedupPerCaseVariantKey(t *testing.T) {
 	item := map[string]any{
 		"emails": []any{map[string]any{"value": "a@x"}},
