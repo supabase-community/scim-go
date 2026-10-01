@@ -80,7 +80,7 @@ func (s *service[T]) Replace(ctx context.Context, item T) (T, error) {
 // Patch applies cmd.Request to the current resource as one unit, per RFC 7644 Section 3.5.2.
 func (s *service[T]) Patch(ctx context.Context, cmd PatchCommand) (Patched[T], error) {
 	if found, ok := s.delta(cmd); ok {
-		meta, _, err := s.patcher.PatchAttribute(ctx, cmd.ID, cmd.Version, AttributeDelta{Attribute: found.attribute, Added: found.added, Removed: found.removed})
+		meta, _, err := s.patcher.PatchAttribute(ctx, cmd.ID, cmd.Version, found)
 		return Patched[T]{Meta: meta}, err
 	}
 	patched, err := s.patchWithRetry(ctx, cmd)
@@ -90,9 +90,9 @@ func (s *service[T]) Patch(ctx context.Context, cmd PatchCommand) (Patched[T], e
 	return Patched[T]{Resource: patched, Meta: patched.Common().Meta}, nil
 }
 
-func (s *service[T]) delta(cmd PatchCommand) (delta, bool) {
+func (s *service[T]) delta(cmd PatchCommand) (AttributeDelta, bool) {
 	if s.patcher == nil || !cmd.NoContent {
-		return delta{}, false
+		return AttributeDelta{}, false
 	}
 	return eligibleDelta(s.schemas, cmd.Request.Operations)
 }

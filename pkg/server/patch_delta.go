@@ -10,35 +10,29 @@ import (
 	"github.com/supabase-community/scim-go/pkg/patch"
 )
 
-type delta struct {
-	attribute string
-	added     []core.Object
-	removed   []string
-}
-
 // eligibleDelta extracts an add/remove-only delta, the only PATCH shape RFC 7643 Section 4.2 immutability can't block.
-func eligibleDelta(schemas core.Schemas, ops []patch.Operation) (delta, bool) {
-	var d delta
+func eligibleDelta(schemas core.Schemas, ops []patch.Operation) (AttributeDelta, bool) {
+	var d AttributeDelta
 	for _, op := range ops {
 		if !accumulateOp(&d, op) {
-			return delta{}, false
+			return AttributeDelta{}, false
 		}
 	}
 	attribute, ok := resolveDeltaAttribute(schemas, d)
-	if !ok || !everyAddedHasValue(d.added) || !validAddedElements(attribute, d.added) || identityOverlap(attribute, d) {
-		return delta{}, false
+	if !ok || !everyAddedHasValue(d.Added) || !validAddedElements(attribute, d.Added) || identityOverlap(attribute, d) {
+		return AttributeDelta{}, false
 	}
 	return d, true
 }
 
-func accumulateOp(d *delta, op patch.Operation) bool {
+func accumulateOp(d *AttributeDelta, op patch.Operation) bool {
 	shape, ok := parseAttributeOp(op)
 	if !ok {
 		return false
 	}
-	if d.attribute == "" {
-		d.attribute = shape.attribute
-	} else if !strings.EqualFold(d.attribute, shape.attribute) {
+	if d.Attribute == "" {
+		d.Attribute = shape.attribute
+	} else if !strings.EqualFold(d.Attribute, shape.attribute) {
 		return false
 	}
 	if !shape.add {
@@ -46,22 +40,22 @@ func accumulateOp(d *delta, op patch.Operation) bool {
 		if !ok {
 			return false
 		}
-		d.removed = append(d.removed, literal)
+		d.Removed = append(d.Removed, literal)
 		return true
 	}
 	added, ok := decodeAdded(op.Value)
 	if !ok {
 		return false
 	}
-	d.added = append(d.added, added...)
+	d.Added = append(d.Added, added...)
 	return true
 }
 
-func resolveDeltaAttribute(schemas core.Schemas, d delta) (*core.Attribute, bool) {
-	if d.attribute == "" {
+func resolveDeltaAttribute(schemas core.Schemas, d AttributeDelta) (*core.Attribute, bool) {
+	if d.Attribute == "" {
 		return nil, false
 	}
-	attribute, ok := schemas.Resolve("", d.attribute, "")
+	attribute, ok := schemas.Resolve("", d.Attribute, "")
 	if !ok || !attribute.MultiValued || attribute.SubAttribute("value") == nil {
 		return nil, false
 	}
@@ -142,12 +136,12 @@ func hasPrimarySubAttribute(attribute *core.Attribute) bool {
 	return slices.ContainsFunc(attribute.SubAttributes, isPrimaryField)
 }
 
-func identityOverlap(attribute *core.Attribute, d delta) bool {
-	removed := make(map[string]bool, len(d.removed))
-	for _, literal := range d.removed {
+func identityOverlap(attribute *core.Attribute, d AttributeDelta) bool {
+	removed := make(map[string]bool, len(d.Removed))
+	for _, literal := range d.Removed {
 		removed[value.Identity(attribute, core.Object{"value": literal})] = true
 	}
-	for _, object := range d.added {
+	for _, object := range d.Added {
 		if removed[value.Identity(attribute, object)] {
 			return true
 		}
