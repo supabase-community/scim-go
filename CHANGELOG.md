@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.9.0](https://github.com/supabase-community/scim-go/compare/v0.8.4...v0.9.0) (2026-10-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **protocol:** keep only the RFC 7644 count and operation limits in Limits
+
+### Features
+
+* **server:** add a member-delta fast path for Group PATCH that skips Get ([5d52858](https://github.com/supabase-community/scim-go/commit/5d5285856c98794f5523479d3b9472aa958d6e43))
+* **server:** retry a versionless PATCH that loses a race ([6137028](https://github.com/supabase-community/scim-go/commit/6137028b32636fb25601e9ecb0542ebdaef8d23e))
+* **server:** return 204 No Content for a Group member-only PATCH ([d75b9f6](https://github.com/supabase-community/scim-go/commit/d75b9f6cbc051382f3a6ca9b89ccf66789ef2f96))
+
+
+### Bug Fixes
+
+* **server:** decode the PATCH body before reading the resource ([3fbf888](https://github.com/supabase-community/scim-go/commit/3fbf8884b3db38b8281df3f5d95358f41e52e4ab))
+* **server:** drop patch from the 409 detail a lost PUT race also returns ([9a3ceec](https://github.com/supabase-community/scim-go/commit/9a3ceecb89d2353114009939c0c0500fc5746c90))
+* **server:** forward the real stampSchemas error on PATCH instead of a generic one ([676a9e2](https://github.com/supabase-community/scim-go/commit/676a9e24cddb0a7bb8435500a2e2fc2087eccb23))
+* **server:** stop retrying at once when the PATCH request is already canceled ([a5bf220](https://github.com/supabase-community/scim-go/commit/a5bf2205cdc75bce36adcdec93cd2b17d4ca08d7))
+
+
+### Code Refactoring
+
+* **protocol:** keep only the RFC 7644 count and operation limits in Limits ([02426cf](https://github.com/supabase-community/scim-go/commit/02426cf9b5f931dc146f627a80042caffb5b9810))
+
 ## [0.8.4](https://github.com/supabase-community/scim-go/compare/v0.8.3...v0.8.4) (2026-10-01)
 
 
