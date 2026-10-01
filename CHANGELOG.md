@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.1](https://github.com/supabase-community/scim-go/compare/v0.8.0...v0.8.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **patch:** drop a non-RFC comment and an unused parameter ([d679919](https://github.com/supabase-community/scim-go/commit/d679919bf0329e40795d02ce2fe5041dee462a6d))
+* **patch:** return mutability when a filtered remove empties a required attribute ([272f2dc](https://github.com/supabase-community/scim-go/commit/272f2dc098897ba8fea3c757d81dd498799110f6))
+* **patch:** return mutability when removing a required attribute ([f8fe193](https://github.com/supabase-community/scim-go/commit/f8fe193fd5a159d870fd2cba6ab9d7b3bd8828b4))
+
+
+### Performance Improvements
+
+* **patch:** avoid rescanning the whole list to demote primary values ([114cf2b](https://github.com/supabase-community/scim-go/commit/114cf2b40670722d3e60278c960a473aecc8e56f))
+
 ## [0.8.0](https://github.com/supabase-community/scim-go/compare/v0.7.5...v0.8.0) (2026-09-30)
 
 
