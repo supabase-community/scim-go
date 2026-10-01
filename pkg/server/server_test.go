@@ -2898,7 +2898,7 @@ func TestRFC7644GroupMemberPatch(t *testing.T) {
 	})
 }
 
-func TestRFC7644ConcurrentVersionlessPUTsCannotBothPassImmutabilityValidation(t *testing.T) {
+func TestRFC7644ConcurrentVersionlessPUTsCannotBothSetAnImmutableValue(t *testing.T) {
 	gate := newRaceGate(2)
 	srv := newTestServer(t, withUpdateGate(gate))
 	id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2920,13 +2920,12 @@ func TestRFC7644ConcurrentVersionlessPUTsCannotBothPassImmutabilityValidation(t 
 
 	statuses := []int{responses[0].StatusCode, responses[1].StatusCode}
 	slices.Sort(statuses)
-	require.Equal(t, []int{http.StatusOK, http.StatusBadRequest}, statuses)
+	require.Equal(t, []int{http.StatusOK, http.StatusConflict}, statuses)
 
-	winner, loser := "a", responses[1]
+	winner := "a"
 	if responses[0].StatusCode != http.StatusOK {
-		winner, loser = "b", responses[0]
+		winner = "b"
 	}
-	assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, loser).ScimType)
 	final := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))))
 	assert.Equal(t, winner, final.EnterpriseUser.EmployeeNumber)
 }
@@ -2952,13 +2951,13 @@ func TestRFC7644ReplaceAndPatchGetTheResourceOnce(t *testing.T) {
 			WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
 		))
 		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, 1, repository.gets)
+		assert.Equal(t, 1, repository.reads)
 	})
 
 	t.Run("PATCH", func(t *testing.T) {
 		srv, repository, id := newCountingUser(t)
 		patchUser(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "userType", Value: json.RawMessage(`"employee"`)})
-		assert.Equal(t, 1, repository.gets)
+		assert.Equal(t, 1, repository.reads)
 	})
 }
 
@@ -4258,7 +4257,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 					WithContentType(protocol.MediaType),
 					WithRequestBody([]byte(`{"userName":"bjensen"}`)),
 				)
-				assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
+				assert.Contains(t, []int{http.StatusOK, http.StatusConflict}, Response(t, srv, request).StatusCode)
 			})
 			wg.Go(func() {
 				request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
@@ -4269,7 +4268,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 						Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
 					}),
 				)
-				assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
+				assert.Contains(t, []int{http.StatusOK, http.StatusConflict}, Response(t, srv, request).StatusCode)
 			})
 		}
 		wg.Wait()
@@ -4279,7 +4278,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, 9, list.TotalResults)
 	})
 
-	t.Run("keeps both of two concurrent versionless patches", func(t *testing.T) {
+	t.Run("answers 409 to the loser of two concurrent versionless patches and keeps the winner", func(t *testing.T) {
 		srv := newTestServer(t, withUpdateGate(newRaceGate(2)))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
@@ -4290,10 +4289,32 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		}
 		wg.Wait()
 
-		assert.Equal(t, []int{http.StatusOK, http.StatusOK}, statuses)
+		assert.ElementsMatch(t, []int{http.StatusOK, http.StatusConflict}, statuses)
 		user := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))))
-		assert.True(t, *user.Active)
-		assert.Equal(t, "Tour Guide", user.Title)
+		if statuses[0] == http.StatusOK {
+			assert.True(t, *user.Active)
+			assert.Empty(t, user.Title)
+		} else {
+			assert.Nil(t, user.Active)
+			assert.Equal(t, "Tour Guide", user.Title)
+		}
+	})
+
+	// RFC 7644 Section 3.14: the repository rejects a write whose If-Match version went stale after the read.
+	t.Run("answers 412 to the loser of two concurrent patches with the same If-Match", func(t *testing.T) {
+		srv := newTestServer(t, withUpdateGate(newRaceGate(2)))
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+		statuses := make([]int, 2)
+		var wg sync.WaitGroup
+		for i, op := range []patch.Operation{activate, {Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}} {
+			wg.Go(func() {
+				statuses[i] = Response(t, srv, patchRequest(t, srv, id, op, WithHeader("If-Match", etag))).StatusCode
+			})
+		}
+		wg.Wait()
+
+		assert.ElementsMatch(t, []int{http.StatusOK, http.StatusPreconditionFailed}, statuses)
 	})
 
 	t.Run("retrieves a resource only if it changed with If-None-Match", func(t *testing.T) {

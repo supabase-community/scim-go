@@ -117,7 +117,7 @@ type projectingRepository struct {
 
 type countingRepository struct {
 	server.Repository[*core.User]
-	gets int
+	reads int
 }
 
 func userSchemas() core.Schemas {
@@ -186,11 +186,11 @@ func withUpdateGate(gate *raceGate) testOption {
 	return func(s *testServer) { s.updateGate = gate }
 }
 
-func (r gatedRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
+func (r gatedRepository) Update(ctx context.Context, user *core.User) (*core.User, error) {
 	if r.gate != nil {
 		r.gate.arrive()
 	}
-	return r.Repository.Update(ctx, id, version, change)
+	return r.Repository.Update(ctx, user)
 }
 
 func (r inspectingRepository) Create(ctx context.Context, w *widget) (*widget, error) {
@@ -200,9 +200,9 @@ func (r inspectingRepository) Create(ctx context.Context, w *widget) (*widget, e
 	return r.Repository.Create(ctx, w)
 }
 
-func (r *projectingRepository) Get(ctx context.Context, id string) (*core.User, error) {
+func (r *projectingRepository) Read(ctx context.Context, id string) (*core.User, error) {
 	r.record(ctx)
-	return r.Repository.Get(ctx, id)
+	return r.Repository.Read(ctx, id)
 }
 
 func (r *projectingRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
@@ -210,23 +210,18 @@ func (r *projectingRepository) List(ctx context.Context, query *protocol.SearchR
 	return r.Repository.List(ctx, query)
 }
 
-func (r *projectingRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
+func (r *projectingRepository) Update(ctx context.Context, user *core.User) (*core.User, error) {
 	r.record(ctx)
-	return r.Repository.Update(ctx, id, version, change)
+	return r.Repository.Update(ctx, user)
 }
 
 func (r *projectingRepository) record(ctx context.Context) {
 	r.returned = append(r.returned, protocol.ProjectionFrom(ctx).Returns("emails"))
 }
 
-func (r *countingRepository) Get(ctx context.Context, id string) (*core.User, error) {
-	r.gets++
-	return r.Repository.Get(ctx, id)
-}
-
-func (r *countingRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
-	r.gets++
-	return r.Repository.Update(ctx, id, version, change)
+func (r *countingRepository) Read(ctx context.Context, id string) (*core.User, error) {
+	r.reads++
+	return r.Repository.Read(ctx, id)
 }
 
 func validate(ctx context.Context, token string) (context.Context, error) {

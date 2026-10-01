@@ -13,13 +13,13 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Repository stores resources and enforces uniqueness atomically, per RFC 7643 Section 7.
+// Repository stores resources, enforces uniqueness atomically per RFC 7643 Section 7, and rejects a write whose item.Meta.Version is stale per RFC 7644 Section 3.14.
 type Repository[T core.Resource] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
-	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
-	Update(ctx context.Context, id, version string, change func(current T) (T, error)) (T, error)
-	Delete(ctx context.Context, id, version string) error
+	Read(ctx context.Context, id string) (T, error)
+	Update(ctx context.Context, item T) (T, error)
+	Delete(ctx context.Context, item T) error
 }
 
 type repository[T core.Resource] struct {
@@ -52,7 +52,7 @@ func NewRepository[T core.Resource](endpoint string, schemas core.Schemas) Repos
 	}
 }
 
-func (r *repository[T]) Get(_ context.Context, id string) (item T, err error) {
+func (r *repository[T]) Read(_ context.Context, id string) (item T, err error) {
 	err = r.withLock(func() error {
 		i, err := r.locate(id, "")
 		if err != nil {
@@ -113,13 +113,11 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 	return item, nil
 }
 
-func (r *repository[T]) Update(_ context.Context, id, version string, change func(current T) (T, error)) (item T, err error) {
-	err = r.withLock(func() error {
-		i, err := r.locate(id, version)
+func (r *repository[T]) Update(_ context.Context, item T) (T, error) {
+	err := r.withLock(func() error {
+		common := item.Common()
+		i, err := r.locate(common.ID, common.Meta.Version)
 		if err != nil {
-			return err
-		}
-		if item, err = change(r.rows[i].item); err != nil {
 			return err
 		}
 		return r.store(i, item)
@@ -131,9 +129,10 @@ func (r *repository[T]) Update(_ context.Context, id, version string, change fun
 	return item, nil
 }
 
-func (r *repository[T]) Delete(_ context.Context, id, version string) error {
+func (r *repository[T]) Delete(_ context.Context, item T) error {
 	return r.withLock(func() error {
-		i, err := r.locate(id, version)
+		id := item.Common().ID
+		i, err := r.locate(id, item.Common().Meta.Version)
 		if err != nil {
 			return err
 		}

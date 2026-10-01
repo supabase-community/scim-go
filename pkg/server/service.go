@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
+	"net/http"
 	"reflect"
 
 	"github.com/supabase-community/scim-go/internal/value"
@@ -36,7 +37,7 @@ func NewService[T core.Resource](repo Repository[T], schemas core.Schemas, limit
 }
 
 func (s *service[T]) Get(ctx context.Context, id string) (T, error) {
-	return s.repo.Get(ctx, id)
+	return s.repo.Read(ctx, id)
 }
 
 func (s *service[T]) List(ctx context.Context, query *protocol.SearchRequest) ([]T, int, error) {
@@ -60,26 +61,55 @@ func (s *service[T]) Create(ctx context.Context, document core.Object) (T, error
 }
 
 func (s *service[T]) Replace(ctx context.Context, req *protocol.ReplaceRequest) (T, error) {
-	return s.repo.Update(ctx, req.ID, req.Version, func(existing T) (T, error) {
+	return s.write(ctx, req.ID, req.Version, func(existing T) (T, error) {
 		return s.replaced(ctx, existing, req)
 	})
 }
 
 func (s *service[T]) Delete(ctx context.Context, req *protocol.DeleteRequest) error {
-	return s.repo.Delete(ctx, req.ID, req.Version)
+	current, err := s.current(ctx, req.ID, req.Version)
+	if err != nil {
+		return err
+	}
+	return conflict(req.Version, s.repo.Delete(ctx, current))
 }
 
 // Patch applies req to the current resource as one unit, per RFC 7644 Section 3.5.2.
 func (s *service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, error) {
-	var current T
-	patched, err := s.repo.Update(ctx, req.ID, req.Version, func(existing T) (T, error) {
-		current = existing
+	return s.write(ctx, req.ID, req.Version, func(existing T) (T, error) {
 		return s.patched(ctx, existing, req)
 	})
+}
+
+func (s *service[T]) write(ctx context.Context, id, version string, change func(existing T) (T, error)) (T, error) {
+	var zero T
+	current, err := s.current(ctx, id, version)
+	if err != nil {
+		return zero, err
+	}
+	next, err := change(current)
 	if errors.Is(err, errUnchanged) {
 		return current, nil
 	}
-	return patched, err
+	if err != nil {
+		return zero, err
+	}
+	next.Common().ID, next.Common().Meta = current.Common().ID, current.Common().Meta
+	saved, err := s.repo.Update(ctx, next)
+	return saved, conflict(version, err)
+}
+
+// RFC 7644 Section 3.14: a stale If-Match fails before any work; the repository rechecks the version on write.
+func (s *service[T]) current(ctx context.Context, id, version string) (T, error) {
+	current, err := s.repo.Read(ctx, id)
+	if err != nil {
+		return current, err
+	}
+	if version != "" && current.Common().Meta.Version != version {
+		var zero T
+		return zero, scimerrors.ErrPreconditionFailed("resource has changed on the server")
+	}
+	return current, nil
 }
 
 func (s *service[T]) patched(ctx context.Context, existing T, req *protocol.PatchRequest) (T, error) {
@@ -160,6 +190,13 @@ func schemaURIsToAny(uris []core.SchemaURI) []any {
 		ids[i] = string(uri)
 	}
 	return ids
+}
+
+func conflict(version string, err error) error {
+	if version == "" && errors.Is(err, scimerrors.ErrPreconditionFailed("")) {
+		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
+	}
+	return err
 }
 
 func unchanged(before, after core.Object) bool {

@@ -98,15 +98,18 @@ func BenchmarkGroupWrites(b *testing.B) {
 
 type timedGroupRepository struct {
 	server.Repository[*core.Group]
+	read time.Time
 	held time.Duration
 }
 
-func (r *timedGroupRepository) Update(ctx context.Context, id, version string, change func(*core.Group) (*core.Group, error)) (*core.Group, error) {
-	return r.Repository.Update(ctx, id, version, func(current *core.Group) (*core.Group, error) {
-		start := time.Now()
-		defer func() { r.held += time.Since(start) }()
-		return change(current)
-	})
+func (r *timedGroupRepository) Read(ctx context.Context, id string) (*core.Group, error) {
+	defer func() { r.read = time.Now() }()
+	return r.Repository.Read(ctx, id)
+}
+
+func (r *timedGroupRepository) Update(ctx context.Context, group *core.Group) (*core.Group, error) {
+	r.held += time.Since(r.read)
+	return r.Repository.Update(ctx, group)
 }
 
 func patchBody(b *testing.B, op patch.Op, path, value string) []byte {

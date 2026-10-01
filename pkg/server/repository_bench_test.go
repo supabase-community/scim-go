@@ -34,14 +34,16 @@ func benchRepository(b *testing.B, size int) {
 			_, err := repository.Create(ctx, &core.User{UserName: "new" + strconv.Itoa(created)})
 			return err
 		}},
-		{"Get", func() error {
-			_, err := repository.Get(ctx, seeded.ID)
+		{"Read", func() error {
+			_, err := repository.Read(ctx, seeded.ID)
 			return err
 		}},
 		{"Update", func() error {
-			_, err := repository.Update(ctx, seeded.ID, "", func(current *core.User) (*core.User, error) {
-				return current, nil
-			})
+			current, err := repository.Read(ctx, seeded.ID)
+			if err != nil {
+				return err
+			}
+			_, err = repository.Update(ctx, current)
 			return err
 		}},
 		{"List", func() error {
