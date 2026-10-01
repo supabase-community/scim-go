@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/supabase-community/scim-go/compare/v0.8.1...v0.8.2) (2026-10-01)
+
+
+### Bug Fixes
+
+* **internal/value:** normalize -0.0 inside nested bucketKey maps/slices ([99ff49b](https://github.com/supabase-community/scim-go/commit/99ff49b3f89324193021421d4d9e294ee6ba4cbd))
+
 ## [0.8.1](https://github.com/supabase-community/scim-go/compare/v0.8.0...v0.8.1) (2026-10-01)
 
 
