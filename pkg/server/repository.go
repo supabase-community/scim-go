@@ -27,7 +27,13 @@ type Repository[T core.Resource] interface {
 
 // AttributePatcher applies an add/remove delta to one attribute without the full resource; MaxResourceBytes is not enforced on this path.
 type AttributePatcher[T core.Resource] interface {
-	PatchAttribute(ctx context.Context, id, version, attribute string, added []core.Object, removed []string) (meta core.Meta, changed bool, err error)
+	PatchAttribute(ctx context.Context, id, version string, delta AttributeDelta) (meta core.Meta, changed bool, err error)
+}
+
+type AttributeDelta struct {
+	Attribute string
+	Added     []core.Object
+	Removed   []string
 }
 
 type repository[T core.Resource] struct {
@@ -145,8 +151,7 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 	return item, nil
 }
 
-//nolint:revive // matches the AttributePatcher[T] interface agreed with repo authors; not grouping params into a struct post hoc.
-func (r *repository[T]) PatchAttribute(_ context.Context, id, version, attribute string, added []core.Object, removed []string) (meta core.Meta, changed bool, err error) {
+func (r *repository[T]) PatchAttribute(_ context.Context, id, version string, delta AttributeDelta) (meta core.Meta, changed bool, err error) {
 	err = r.withLock(func() error {
 		i, err := r.locate(id, version)
 		if err != nil {
@@ -154,16 +159,16 @@ func (r *repository[T]) PatchAttribute(_ context.Context, id, version, attribute
 		}
 		existing := r.rows[i]
 		meta = existing.item.Common().Meta
-		attr, ok := r.schemas.Resolve("", attribute, "")
+		attr, ok := r.schemas.Resolve("", delta.Attribute, "")
 		if !ok {
-			return scimerrors.ErrInvalidPath(strconv.Quote(attribute) + " is unknown")
+			return scimerrors.ErrInvalidPath(strconv.Quote(delta.Attribute) + " is unknown")
 		}
-		elements, _ := existing.object.Get(attribute).([]any)
-		next, didChange := applyMemberDelta(attr, elements, added, removed)
+		elements, _ := existing.object.Get(delta.Attribute).([]any)
+		next, didChange := applyMemberDelta(attr, elements, delta.Added, delta.Removed)
 		if !didChange {
 			return nil
 		}
-		replaced, newMeta, err := r.replaceAttribute(existing, attribute, next)
+		replaced, newMeta, err := r.replaceAttribute(existing, delta.Attribute, next)
 		if err != nil {
 			return err
 		}

@@ -186,7 +186,7 @@ func (c *controller[T]) patchWithDelta(w http.ResponseWriter, r *http.Request, p
 		}
 		return c.applyPatch(w, r, projection, decodedPatch[T]{existing, req})
 	}
-	meta, _, err := c.patcher.PatchAttribute(r.Context(), r.PathValue("id"), c.ifMatch(r), found.attribute, found.added, found.removed)
+	meta, _, err := c.patcher.PatchAttribute(r.Context(), r.PathValue("id"), c.ifMatch(r), AttributeDelta{Attribute: found.attribute, Added: found.added, Removed: found.removed})
 	if err != nil {
 		return protocol.SendError(w, c.lostRace(r, err))
 	}

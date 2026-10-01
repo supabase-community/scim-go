@@ -138,7 +138,7 @@ type stubDeltaRepository struct {
 	server.Repository[*core.Group]
 }
 
-func (stubDeltaRepository) PatchAttribute(context.Context, string, string, string, []core.Object, []string) (core.Meta, bool, error) {
+func (stubDeltaRepository) PatchAttribute(context.Context, string, string, server.AttributeDelta) (core.Meta, bool, error) {
 	return core.Meta{Version: `W/"stub"`}, true, nil
 }
 
@@ -257,9 +257,9 @@ func (r *countingGroupDeltaRepository) Get(ctx context.Context, id string) (*cor
 
 func (r *countingGroupDeltaRepository) Gets() int { return r.gets }
 
-func (r *countingGroupDeltaRepository) PatchAttribute(ctx context.Context, id, version, attribute string, added []core.Object, removed []string) (core.Meta, bool, error) {
+func (r *countingGroupDeltaRepository) PatchAttribute(ctx context.Context, id, version string, delta server.AttributeDelta) (core.Meta, bool, error) {
 	patcher := r.Repository.(server.AttributePatcher[*core.Group])
-	return patcher.PatchAttribute(ctx, id, version, attribute, added, removed)
+	return patcher.PatchAttribute(ctx, id, version, delta)
 }
 
 func validate(ctx context.Context, token string) (context.Context, error) {
