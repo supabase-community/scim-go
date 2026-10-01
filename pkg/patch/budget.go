@@ -6,7 +6,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-const defaultMaxWriteBytes = 8 << 20
+const DefaultMaxWriteBytes = 8 << 20
 
 type Option func(*limits)
 
@@ -33,7 +33,7 @@ func MaxWriteBytes(n int) Option {
 }
 
 func defaultLimits() limits {
-	return limits{maxWriteBytes: defaultMaxWriteBytes}
+	return limits{maxWriteBytes: DefaultMaxWriteBytes}
 }
 
 func (l limits) budget() *budget {
