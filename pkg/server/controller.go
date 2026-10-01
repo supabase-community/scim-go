@@ -21,11 +21,11 @@ type Controller[T core.Resource] interface {
 type controller[T core.Resource] struct {
 	schemas core.Schemas
 	service Service[T]
-	limits  protocol.Limits
+	limits  Limits
 	config  *core.ServiceProviderConfig
 }
 
-func NewController[T core.Resource](service Service[T], schemas core.Schemas, limits protocol.Limits, config *core.ServiceProviderConfig) Controller[T] {
+func NewController[T core.Resource](service Service[T], schemas core.Schemas, limits Limits, config *core.ServiceProviderConfig) Controller[T] {
 	return &controller[T]{
 		schemas: schemas,
 		service: service,

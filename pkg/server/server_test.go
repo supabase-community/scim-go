@@ -2913,8 +2913,8 @@ func TestRFC7644GroupMemberDeltaFastPath(t *testing.T) {
 		group, err := repo.Create(context.Background(), &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})
 		require.NoError(t, err)
 
-		service := server.NewService[*core.Group](repo, groupSchemas(), protocol.DefaultLimits)
-		controller := server.NewController(service, groupSchemas(), protocol.DefaultLimits, fullServiceProviderConfig())
+		service := server.NewService[*core.Group](repo, groupSchemas(), server.DefaultLimits)
+		controller := server.NewController(service, groupSchemas(), server.DefaultLimits, fullServiceProviderConfig())
 
 		body, err := json.Marshal(protocol.PatchRequest{
 			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
@@ -4452,7 +4452,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		_, err = server.NewService[*core.User](repo, userSchemas(), protocol.DefaultLimits).Patch(ctx, server.PatchCommand{
+		_, err = server.NewService[*core.User](repo, userSchemas(), server.DefaultLimits).Patch(ctx, server.PatchCommand{
 			ID:      user.ID,
 			Request: &protocol.PatchRequest{Operations: []patch.Operation{activate}},
 		})

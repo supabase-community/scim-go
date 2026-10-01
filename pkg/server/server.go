@@ -20,7 +20,7 @@ type Server struct {
 	resourceTypes []*core.ResourceType
 	schemas       []*core.Schema
 	config        *core.ServiceProviderConfig
-	limits        protocol.Limits
+	limits        Limits
 	maxBodySize   int64
 	registrations []Registration
 	errorHandler  func(*http.Request, error)
@@ -140,8 +140,8 @@ func (s *Server) schemaByID(w http.ResponseWriter, r *http.Request) error {
 }
 
 // limitsFrom derives the page-size cap from the advertised filter.maxResults, per RFC 7643, Section 5.
-func limitsFrom(config *core.ServiceProviderConfig) protocol.Limits {
-	limits := protocol.DefaultLimits
+func limitsFrom(config *core.ServiceProviderConfig) Limits {
+	limits := DefaultLimits
 	if config.Filter.MaxResults > 0 {
 		limits.MaxCount = config.Filter.MaxResults
 	}

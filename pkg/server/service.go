@@ -32,7 +32,7 @@ type Service[T core.Resource] interface {
 type service[T core.Resource] struct {
 	repo       Repository[T]
 	schemas    core.Schemas
-	limits     protocol.Limits
+	limits     Limits
 	validators []Validator[T]
 	patcher    AttributePatcher[T]
 }
@@ -49,7 +49,7 @@ type Patched[T core.Resource] struct {
 	Meta     core.Meta
 }
 
-func NewService[T core.Resource](repo Repository[T], schemas core.Schemas, limits protocol.Limits, validators ...Validator[T]) Service[T] {
+func NewService[T core.Resource](repo Repository[T], schemas core.Schemas, limits Limits, validators ...Validator[T]) Service[T] {
 	return &service[T]{repo: repo, schemas: schemas, limits: limits, validators: validators}
 }
 
@@ -196,7 +196,7 @@ func schemaURIsToAny(uris []core.SchemaURI) []any {
 	return ids
 }
 
-func checkSize[T core.Resource](limits protocol.Limits, resource T) error {
+func checkSize[T core.Resource](limits Limits, resource T) error {
 	encoded, err := json.Marshal(resource)
 	if err != nil {
 		return scimerrors.ErrInternal("could not encode the resource")
@@ -204,7 +204,7 @@ func checkSize[T core.Resource](limits protocol.Limits, resource T) error {
 	return checkEncodedSize(limits, encoded)
 }
 
-func checkEncodedSize(limits protocol.Limits, encoded []byte) error {
+func checkEncodedSize(limits Limits, encoded []byte) error {
 	if limits.MaxResourceBytes > 0 && len(encoded) > limits.MaxResourceBytes {
 		return scimerrors.ErrTooLarge("the resource would exceed " + strconv.Itoa(limits.MaxResourceBytes) + " bytes")
 	}
