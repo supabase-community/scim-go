@@ -90,13 +90,14 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	if err := c.stampSchemas(resource); err != nil {
+	after, err := c.stampSchemas(resource)
+	if err != nil {
 		return protocol.SendError(w, err)
 	}
 	if err := c.checkSize(resource); err != nil {
 		return protocol.SendError(w, err)
 	}
-	created, err := c.service.Create(r.Context(), resource)
+	created, err := c.service.Create(withCandidate(r.Context(), after), resource)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -119,7 +120,8 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	resource.Common().Meta = core.Meta{Version: c.version(r, existing)}
-	if err := c.stampSchemas(resource); err != nil {
+	after, err := c.stampSchemas(resource)
+	if err != nil {
 		return protocol.SendError(w, err)
 	}
 	if err := c.checkSize(resource); err != nil {
@@ -129,7 +131,7 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, scimerrors.ErrInternal("could not encode the resource"))
 	}
-	replaced, err := c.service.Replace(withExisting(r.Context(), before), resource)
+	replaced, err := c.service.Replace(withCandidate(withExisting(r.Context(), before), after), resource)
 	if err != nil {
 		return protocol.SendError(w, c.lostRace(r, err))
 	}
@@ -168,11 +170,10 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
-	after, err := core.NewObject(patched)
+	after, err := c.stampSchemas(patched)
 	if err != nil {
 		return protocol.SendError(w, scimerrors.ErrInternal("could not encode the resource"))
 	}
-	c.stampSchemasWith(patched, after)
 	replaced, err := c.persist(r, existing, patched, after)
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -266,16 +267,11 @@ func (c *controller[T]) ifMatch(r *http.Request) string {
 }
 
 // stampSchemas lists the base schema plus every extension with assigned data, per RFC 7643, Section 3.
-func (c *controller[T]) stampSchemas(resource T) error {
+func (c *controller[T]) stampSchemas(resource T) (core.Object, error) {
 	object, err := core.NewObject(resource)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	c.stampSchemasWith(resource, object)
-	return nil
-}
-
-func (c *controller[T]) stampSchemasWith(resource T, object core.Object) {
 	uris := []core.SchemaURI{c.schemas.Base().ID}
 	for _, extension := range c.schemas.Extensions() {
 		if !value.IsUnassigned(object.Get(string(extension.ID))) {
@@ -284,6 +280,7 @@ func (c *controller[T]) stampSchemasWith(resource T, object core.Object) {
 	}
 	resource.Common().Schemas = uris
 	object.Set("schemas", schemaURIsToAny(uris))
+	return object, nil
 }
 
 func schemaURIsToAny(uris []core.SchemaURI) []any {

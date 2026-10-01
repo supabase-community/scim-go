@@ -83,6 +83,17 @@ func BenchmarkServerPatchGroupMembers(b *testing.B) {
 	}
 }
 
+func BenchmarkServerPutGroupMembers(b *testing.B) {
+	handler := newTestHandler(b)
+	group := benchGroup(10000, "seed")
+	location := serve(b, handler, http.MethodPost, basePath+"/Groups", benchBody(b, group), http.StatusCreated).Header().Get("Location")
+	body := benchBody(b, group)
+	b.ReportAllocs()
+	for b.Loop() {
+		serve(b, handler, http.MethodPut, location, body, http.StatusOK)
+	}
+}
+
 func benchGroup(n int, prefix string) *core.Group {
 	members := make([]core.Member, n)
 	for i := range members {
