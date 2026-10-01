@@ -90,12 +90,9 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	after, err := c.stampSchemas(resource)
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
-	if err := c.checkSize(resource); err != nil {
-		return protocol.SendError(w, err)
+	after, ok, err := c.prepare(w, resource)
+	if !ok {
+		return err
 	}
 	created, err := c.service.Create(withCandidate(r.Context(), after), resource)
 	if err != nil {
@@ -120,12 +117,9 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	resource.Common().Meta = core.Meta{Version: c.version(r, existing)}
-	after, err := c.stampSchemas(resource)
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
-	if err := c.checkSize(resource); err != nil {
-		return protocol.SendError(w, err)
+	after, ok, err := c.prepare(w, resource)
+	if !ok {
+		return err
 	}
 	before, err := core.NewObject(existing)
 	if err != nil {
@@ -234,6 +228,18 @@ func (c *controller[T]) persist(r *http.Request, existing, patched T, after core
 	}
 	replaced, err := c.service.Replace(withCandidate(withExisting(r.Context(), before), after), patched)
 	return replaced, c.lostRace(r, err)
+}
+
+// prepare stamps schemas into resource and rejects it once it crosses MaxResourceBytes, per RFC 7643, Section 3.
+func (c *controller[T]) prepare(w http.ResponseWriter, resource T) (after core.Object, ok bool, err error) {
+	after, err = c.stampSchemas(resource)
+	if err != nil {
+		return after, false, protocol.SendError(w, err)
+	}
+	if err := c.checkSize(resource); err != nil {
+		return after, false, protocol.SendError(w, err)
+	}
+	return after, true, nil
 }
 
 func (c *controller[T]) checkSize(resource T) error {
