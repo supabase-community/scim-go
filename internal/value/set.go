@@ -33,18 +33,43 @@ func (s *Set) Contains(want any) bool {
 
 func bucketKey(attribute *core.Attribute, v any) string {
 	switch value := v.(type) {
-	case map[string]any:
-		raw, _ := json.Marshal(value)
+	case map[string]any, []any:
+		raw, _ := json.Marshal(normalizeZeros(value))
 		return string(raw)
 	case time.Time:
 		return value.UTC().Format(time.RFC3339Nano)
 	case float64:
-		if value == 0 {
-			value = 0
-		}
-		raw, _ := json.Marshal(value)
+		raw, _ := json.Marshal(normalizeZero(value))
 		return string(raw)
 	}
 	raw, _ := json.Marshal(Fold(attribute, v))
 	return string(raw)
+}
+
+func normalizeZero(f float64) float64 {
+	if f == 0 {
+		return 0
+	}
+	return f
+}
+
+func normalizeZeros(v any) any {
+	switch value := v.(type) {
+	case map[string]any:
+		normalized := make(map[string]any, len(value))
+		for key, element := range value {
+			normalized[key] = normalizeZeros(element)
+		}
+		return normalized
+	case []any:
+		normalized := make([]any, len(value))
+		for i, element := range value {
+			normalized[i] = normalizeZeros(element)
+		}
+		return normalized
+	case float64:
+		return normalizeZero(value)
+	default:
+		return value
+	}
 }

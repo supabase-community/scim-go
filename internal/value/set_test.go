@@ -22,6 +22,7 @@ func TestSetContainsAgreesWithContains(t *testing.T) {
 		{"a complex element's string sub-attribute case, unfolded like DeepEqual", addressesLike(), []any{map[string]any{"postalCode": "aI"}}, map[string]any{"postalCode": "AI"}},
 		{"a scalar string element, folded", core.NewAttribute("schemas", core.TypeString).AsMultiValued(), []any{"Foo"}, "foo"},
 		{"a float64 zero and negative zero", core.NewAttribute("n", core.TypeDecimal).AsMultiValued(), []any{0.0}, math.Copysign(0, -1)},
+		{"a complex element's float64 zero and negative zero sub-attribute", measurementsLike(), []any{map[string]any{"n": 0.0}}, map[string]any{"n": math.Copysign(0, -1)}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -45,5 +46,11 @@ func TestSetContainsAgreesWithContains(t *testing.T) {
 func addressesLike() *core.Attribute {
 	return core.NewAttribute("addresses", core.TypeComplex).AsMultiValued().With(
 		core.NewAttribute("postalCode", core.TypeString),
+	)
+}
+
+func measurementsLike() *core.Attribute {
+	return core.NewAttribute("measurements", core.TypeComplex).AsMultiValued().With(
+		core.NewAttribute("n", core.TypeDecimal),
 	)
 }
