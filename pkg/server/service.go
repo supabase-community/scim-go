@@ -72,7 +72,7 @@ func (s *service[T]) validate(ctx context.Context, item T) error {
 }
 
 func (s *service[T]) multiValuedDelta() (MultiValuedDeltaPatcher[T], bool) {
-	if !s.allowDelta || len(s.validators) > 1 {
+	if !s.allowDelta {
 		return nil, false
 	}
 	patcher, ok := s.repo.(MultiValuedDeltaPatcher[T])
