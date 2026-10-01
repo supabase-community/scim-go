@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -124,7 +125,11 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err := c.checkSize(resource); err != nil {
 		return protocol.SendError(w, err)
 	}
-	replaced, err := c.service.Replace(r.Context(), resource)
+	before, err := core.NewObject(existing)
+	if err != nil {
+		return protocol.SendError(w, scimerrors.ErrInternal("could not encode the resource"))
+	}
+	replaced, err := c.service.Replace(withExisting(r.Context(), before), resource)
 	if err != nil {
 		return protocol.SendError(w, c.lostRace(r, err))
 	}
@@ -214,14 +219,18 @@ func (c *controller[T]) persist(r *http.Request, existing, patched T) (T, error)
 	if err != nil {
 		return existing, scimerrors.ErrInternal("could not encode the resource")
 	}
-	same, err := unchanged(existing, encoded)
+	before, err := core.NewObject(existing)
+	if err != nil {
+		return existing, scimerrors.ErrInternal("could not encode the resource")
+	}
+	same, err := unchanged(before, encoded)
 	if err != nil || same {
 		return existing, err
 	}
 	if err := c.checkEncodedSize(encoded); err != nil {
 		return existing, err
 	}
-	replaced, err := c.service.Replace(r.Context(), patched)
+	replaced, err := c.service.Replace(withExisting(r.Context(), before), patched)
 	return replaced, c.lostRace(r, err)
 }
 
@@ -271,15 +280,12 @@ func (c *controller[T]) stampSchemas(resource T) error {
 	return nil
 }
 
-func unchanged(existing any, encodedPatched []byte) (bool, error) {
-	before, err := core.NewObject(existing)
-	if err != nil {
-		return false, err
-	}
+func unchanged(before core.Object, encodedPatched []byte) (bool, error) {
 	after, err := core.DecodeObject(encodedPatched)
 	if err != nil {
 		return false, err
 	}
+	before = maps.Clone(before)
 	before.Remove("meta")
 	after.Remove("meta")
 	return reflect.DeepEqual(before, after), nil

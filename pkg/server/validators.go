@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -15,7 +14,7 @@ import (
 )
 
 // characteristics enforces RFC 7643 Section 2.2, except uniqueness.
-func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) Validator[T] {
+func characteristics[T core.Resource](schemas core.Schemas) Validator[T] {
 	fields := newFields(schemas)
 	constrained := slices.DeleteFunc(slices.Clone(fields), func(field field) bool { return !isConstrained(field) })
 	return func(ctx context.Context, candidate T) error {
@@ -28,11 +27,7 @@ func characteristics[T core.Resource](schemas core.Schemas, repo Repository[T]) 
 				return err
 			}
 		}
-		before, err := previous(ctx, repo, candidate)
-		if err != nil {
-			return err
-		}
-		return immutable(fields, before, after)
+		return immutable(fields, previous(ctx, candidate), after)
 	}
 }
 
@@ -94,19 +89,23 @@ func count(values []any, target any) int {
 	return n
 }
 
-func previous[T core.Resource](ctx context.Context, repo Repository[T], candidate T) (core.Object, error) {
-	id := candidate.Common().ID
-	if id == "" {
-		return core.Object{}, nil
+func previous[T core.Resource](ctx context.Context, candidate T) core.Object {
+	if candidate.Common().ID == "" {
+		return core.Object{}
 	}
-	existing, err := repo.Get(ctx, id)
-	if errors.Is(err, scimerrors.ErrNotFound("")) {
-		return core.Object{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return core.NewObject(existing)
+	before, _ := existingFrom(ctx)
+	return before
+}
+
+type existingKey struct{}
+
+func withExisting(ctx context.Context, existing core.Object) context.Context {
+	return context.WithValue(ctx, existingKey{}, existing)
+}
+
+func existingFrom(ctx context.Context) (core.Object, bool) {
+	existing, ok := ctx.Value(existingKey{}).(core.Object)
+	return existing, ok
 }
 
 // immutable rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7644, Section 3.5.1.

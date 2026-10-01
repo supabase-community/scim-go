@@ -2807,6 +2807,37 @@ func TestRFC7644ConcurrentVersionlessPUTsCannotBothPassImmutabilityValidation(t 
 	assert.Equal(t, winner, final.EnterpriseUser.EmployeeNumber)
 }
 
+// RFC 7644 3.5.1 Replacing with PUT, 3.5.2 Modifying with PATCH
+func TestRFC7644ReplaceAndPatchGetTheResourceOnce(t *testing.T) {
+	newCountingUser := func(t *testing.T) (*httptest.Server, *countingRepository, string) {
+		t.Helper()
+		schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
+		repository := &countingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas)}
+		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
+		))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		return srv, repository, id
+	}
+
+	t.Run("PUT", func(t *testing.T) {
+		srv, repository, id := newCountingUser(t)
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
+		))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, 1, repository.gets)
+	})
+
+	t.Run("PATCH", func(t *testing.T) {
+		srv, repository, id := newCountingUser(t)
+		patchUser(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "userType", Value: json.RawMessage(`"employee"`)})
+		assert.Equal(t, 1, repository.gets)
+	})
+}
+
 // RFC 7644 3.5.2 Modifying with PATCH
 func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	t.Run("patches a resource and returns the updated field with an ETag", func(t *testing.T) {

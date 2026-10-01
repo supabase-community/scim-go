@@ -114,6 +114,11 @@ type projectingRepository struct {
 	returned []bool
 }
 
+type countingRepository struct {
+	server.Repository[*core.User]
+	gets int
+}
+
 func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 	t.Helper()
 
@@ -196,6 +201,11 @@ func (r *projectingRepository) List(ctx context.Context, query *protocol.SearchR
 
 func (r *projectingRepository) record(ctx context.Context) {
 	r.returned = append(r.returned, protocol.ProjectionFrom(ctx).Returns("emails"))
+}
+
+func (r *countingRepository) Get(ctx context.Context, id string) (*core.User, error) {
+	r.gets++
+	return r.Repository.Get(ctx, id)
 }
 
 func validate(ctx context.Context, token string) (context.Context, error) {
