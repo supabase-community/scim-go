@@ -120,21 +120,6 @@ type countingRepository struct {
 	gets int
 }
 
-type countingRepo interface {
-	server.Repository[*core.Group]
-	Gets() int
-}
-
-type countingGroupRepository struct {
-	server.Repository[*core.Group]
-	gets int
-}
-
-type countingGroupDeltaRepository struct {
-	server.Repository[*core.Group]
-	gets int
-}
-
 func userSchemas() core.Schemas {
 	return core.Schemas{core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...)}
 }
@@ -242,35 +227,6 @@ func (r *countingRepository) Get(ctx context.Context, id string) (*core.User, er
 func (r *countingRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
 	r.gets++
 	return r.Repository.Update(ctx, id, version, change)
-}
-
-func (r *countingGroupRepository) Get(ctx context.Context, id string) (*core.Group, error) {
-	r.gets++
-	return r.Repository.Get(ctx, id)
-}
-
-func (r *countingGroupRepository) Update(ctx context.Context, id, version string, change func(*core.Group) (*core.Group, error)) (*core.Group, error) {
-	r.gets++
-	return r.Repository.Update(ctx, id, version, change)
-}
-
-func (r *countingGroupRepository) Gets() int { return r.gets }
-
-func (r *countingGroupDeltaRepository) Get(ctx context.Context, id string) (*core.Group, error) {
-	r.gets++
-	return r.Repository.Get(ctx, id)
-}
-
-func (r *countingGroupDeltaRepository) Update(ctx context.Context, id, version string, change func(*core.Group) (*core.Group, error)) (*core.Group, error) {
-	r.gets++
-	return r.Repository.Update(ctx, id, version, change)
-}
-
-func (r *countingGroupDeltaRepository) Gets() int { return r.gets }
-
-func (r *countingGroupDeltaRepository) PatchAttribute(ctx context.Context, id, version string, delta server.AttributeDelta) (core.Meta, bool, error) {
-	patcher := r.Repository.(server.AttributePatcher[*core.Group])
-	return patcher.PatchAttribute(ctx, id, version, delta)
 }
 
 func validate(ctx context.Context, token string) (context.Context, error) {

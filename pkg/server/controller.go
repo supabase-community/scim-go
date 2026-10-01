@@ -127,10 +127,9 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	}
 	noContent := noContentEligible(r, c.schemas, req.Operations)
 	result, err := c.service.Patch(r.Context(), PatchCommand{
-		ID:        r.PathValue("id"),
-		Version:   c.ifMatch(r),
-		Request:   req,
-		NoContent: noContent,
+		ID:      r.PathValue("id"),
+		Version: c.ifMatch(r),
+		Request: req,
 	})
 	if err != nil {
 		return protocol.SendError(w, err)

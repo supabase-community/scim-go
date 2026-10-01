@@ -31,7 +31,6 @@ type service[T core.Resource] struct {
 	schemas    core.Schemas
 	limits     Limits
 	validators []Validator[T]
-	patcher    AttributePatcher[T]
 }
 
 type ReplaceCommand struct {
@@ -41,10 +40,9 @@ type ReplaceCommand struct {
 }
 
 type PatchCommand struct {
-	ID        string
-	Version   string
-	Request   *protocol.PatchRequest
-	NoContent bool
+	ID      string
+	Version string
+	Request *protocol.PatchRequest
 }
 
 type Patched[T core.Resource] struct {
@@ -88,22 +86,11 @@ func (s *service[T]) Delete(ctx context.Context, id, version string) error {
 
 // Patch applies cmd.Request to the current resource as one unit, per RFC 7644 Section 3.5.2.
 func (s *service[T]) Patch(ctx context.Context, cmd PatchCommand) (Patched[T], error) {
-	if found, ok := s.delta(cmd); ok {
-		meta, _, err := s.patcher.PatchAttribute(ctx, cmd.ID, cmd.Version, found)
-		return Patched[T]{Meta: meta}, err
-	}
 	patched, err := s.patch(ctx, cmd)
 	if err != nil {
 		return Patched[T]{}, err
 	}
 	return Patched[T]{Resource: patched, Meta: patched.Common().Meta}, nil
-}
-
-func (s *service[T]) delta(cmd PatchCommand) (AttributeDelta, bool) {
-	if s.patcher == nil || !cmd.NoContent {
-		return AttributeDelta{}, false
-	}
-	return eligibleDelta(s.schemas, cmd.Request.Operations)
 }
 
 func (s *service[T]) patch(ctx context.Context, cmd PatchCommand) (T, error) {

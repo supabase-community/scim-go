@@ -1,7 +1,6 @@
 package server_test
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -2776,10 +2775,10 @@ func TestRFC7644GroupMemberMutabilityIsLinearInMemberCount(t *testing.T) {
 	assert.Less(t, float64(large)/float64(small), 8.0, "immutable member validation must not be quadratic in duplicate values")
 }
 
-func TestRFC7644GroupMemberDeltaFastPath(t *testing.T) {
-	newGroupServer := func(t *testing.T, repo server.Repository[*core.Group]) *httptest.Server {
+func TestRFC7644GroupMemberPatch(t *testing.T) {
+	newGroupServer := func(t *testing.T) *httptest.Server {
 		t.Helper()
-		return Server(t, newGroupHandler(t, repo))
+		return Server(t, newGroupHandler(t, server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())))
 	}
 	createGroup := func(t *testing.T, srv *httptest.Server) core.Group {
 		t.Helper()
@@ -2791,226 +2790,111 @@ func TestRFC7644GroupMemberDeltaFastPath(t *testing.T) {
 		require.Equal(t, http.StatusCreated, created.StatusCode)
 		return ReadBodyAs[core.Group](t, created)
 	}
-
-	t.Run("skips Get for an eligible member add, but not for a non-member patch", func(t *testing.T) {
-		repository := &countingGroupDeltaRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}
-		srv := newGroupServer(t, repository)
-		group := createGroup(t, srv)
-
-		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
+	patchMembers := func(t *testing.T, srv *httptest.Server, id string, ops []patch.Operation, options ...Option[*http.Request]) *http.Response {
+		t.Helper()
+		options = append([]Option[*http.Request]{
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
-			}),
-		))
-		require.Equal(t, http.StatusNoContent, response.StatusCode)
-		assert.Equal(t, 0, repository.gets)
+			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: ops}),
+		}, options...)
+		return Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id, options...))
+	}
 
-		response = Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"renamed"`)}},
-			}),
-		))
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, 1, repository.gets)
-	})
+	for _, scenario := range []struct {
+		name            string
+		ops             []patch.Operation
+		expectedMembers []core.Member
+	}{
+		{
+			"add",
+			[]patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
+			[]core.Member{{Value: "u-1", Type: "User"}, {Value: "u-2", Type: "User"}},
+		},
+		{
+			"add with a capitalized key",
+			[]patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"Value":"u-2","Type":"User"}]`)}},
+			[]core.Member{{Value: "u-1", Type: "User"}, {Value: "u-2", Type: "User"}},
+		},
+		{
+			"add with an unknown sub-attribute",
+			[]patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User","display":"x"}]`)}},
+			[]core.Member{{Value: "u-1", Type: "User"}, {Value: "u-2", Type: "User"}},
+		},
+		{
+			"add of an already-present value is a no-op",
+			[]patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"User"}]`)}},
+			[]core.Member{{Value: "u-1", Type: "User"}},
+		},
+		{
+			"remove of a value that is not present",
+			[]patch.Operation{{Op: patch.OpRemove, Path: `members[value eq "does-not-exist"]`}},
+			[]core.Member{{Value: "u-1", Type: "User"}},
+		},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			srv := newGroupServer(t)
+			group := createGroup(t, srv)
 
-	t.Run("behaves identically whether or not the repo supports the fast path", func(t *testing.T) {
-		for _, scenario := range []struct {
-			name            string
-			ops             []patch.Operation
-			expectedMembers []core.Member
-		}{
-			{
-				"add",
-				[]patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
-				[]core.Member{{Value: "u-1", Type: "User"}, {Value: "u-2", Type: "User"}},
-			},
-			{
-				"add with a capitalized key",
-				[]patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"Value":"u-2","Type":"User"}]`)}},
-				[]core.Member{{Value: "u-1", Type: "User"}, {Value: "u-2", Type: "User"}},
-			},
-			{
-				"add with an unknown sub-attribute",
-				[]patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User","display":"x"}]`)}},
-				[]core.Member{{Value: "u-1", Type: "User"}, {Value: "u-2", Type: "User"}},
-			},
-			{
-				"add of an already-present value is a no-op",
-				[]patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"User"}]`)}},
-				[]core.Member{{Value: "u-1", Type: "User"}},
-			},
-			{
-				"remove of a value that is not present",
-				[]patch.Operation{{Op: patch.OpRemove, Path: `members[value eq "does-not-exist"]`}},
-				[]core.Member{{Value: "u-1", Type: "User"}},
-			},
-		} {
-			t.Run(scenario.name, func(t *testing.T) {
-				for _, test := range []struct {
-					name     string
-					repo     countingRepo
-					wantGets int
-				}{
-					{"capability present", &countingGroupDeltaRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}, 0},
-					{"capability absent", &countingGroupRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}, 1},
-				} {
-					t.Run(test.name, func(t *testing.T) {
-						srv := newGroupServer(t, test.repo)
-						group := createGroup(t, srv)
+			response := patchMembers(t, srv, group.ID, scenario.ops)
+			require.Equal(t, http.StatusNoContent, response.StatusCode)
+			assert.NotEmpty(t, response.Header.Get("ETag"))
 
-						response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
-							WithBearerToken(validToken),
-							WithContentType(protocol.MediaType),
-							WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: scenario.ops}),
-						))
-						require.Equal(t, http.StatusNoContent, response.StatusCode)
-						assert.NotEmpty(t, response.Header.Get("ETag"))
-						assert.Equal(t, test.wantGets, test.repo.Gets())
-
-						fetched := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Groups/"+group.ID, WithBearerToken(validToken)))
-						patched := ReadBodyAs[core.Group](t, fetched)
-						assert.ElementsMatch(t, scenario.expectedMembers, patched.Members)
-					})
-				}
-			})
-		}
-	})
-
-	t.Run("a valid eligible body on an unknown id is a 404, whether or not the repo supports the fast path", func(t *testing.T) {
-		for _, test := range []struct {
-			name string
-			repo server.Repository[*core.Group]
-		}{
-			{"capability present", server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())},
-			{"capability absent", &countingGroupRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}},
-		} {
-			t.Run(test.name, func(t *testing.T) {
-				srv := newGroupServer(t, test.repo)
-
-				response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/does-not-exist",
-					WithBearerToken(validToken),
-					WithContentType(protocol.MediaType),
-					WithRequestBodyAs(t, protocol.PatchRequest{
-						Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-						Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
-					}),
-				))
-
-				require.Equal(t, http.StatusNotFound, response.StatusCode)
-			})
-		}
-	})
-
-	t.Run("a manually constructed service never uses the fast path, even with a capable repo", func(t *testing.T) {
-		repo := &countingGroupDeltaRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}
-		group, err := repo.Create(context.Background(), &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})
-		require.NoError(t, err)
-
-		service := server.NewService[*core.Group](repo, groupSchemas(), server.DefaultLimits)
-		controller := server.NewController(service, groupSchemas(), server.DefaultLimits, fullServiceProviderConfig())
-
-		body, err := json.Marshal(protocol.PatchRequest{
-			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-			Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
+			fetched := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Groups/"+group.ID, WithBearerToken(validToken)))
+			patched := ReadBodyAs[core.Group](t, fetched)
+			assert.ElementsMatch(t, scenario.expectedMembers, patched.Members)
 		})
-		require.NoError(t, err)
+	}
 
-		r := httptest.NewRequest(http.MethodPatch, "/Groups/"+group.ID, strings.NewReader(string(body)))
-		r.SetPathValue("id", group.ID)
-		r.Header.Set("Content-Type", protocol.MediaType)
-		w := httptest.NewRecorder()
+	t.Run("a valid member add on an unknown id is a 404", func(t *testing.T) {
+		srv := newGroupServer(t)
 
-		require.NoError(t, controller.Patch(w, r))
-		assert.Equal(t, http.StatusNoContent, w.Code)
-		assert.Equal(t, 1, repo.gets)
+		response := patchMembers(t, srv, "does-not-exist", []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}})
+
+		require.Equal(t, http.StatusNotFound, response.StatusCode)
 	})
 
-	// RFC 7643 Section 4.2: the normal path's immutability rejection must still apply to a same-identity remove+add.
-	t.Run("falls back to the slow path, and the usual mutability rejection still applies, when the same identity is both added and removed", func(t *testing.T) {
-		repository := &countingGroupDeltaRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}
-		srv := newGroupServer(t, repository)
+	// RFC 7643 Section 4.2: an immutable member cannot be removed and re-added with a different type.
+	t.Run("rejects removing and re-adding the same identity with a different type", func(t *testing.T) {
+		srv := newGroupServer(t)
 		group := createGroup(t, srv)
 
-		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{
-					{Op: patch.OpRemove, Path: `members[value eq "u-1"]`},
-					{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"Group"}]`)},
-				},
-			}),
-		))
+		response := patchMembers(t, srv, group.ID, []patch.Operation{
+			{Op: patch.OpRemove, Path: `members[value eq "u-1"]`},
+			{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"Group"}]`)},
+		})
 
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
-		assert.Equal(t, 1, repository.gets)
 	})
 
-	// RFC 7643 Section 2.2: an added member with a non-canonical "type" is rejected, same as the slow path.
-	t.Run("falls back to the slow path when an added member's type is not canonical", func(t *testing.T) {
-		repository := &countingGroupDeltaRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}
-		srv := newGroupServer(t, repository)
+	// RFC 7643 Section 2.2: an added member's "type" must be a canonical value.
+	t.Run("rejects an added member whose type is not canonical", func(t *testing.T) {
+		srv := newGroupServer(t)
 		group := createGroup(t, srv)
 
-		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"Bogus"}]`)}},
-			}),
-		))
+		response := patchMembers(t, srv, group.ID, []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"Bogus"}]`)}})
 
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
-		assert.Equal(t, 1, repository.gets)
 	})
 
 	// RFC 7643 Section 2.3: an added member whose "value" is not a string is a 4xx, not a raw decode error.
-	t.Run("falls back to the slow path when an added member's value is the wrong type", func(t *testing.T) {
-		repository := &countingGroupDeltaRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}
-		srv := newGroupServer(t, repository)
+	t.Run("rejects an added member whose value is the wrong type", func(t *testing.T) {
+		srv := newGroupServer(t)
 		group := createGroup(t, srv)
 
-		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":123}]`)}},
-			}),
-		))
+		response := patchMembers(t, srv, group.ID, []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":123}]`)}})
 
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
-		assert.Equal(t, 1, repository.gets)
 	})
 
-	t.Run("a stale If-Match is rejected the same way on the fast path, without calling Get", func(t *testing.T) {
-		repository := &countingGroupDeltaRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}
-		srv := newGroupServer(t, repository)
+	t.Run("rejects a member add with a stale If-Match", func(t *testing.T) {
+		srv := newGroupServer(t)
 		group := createGroup(t, srv)
 
-		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithHeader("If-Match", `W/"stale"`),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
-			}),
-		))
+		response := patchMembers(t, srv, group.ID, []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}}, WithHeader("If-Match", `W/"stale"`))
 
 		require.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
-		assert.Equal(t, 0, repository.gets)
 	})
 }
 
@@ -3506,7 +3390,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
 	})
 
-	t.Run("a malformed body on an unknown id is a 400, not a 404, when the repo supports the member-delta fast path", func(t *testing.T) {
+	t.Run("a malformed body on an unknown id is a 400, not a 404", func(t *testing.T) {
 		srv := newTestServer(t)
 
 		request := Request(t, srv, http.MethodPatch, basePath+"/Groups/does-not-exist",

@@ -76,7 +76,6 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	if repository == nil {
 		repository = NewRepository[T](s.base()+c.endpoint, schemas)
 	}
-	patcher, _ := repository.(AttributePatcher[T])
 	controller := &controller[T]{
 		schemas: schemas,
 		service: &service[T]{
@@ -84,7 +83,6 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 			schemas:    schemas,
 			limits:     s.limits,
 			validators: []Validator[T]{characteristics[T](schemas)},
-			patcher:    patcher,
 		},
 		limits: s.limits,
 		config: s.config,
