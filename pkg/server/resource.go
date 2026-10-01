@@ -79,10 +79,15 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	patcher, _ := repository.(AttributePatcher[T])
 	controller := &controller[T]{
 		schemas: schemas,
-		service: NewService(repository, schemas, s.limits, characteristics[T](schemas)),
-		patcher: patcher,
-		limits:  s.limits,
-		config:  s.config,
+		service: &service[T]{
+			repo:       repository,
+			schemas:    schemas,
+			limits:     s.limits,
+			validators: []Validator[T]{characteristics[T](schemas)},
+			patcher:    patcher,
+		},
+		limits: s.limits,
+		config: s.config,
 	}
 
 	s.mux.HandleFunc("GET "+path, s.handle(controller.List))

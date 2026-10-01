@@ -22,7 +22,6 @@ type Controller[T core.Resource] interface {
 type controller[T core.Resource] struct {
 	schemas core.Schemas
 	service Service[T]
-	patcher AttributePatcher[T]
 	limits  protocol.Limits
 	config  *core.ServiceProviderConfig
 }
@@ -148,41 +147,21 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	noContent := noContentEligible(r, c.schemas, req.Operations)
-	if found, ok := c.delta(req, noContent); ok {
-		return c.patchDelta(w, r, found)
-	}
-	result, err := c.service.Patch(r.Context(), PatchCommand{ID: r.PathValue("id"), Version: c.ifMatch(r), Request: req})
+	result, err := c.service.Patch(r.Context(), PatchCommand{ID: r.PathValue("id"), Version: c.ifMatch(r), Request: req, NoContent: noContent})
 	if err != nil {
 		return protocol.SendError(w, c.lostRace(r, err))
 	}
 	c.setETag(w, result.Meta.Version)
-	return c.sendPatched(w, result.Resource, projection, noContent)
-}
-
-func (c *controller[T]) delta(req *protocol.PatchRequest, noContent bool) (delta, bool) {
-	if c.patcher == nil || !noContent {
-		return delta{}, false
-	}
-	return eligibleDelta(c.schemas, req.Operations)
-}
-
-func (c *controller[T]) patchDelta(w http.ResponseWriter, r *http.Request, found delta) error {
-	meta, _, err := c.patcher.PatchAttribute(r.Context(), r.PathValue("id"), c.ifMatch(r), AttributeDelta{Attribute: found.attribute, Added: found.added, Removed: found.removed})
-	if err != nil {
-		return protocol.SendError(w, c.lostRace(r, err))
-	}
-	c.setETag(w, meta.Version)
-	setLocation(w, meta)
-	return protocol.Send(w, http.StatusNoContent, nil)
+	return c.sendPatched(w, result, projection, noContent)
 }
 
 // sendPatched returns 204 for a Group PATCH eligible under noContentEligible, or 200 with the resource otherwise, per RFC 7644 Section 3.5.2.
-func (c *controller[T]) sendPatched(w http.ResponseWriter, replaced T, projection protocol.Projection, noContent bool) error {
+func (c *controller[T]) sendPatched(w http.ResponseWriter, result Patched[T], projection protocol.Projection, noContent bool) error {
 	if noContent {
-		setLocation(w, replaced.Common().Meta)
+		setLocation(w, result.Meta)
 		return protocol.Send(w, http.StatusNoContent, nil)
 	}
-	return c.send(w, http.StatusOK, replaced, projection)
+	return c.send(w, http.StatusOK, result.Resource, projection)
 }
 
 func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
