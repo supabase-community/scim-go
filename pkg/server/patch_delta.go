@@ -49,7 +49,7 @@ func accumulateOp(d *delta, op patch.Operation) bool {
 		d.removed = append(d.removed, literal)
 		return true
 	}
-	added, ok := addedElements(op.Value)
+	added, ok := decodeAdded(op.Value)
 	if !ok {
 		return false
 	}
@@ -68,7 +68,7 @@ func resolveDeltaAttribute(schemas core.Schemas, d delta) (*core.Attribute, bool
 	return attribute, true
 }
 
-func addedElements(raw json.RawMessage) ([]core.Object, bool) {
+func decodeAdded(raw json.RawMessage) ([]core.Object, bool) {
 	var decoded any
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		return nil, false
@@ -105,7 +105,7 @@ func validAddedElements(attribute *core.Attribute, added []core.Object) bool {
 	if hasPrimarySubAttribute(attribute) {
 		return false
 	}
-	parent := field{Attribute: attribute, raw: func(core.Object) any { return addedAsElements(added) }}
+	parent := field{Attribute: attribute, raw: func(core.Object) any { return asElements(added) }}
 	for _, sub := range attribute.SubAttributes {
 		if !coercibleAdded(sub, added) {
 			return false
@@ -117,7 +117,7 @@ func validAddedElements(attribute *core.Attribute, added []core.Object) bool {
 	return true
 }
 
-func addedAsElements(added []core.Object) []any {
+func asElements(added []core.Object) []any {
 	elements := make([]any, len(added))
 	for i, element := range added {
 		elements[i] = map[string]any(element)
