@@ -1437,6 +1437,21 @@ func TestApplyRemoveRejectsARequiredTopLevelAttribute(t *testing.T) {
 	assert.Equal(t, "bjensen", item["userName"])
 }
 
+// RFC 7644 Section 3.5.2.2: a filtered remove that empties a required multi-valued attribute SHALL return "mutability".
+func TestApplyRemoveRejectsAFilteredRemovalThatEmptiesARequiredMultiValuedAttribute(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("parts", core.TypeComplex).AsMultiValued().AsRequired().With(
+				core.NewAttribute("serial", core.TypeString),
+			),
+		),
+	}
+	item := core.Object{"parts": []any{map[string]any{"serial": "s-1"}}}
+
+	requireMutability(t, apply(item, schemas, operation(patch.OpRemove, `parts[serial eq "s-1"]`, "")))
+	assert.Equal(t, []any{map[string]any{"serial": "s-1"}}, item["parts"])
+}
+
 func badgeSchema() []*core.Schema {
 	return []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(

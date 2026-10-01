@@ -3452,6 +3452,33 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 		assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, stored).UserName)
 	})
 
+	// RFC 7644 Section 3.5.2.2: a filtered remove that empties a required multi-valued attribute SHALL return "mutability".
+	t.Run("rejects a filtered remove that empties a required multi-valued attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		active := true
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Kits",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, &kit{Active: &active, Name: &core.Name{GivenName: "gear"}, Parts: []part{{Serial: "s-1"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Kits/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpRemove, Path: `parts[serial eq "s-1"]`}},
+			}),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		stored := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Kits/"+id, WithBearerToken(validToken)))
+		assert.Len(t, ReadBodyAs[kit](t, stored).Parts, 1)
+	})
+
 	t.Run("rejects a remove without a path with noTarget", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})

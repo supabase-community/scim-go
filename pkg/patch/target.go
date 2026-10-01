@@ -171,7 +171,7 @@ func (t *target) gateHolderRemoval(holder core.Object) error {
 	if err := eachSub(t.attr, held, gateRemove); err != nil {
 		return err
 	}
-	if err := gateRequired(t.attr, held); err != nil {
+	if err := gateRequired(t.attr, !value.IsUnassigned(held)); err != nil {
 		return err
 	}
 	if err := gateImmutableWrite(t.attr, held, nil); err != nil {
@@ -205,6 +205,9 @@ func (t *target) drop() error {
 	}
 	if len(kept) == len(elements) {
 		return nil // RFC 7644 Section 3.5.2.2: a filter matching no value makes no change and still succeeds.
+	}
+	if err := gateRequired(t.attr, value.IsUnassigned(kept)); err != nil {
+		return err
 	}
 	container.Set(t.path.Name, kept)
 	return nil
@@ -379,8 +382,8 @@ func gateRemove(sub *core.Attribute, held any) error {
 }
 
 // RFC 7644 Section 3.5.2.2: an attribute that is removed or becomes unassigned and is required SHALL return "mutability".
-func gateRequired(attr *core.Attribute, held any) error {
-	if !attr.Required || value.IsUnassigned(held) {
+func gateRequired(attr *core.Attribute, becomesUnassigned bool) error {
+	if !attr.Required || !becomesUnassigned {
 		return nil
 	}
 	return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is required")
