@@ -214,7 +214,7 @@ func (c *controller[T]) applyPatch(w http.ResponseWriter, r *http.Request, proje
 	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
 	after, err := c.stampSchemas(patched)
 	if err != nil {
-		return protocol.SendError(w, scimerrors.ErrInternal("could not encode the resource"))
+		return protocol.SendError(w, err)
 	}
 	replaced, err := c.persist(r, existing, patched, after)
 	if err != nil {
