@@ -62,15 +62,13 @@ func (t *target) demoteIfPromoted(kind Op, before []any, written func(int) bool,
 	case !promotes(t.key(), value):
 		return
 	case t.isListAdd(kind):
-		t.demotePrimaries(before, value)
+		t.demotePrimaries(before)
 	default:
 		demote(t.elements(), written)
 	}
 }
 
-// RFC 7644 Section 3.5.2: the hot path for repeated top-level list-adds of "primary" - demotes only the
-// elements this attribute's cached index already knows hold it, instead of rescanning the whole list.
-func (t *target) demotePrimaries(before []any, added any) {
+func (t *target) demotePrimaries(before []any) {
 	ix := t.index(before)
 	for _, held := range ix.primaries {
 		setPrimaryFalse(held)
