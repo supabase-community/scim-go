@@ -4405,6 +4405,20 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, http.StatusPreconditionFailed, patch(WithHeader("If-Match", etag)))
 	})
 
+	t.Run("answers a put that loses a race with a 409 that does not mention a patch", func(t *testing.T) {
+		srv := newTestServer(t, withRaces(alwaysLosing()))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+		))
+
+		require.Equal(t, http.StatusConflict, response.StatusCode)
+		assert.NotContains(t, ReadBodyAs[scimerrors.Error](t, response).Detail, "patch")
+	})
+
 	t.Run("reapplies a versionless patch that loses a race to the current version", func(t *testing.T) {
 		races := &races{lose: 2}
 		srv := newTestServer(t, withRaces(races))

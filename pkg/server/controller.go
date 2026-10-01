@@ -213,7 +213,7 @@ func (c *controller[T]) prepare(w http.ResponseWriter, resource T) (after core.O
 
 func (c *controller[T]) lostRace(r *http.Request, err error) error {
 	if c.ifMatch(r) == "" && isPreconditionFailed(err) {
-		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the patch; retry")
+		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
 	}
 	return err
 }
