@@ -42,7 +42,7 @@ func conforms(field field, candidate core.Object) error {
 	if field.Required && isMissing(field.Attribute, raw) {
 		return scimerrors.ErrInvalidValue(strconv.Quote(field.Name) + " is required")
 	}
-	if isPrimaryField(field) && count(values, true) > 1 {
+	if isPrimaryField(field.Attribute) && count(values, true) > 1 {
 		return scimerrors.ErrInvalidValue(`"primary" may be true for at most one value`)
 	}
 	if field.Type == core.TypeBinary && !isEncoded(field, candidate) {
@@ -55,11 +55,11 @@ func conforms(field field, candidate core.Object) error {
 }
 
 func isConstrained(field field) bool {
-	return field.Required || isPrimaryField(field) || len(field.CanonicalValues) > 0 || field.Type == core.TypeBinary
+	return field.Required || isPrimaryField(field.Attribute) || len(field.CanonicalValues) > 0 || field.Type == core.TypeBinary
 }
 
-func isPrimaryField(field field) bool {
-	return strings.EqualFold(field.Name, "primary")
+func isPrimaryField(attribute *core.Attribute) bool {
+	return strings.EqualFold(attribute.Name, "primary")
 }
 
 func isCanonical(field field, values []any) bool {

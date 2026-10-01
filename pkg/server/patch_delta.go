@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/supabase-community/scim-go/internal/value"
@@ -138,12 +139,7 @@ func coercibleAdded(sub *core.Attribute, added []core.Object) bool {
 }
 
 func hasPrimarySubAttribute(attribute *core.Attribute) bool {
-	for _, sub := range attribute.SubAttributes {
-		if isPrimaryField(field{Attribute: sub}) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(attribute.SubAttributes, isPrimaryField)
 }
 
 func identityOverlap(attribute *core.Attribute, d delta) bool {
