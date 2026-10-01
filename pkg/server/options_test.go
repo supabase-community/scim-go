@@ -293,6 +293,84 @@ func TestWithRepository(t *testing.T) {
 	assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
 }
 
+type repeatingRepository struct {
+	server.Repository[*core.User]
+}
+
+func (r repeatingRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
+	return r.Repository.Update(ctx, id, version, func(current *core.User) (*core.User, error) {
+		stale := *current
+		stale.Name.FamilyName = "Stale"
+		_, _ = change(&stale)
+		return change(current)
+	})
+}
+
+func TestWithRepositoryThatRunsUpdateChangeTwice(t *testing.T) {
+	newServer := func(t *testing.T) *httptest.Server {
+		t.Helper()
+		schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
+		return Server(t, server.New(basePath, fullServiceProviderConfig(), server.WithResource(
+			server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).
+				WithRepository(repeatingRepository{server.NewRepository[*core.User](basePath+"/Users", schemas)}),
+		)))
+	}
+	get := func(t *testing.T, srv *httptest.Server, id string) *http.Response {
+		t.Helper()
+		return Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id))
+	}
+	put := func(t *testing.T, srv *httptest.Server, id string, user core.User) *http.Response {
+		t.Helper()
+		return Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, user),
+		))
+	}
+
+	t.Run("replaces with PUT", func(t *testing.T) {
+		srv := newServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		require.Equal(t, http.StatusOK, put(t, srv, id, core.User{UserName: "bjensen", Title: "Tour Guide"}).StatusCode)
+		assert.Equal(t, "Tour Guide", ReadBodyAs[core.User](t, get(t, srv, id)).Title)
+	})
+
+	t.Run("replaces from the resource it is given, not an earlier one", func(t *testing.T) {
+		srv := newServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		require.Equal(t, http.StatusOK, put(t, srv, id, core.User{UserName: "bjensen", Name: core.Name{GivenName: "Barbara"}}).StatusCode)
+		assert.Equal(t, core.Name{GivenName: "Barbara"}, ReadBodyAs[core.User](t, get(t, srv, id)).Name)
+	})
+
+	t.Run("modifies with PATCH", func(t *testing.T) {
+		srv := newServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		require.Equal(t, http.StatusOK, Response(t, srv, patchRequest(t, srv, id, activate)).StatusCode)
+		assert.True(t, *ReadBodyAs[core.User](t, get(t, srv, id)).Active)
+	})
+
+	t.Run("keeps the version of a PATCH that changes nothing", func(t *testing.T) {
+		srv := newServer(t)
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+		noop := patch.Operation{Op: patch.OpReplace, Path: "userName", Value: json.RawMessage(`"bjensen"`)}
+		require.Equal(t, http.StatusOK, Response(t, srv, patchRequest(t, srv, id, noop)).StatusCode)
+		assert.Equal(t, etag, get(t, srv, id).Header.Get("ETag"))
+	})
+
+	t.Run("stores nothing when the change is invalid", func(t *testing.T) {
+		srv := newServer(t)
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+		require.Equal(t, http.StatusBadRequest, put(t, srv, id, core.User{Title: "Tour Guide"}).StatusCode)
+		response := get(t, srv, id)
+		assert.Equal(t, etag, response.Header.Get("ETag"))
+		assert.Empty(t, ReadBodyAs[core.User](t, response).Title)
+	})
+}
+
 type tenantKey struct{}
 
 type tenantRepository struct {
