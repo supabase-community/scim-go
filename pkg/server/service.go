@@ -77,6 +77,10 @@ func (s *service[T]) Replace(ctx context.Context, item T) (T, error) {
 	return s.repo.Replace(ctx, item)
 }
 
+func (s *service[T]) Delete(ctx context.Context, id, version string) error {
+	return s.repo.Delete(ctx, id, version)
+}
+
 // Patch applies cmd.Request to the current resource as one unit, per RFC 7644 Section 3.5.2.
 func (s *service[T]) Patch(ctx context.Context, cmd PatchCommand) (Patched[T], error) {
 	if found, ok := s.delta(cmd); ok {
@@ -156,10 +160,6 @@ func (s *service[T]) persist(ctx context.Context, existing, patched T, after cor
 		return existing, err
 	}
 	return s.Replace(withCandidate(withExisting(ctx, before), after), patched)
-}
-
-func (s *service[T]) Delete(ctx context.Context, id, version string) error {
-	return s.repo.Delete(ctx, id, version)
 }
 
 func (s *service[T]) validate(ctx context.Context, item T) error {
