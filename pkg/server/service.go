@@ -227,6 +227,9 @@ func isPreconditionFailed(err error) bool {
 }
 
 func pause(ctx context.Context, retry int) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	timer := time.NewTimer(jitter(retryBackoff << min(retry, 4)))
 	defer timer.Stop()
 	select {
