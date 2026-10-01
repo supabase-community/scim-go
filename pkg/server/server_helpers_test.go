@@ -135,14 +135,6 @@ type countingGroupDeltaRepository struct {
 	gets int
 }
 
-type stubDeltaRepository struct {
-	server.Repository[*core.Group]
-}
-
-func (stubDeltaRepository) PatchAttribute(context.Context, string, string, server.AttributeDelta) (core.Meta, bool, error) {
-	return core.Meta{Version: `W/"stub"`}, true, nil
-}
-
 func userSchemas() core.Schemas {
 	return core.Schemas{core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...)}
 }
