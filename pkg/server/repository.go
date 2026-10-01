@@ -176,61 +176,6 @@ func (r *repository[T]) PatchMultiValued(_ context.Context, id, version, attribu
 	return meta, changed, err
 }
 
-func (r *repository[T]) replaceAttribute(existing row[T], attribute string, next []any) (row[T], core.Meta, error) {
-	object := maps.Clone(existing.object)
-	object.Set(attribute, next)
-	var item T
-	raw, err := json.Marshal(object)
-	if err != nil {
-		return row[T]{}, core.Meta{}, err
-	}
-	if err := json.Unmarshal(raw, &item); err != nil {
-		return row[T]{}, core.Meta{}, err
-	}
-	common := item.Common()
-	common.Meta = bumpMeta(existing.item.Common().Meta)
-	replaced, err := r.rowOf(item)
-	if err != nil {
-		return row[T]{}, core.Meta{}, err
-	}
-	return replaced, common.Meta, nil
-}
-
-func bumpMeta(current core.Meta) core.Meta {
-	now := time.Now().UTC()
-	current.LastModified = now
-	current.Version = weakETag(now)
-	return current
-}
-
-// applyMemberDelta drops removed identities and appends added ones not already present, per RFC 7644 Section 3.5.2.1.
-func applyMemberDelta(attribute *core.Attribute, elements []any, added []core.Object, removed []string) ([]any, bool) {
-	next := slices.Clone(elements)
-	changed := false
-	for _, literal := range removed {
-		key := value.Identity(attribute, core.Object{"value": literal})
-		before := len(next)
-		next = slices.DeleteFunc(next, func(element any) bool {
-			return value.Identity(attribute, asObject(element)) == key
-		})
-		changed = changed || len(next) != before
-	}
-	present := make(map[string]bool, len(next))
-	for _, element := range next {
-		present[value.Identity(attribute, asObject(element))] = true
-	}
-	for _, object := range added {
-		key := value.Identity(attribute, object)
-		if present[key] {
-			continue
-		}
-		present[key] = true
-		next = append(next, map[string]any(object))
-		changed = true
-	}
-	return next, changed
-}
-
 func (r *repository[T]) Delete(_ context.Context, id, version string) error {
 	return r.withLock(func() error {
 		i, err := r.locate(id, version)
@@ -339,4 +284,59 @@ func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (func(core.Ob
 
 func weakETag(t time.Time) string {
 	return `W/"` + strconv.FormatInt(t.UnixNano(), 10) + `"`
+}
+
+func (r *repository[T]) replaceAttribute(existing row[T], attribute string, next []any) (row[T], core.Meta, error) {
+	object := maps.Clone(existing.object)
+	object.Set(attribute, next)
+	var item T
+	raw, err := json.Marshal(object)
+	if err != nil {
+		return row[T]{}, core.Meta{}, err
+	}
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return row[T]{}, core.Meta{}, err
+	}
+	common := item.Common()
+	common.Meta = bumpMeta(existing.item.Common().Meta)
+	replaced, err := r.rowOf(item)
+	if err != nil {
+		return row[T]{}, core.Meta{}, err
+	}
+	return replaced, common.Meta, nil
+}
+
+func bumpMeta(current core.Meta) core.Meta {
+	now := time.Now().UTC()
+	current.LastModified = now
+	current.Version = weakETag(now)
+	return current
+}
+
+// applyMemberDelta drops removed identities and appends added ones not already present, per RFC 7644 Section 3.5.2.1.
+func applyMemberDelta(attribute *core.Attribute, elements []any, added []core.Object, removed []string) ([]any, bool) {
+	next := slices.Clone(elements)
+	changed := false
+	for _, literal := range removed {
+		key := value.Identity(attribute, core.Object{"value": literal})
+		before := len(next)
+		next = slices.DeleteFunc(next, func(element any) bool {
+			return value.Identity(attribute, asObject(element)) == key
+		})
+		changed = changed || len(next) != before
+	}
+	present := make(map[string]bool, len(next))
+	for _, element := range next {
+		present[value.Identity(attribute, asObject(element))] = true
+	}
+	for _, object := range added {
+		key := value.Identity(attribute, object)
+		if present[key] {
+			continue
+		}
+		present[key] = true
+		next = append(next, map[string]any(object))
+		changed = true
+	}
+	return next, changed
 }

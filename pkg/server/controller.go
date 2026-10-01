@@ -32,6 +32,11 @@ type controller[T core.Resource] struct {
 	config  *core.ServiceProviderConfig
 }
 
+type decodedPatch[T core.Resource] struct {
+	existing T
+	req      *protocol.PatchRequest
+}
+
 func NewController[T core.Resource](service Service[T], schemas core.Schemas, limits protocol.Limits, config *core.ServiceProviderConfig) Controller[T] {
 	return &controller[T]{
 		schemas: schemas,
@@ -198,11 +203,6 @@ func (c *controller[T]) existingWithIfMatch(w http.ResponseWriter, r *http.Reque
 		return existing, false, protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
 	}
 	return existing, true, nil
-}
-
-type decodedPatch[T core.Resource] struct {
-	existing T
-	req      *protocol.PatchRequest
 }
 
 func (c *controller[T]) applyPatch(w http.ResponseWriter, r *http.Request, projection protocol.Projection, d decodedPatch[T]) error {

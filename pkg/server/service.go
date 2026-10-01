@@ -21,6 +21,10 @@ type service[T core.Resource] struct {
 	allowDelta bool
 }
 
+type deltaCapable[T core.Resource] interface {
+	multiValuedDelta() (MultiValuedDeltaPatcher[T], bool)
+}
+
 func NewService[T core.Resource](repo Repository[T], validators ...Validator[T]) Service[T] {
 	return &service[T]{repo: repo, validators: validators}
 }
@@ -65,10 +69,6 @@ func (s *service[T]) validate(ctx context.Context, item T) error {
 		}
 	}
 	return nil
-}
-
-type deltaCapable[T core.Resource] interface {
-	multiValuedDelta() (MultiValuedDeltaPatcher[T], bool)
 }
 
 func (s *service[T]) multiValuedDelta() (MultiValuedDeltaPatcher[T], bool) {
