@@ -79,11 +79,11 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return err
 	}
-	resource, err := protocol.DecodeResource[T](r.Body, nil, c.schemas)
+	document, err := protocol.DecodeDocument(r.Body)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	created, err := c.service.Create(r.Context(), resource)
+	created, err := c.service.Create(r.Context(), document)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -101,11 +101,8 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	replaced, err := c.service.Replace(r.Context(), ReplaceCommand{
-		ID:      r.PathValue("id"),
-		Version: c.ifMatch(r),
-		Request: req,
-	})
+	req.ID, req.Version = r.PathValue("id"), c.ifMatch(r)
+	replaced, err := c.service.Replace(r.Context(), req)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -125,30 +122,26 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	noContent := noContentEligible(r, c.schemas, req.Operations)
-	result, err := c.service.Patch(r.Context(), PatchCommand{
-		ID:      r.PathValue("id"),
-		Version: c.ifMatch(r),
-		Request: req,
-	})
+	req.ID, req.Version = r.PathValue("id"), c.ifMatch(r)
+	patched, err := c.service.Patch(r.Context(), req)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	c.setETag(w, result.Meta.Version)
-	return c.sendPatched(w, result, projection, noContent)
+	c.setVersion(w, patched)
+	return c.sendPatched(w, patched, projection, noContentEligible(r, c.schemas, req.Operations))
 }
 
 // sendPatched returns 204 for a Group PATCH eligible under noContentEligible, or 200 with the resource otherwise, per RFC 7644 Section 3.5.2.
-func (c *controller[T]) sendPatched(w http.ResponseWriter, result Patched[T], projection protocol.Projection, noContent bool) error {
+func (c *controller[T]) sendPatched(w http.ResponseWriter, patched T, projection protocol.Projection, noContent bool) error {
 	if noContent {
-		setLocation(w, result.Meta)
+		setLocation(w, patched.Common().Meta)
 		return protocol.Send(w, http.StatusNoContent, nil)
 	}
-	return c.send(w, http.StatusOK, result.Resource, projection)
+	return c.send(w, http.StatusOK, patched, projection)
 }
 
 func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
-	if err := c.service.Delete(r.Context(), r.PathValue("id"), c.ifMatch(r)); err != nil {
+	if err := c.service.Delete(r.Context(), &protocol.DeleteRequest{ID: r.PathValue("id"), Version: c.ifMatch(r)}); err != nil {
 		return protocol.SendError(w, err)
 	}
 	return protocol.Send(w, http.StatusNoContent, nil)

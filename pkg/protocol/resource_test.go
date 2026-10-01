@@ -3,6 +3,7 @@ package protocol_test
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestDecodeResourceKeepsReadOnlySubAttributesOfMatchingElements(t *testing.T
 		t.Helper()
 		raw, err := json.Marshal(body)
 		require.NoError(t, err)
-		out, err := protocol.DecodeResource[map[string]any](bytes.NewReader(raw), existing, schemas)
+		out, err := decodeResource(bytes.NewReader(raw), existing, schemas)
 		require.NoError(t, err)
 		return out
 	}
@@ -139,7 +140,7 @@ func TestDecodeResource(t *testing.T) {
 	}
 
 	t.Run("drops readOnly values when there is no existing resource", func(t *testing.T) {
-		out, err := protocol.DecodeResource[map[string]any](requestBody(body()), nil, schemas)
+		out, err := decodeResource(requestBody(body()), nil, schemas)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{
 			"schemas":  []any{string(core.SchemaUser)},
@@ -152,7 +153,7 @@ func TestDecodeResource(t *testing.T) {
 	})
 
 	t.Run("keeps the existing readOnly values", func(t *testing.T) {
-		out, err := protocol.DecodeResource[map[string]any](requestBody(body()), existing, schemas)
+		out, err := decodeResource(requestBody(body()), existing, schemas)
 		require.NoError(t, err)
 		assert.Equal(t, "2819c223", out["id"])
 		assert.Equal(t, existing["meta"], out["meta"])
@@ -163,7 +164,7 @@ func TestDecodeResource(t *testing.T) {
 	})
 
 	t.Run("keeps existing readOnly values the body leaves out", func(t *testing.T) {
-		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{"userName": "bjensen"}), existing, schemas)
+		out, err := decodeResource(requestBody(map[string]any{"userName": "bjensen"}), existing, schemas)
 		require.NoError(t, err)
 		assert.Equal(t, existing["groups"], out["groups"])
 		assert.Equal(t, map[string]any{"employeeNumber": "701984"}, out[uri])
@@ -173,7 +174,7 @@ func TestDecodeResource(t *testing.T) {
 	// RFC 7644 Section 3.10: the schema URN of an extension is case insensitive.
 	t.Run("matches the extension URN case-insensitively", func(t *testing.T) {
 		document := map[string]any{strings.ToUpper(uri): map[string]any{"department": "Ops", "employeeNumber": "client"}}
-		out, err := protocol.DecodeResource[map[string]any](requestBody(document), existing, schemas)
+		out, err := decodeResource(requestBody(document), existing, schemas)
 		require.NoError(t, err)
 		assert.NotContains(t, out, strings.ToUpper(uri))
 		assert.Equal(t, map[string]any{"department": "Ops", "employeeNumber": "701984"}, out[uri])
@@ -186,7 +187,7 @@ func TestDecodeResource(t *testing.T) {
 		)
 		before := map[string]any{uri: map[string]any{"employeeNumber": "E1", "department": "ops"}}
 
-		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{"userName": "bjensen"}), before, []*core.Schema{user, immutable})
+		out, err := decodeResource(requestBody(map[string]any{"userName": "bjensen"}), before, []*core.Schema{user, immutable})
 		require.NoError(t, err)
 
 		assert.Equal(t, map[string]any{"employeeNumber": "E1"}, out[uri])
@@ -199,7 +200,7 @@ func TestDecodeResource(t *testing.T) {
 		)
 		before := map[string]any{uri: map[string]any{"employeeNumber": "E1"}}
 
-		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{"userName": "bjensen", uri: map[string]any{"EmployeeNumber": "E2"}}), before, []*core.Schema{user, immutable})
+		out, err := decodeResource(requestBody(map[string]any{"userName": "bjensen", uri: map[string]any{"EmployeeNumber": "E2"}}), before, []*core.Schema{user, immutable})
 		require.NoError(t, err)
 
 		body := out[uri].(map[string]any)
@@ -213,37 +214,37 @@ func TestDecodeResource(t *testing.T) {
 		)
 		before := map[string]any{uri: map[string]any{"employeeNumber": "E1"}}
 
-		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{"userName": "bjensen"}), before, []*core.Schema{user, immutable})
+		out, err := decodeResource(requestBody(map[string]any{"userName": "bjensen"}), before, []*core.Schema{user, immutable})
 		require.NoError(t, err)
 
 		assert.NotContains(t, out, uri)
 	})
 
 	t.Run("drops an extension that holds only readOnly values", func(t *testing.T) {
-		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{uri: map[string]any{"employeeNumber": "client"}}), nil, schemas)
+		out, err := decodeResource(requestBody(map[string]any{uri: map[string]any{"employeeNumber": "client"}}), nil, schemas)
 		require.NoError(t, err)
 		assert.NotContains(t, out, uri)
 	})
 
 	t.Run("leaves an extension that is not an object for decoding to reject", func(t *testing.T) {
-		out, err := protocol.DecodeResource[map[string]any](requestBody(map[string]any{uri: "oops"}), nil, schemas)
+		out, err := decodeResource(requestBody(map[string]any{uri: "oops"}), nil, schemas)
 		require.NoError(t, err)
 		assert.Equal(t, "oops", out[uri])
 	})
 
 	t.Run("returns the body without schemas", func(t *testing.T) {
-		out, err := protocol.DecodeResource[map[string]any](requestBody(body()), existing, nil)
+		out, err := decodeResource(requestBody(body()), existing, nil)
 		require.NoError(t, err)
 		assert.Equal(t, body(), out)
 	})
 
 	t.Run("reports an existing resource that cannot be encoded", func(t *testing.T) {
-		_, err := protocol.DecodeResource[map[string]any](requestBody(body()), map[string]any{"id": make(chan int)}, schemas)
+		_, err := decodeResource(requestBody(body()), map[string]any{"id": make(chan int)}, schemas)
 		require.ErrorAs(t, err, new(*json.UnsupportedTypeError))
 	})
 
 	t.Run("rejects a body that is not a JSON object", func(t *testing.T) {
-		_, err := protocol.DecodeResource[map[string]any](bytes.NewReader([]byte("null")), nil, schemas)
+		_, err := decodeResource(bytes.NewReader([]byte("null")), nil, schemas)
 		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
 	})
 
@@ -252,7 +253,15 @@ func TestDecodeResource(t *testing.T) {
 			uri:                  map[string]any{"department": "Ops"},
 			strings.ToUpper(uri): map[string]any{"employeeNumber": "attacker"},
 		}
-		_, err := protocol.DecodeResource[map[string]any](requestBody(document), existing, schemas)
+		_, err := decodeResource(requestBody(document), existing, schemas)
 		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
 	})
+}
+
+func decodeResource(body io.Reader, existing any, schemas core.Schemas) (map[string]any, error) {
+	document, err := protocol.DecodeDocument(body)
+	if err != nil {
+		return nil, err
+	}
+	return protocol.ResourceFrom[map[string]any](document, existing, schemas)
 }

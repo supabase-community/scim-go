@@ -15,6 +15,8 @@ import (
 
 // PatchRequest is the body of a PATCH request, per RFC 7644, Section 3.5.2.
 type PatchRequest struct {
+	ID         string            `json:"-"`
+	Version    string            `json:"-"`
 	Schemas    []core.SchemaURI  `json:"schemas"`
 	Operations []patch.Operation `json:"Operations"`
 }

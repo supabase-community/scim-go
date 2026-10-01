@@ -9,12 +9,14 @@ import (
 
 // ReplaceRequest is the body of a PUT request, per RFC 7644, Section 3.5.1.
 type ReplaceRequest struct {
+	ID         string
+	Version    string
 	Attributes core.Object
 }
 
 // DecodeReplaceRequest reads a PUT body; RFC 7644 Section 3.1: a SCIM resource is a JSON object.
 func DecodeReplaceRequest(body io.Reader) (*ReplaceRequest, error) {
-	document, err := readDocument(body)
+	document, err := DecodeDocument(body)
 	if err != nil {
 		return nil, err
 	}
@@ -24,5 +26,5 @@ func DecodeReplaceRequest(body io.Reader) (*ReplaceRequest, error) {
 // Replace returns the replacement for existing; RFC 7644 Section 3.5.1: readOnly values SHALL be ignored.
 func (r *ReplaceRequest) Replace[T any](existing T, schemas core.Schemas) (T, error) {
 	attributes, _ := value.Clone(map[string]any(r.Attributes)).(map[string]any)
-	return resourceFrom[T](attributes, existing, schemas)
+	return ResourceFrom[T](attributes, existing, schemas)
 }

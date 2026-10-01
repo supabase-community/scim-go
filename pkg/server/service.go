@@ -18,10 +18,10 @@ var errUnchanged = errors.New("server: the patch changes nothing")
 type Service[T core.Resource] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Get(ctx context.Context, id string) (T, error)
-	Create(ctx context.Context, item T) (T, error)
-	Replace(ctx context.Context, cmd ReplaceCommand) (T, error)
-	Patch(ctx context.Context, cmd PatchCommand) (Patched[T], error)
-	Delete(ctx context.Context, id, version string) error
+	Create(ctx context.Context, document core.Object) (T, error)
+	Replace(ctx context.Context, req *protocol.ReplaceRequest) (T, error)
+	Patch(ctx context.Context, req *protocol.PatchRequest) (T, error)
+	Delete(ctx context.Context, req *protocol.DeleteRequest) error
 }
 
 type service[T core.Resource] struct {
@@ -29,23 +29,6 @@ type service[T core.Resource] struct {
 	schemas    core.Schemas
 	limits     Limits
 	validators []Validator[T]
-}
-
-type ReplaceCommand struct {
-	ID      string
-	Version string
-	Request *protocol.ReplaceRequest
-}
-
-type PatchCommand struct {
-	ID      string
-	Version string
-	Request *protocol.PatchRequest
-}
-
-type Patched[T core.Resource] struct {
-	Resource T
-	Meta     core.Meta
 }
 
 func NewService[T core.Resource](repo Repository[T], schemas core.Schemas, limits Limits, validators ...Validator[T]) Service[T] {
@@ -60,7 +43,11 @@ func (s *service[T]) List(ctx context.Context, query *protocol.SearchRequest) ([
 	return s.repo.List(ctx, query)
 }
 
-func (s *service[T]) Create(ctx context.Context, item T) (T, error) {
+func (s *service[T]) Create(ctx context.Context, document core.Object) (T, error) {
+	item, err := protocol.ResourceFrom[T](document, nil, s.schemas)
+	if err != nil {
+		return item, err
+	}
 	after, err := stampSchemas(s.schemas, item)
 	if err != nil {
 		return item, err
@@ -72,30 +59,22 @@ func (s *service[T]) Create(ctx context.Context, item T) (T, error) {
 	return s.repo.Create(ctx, item)
 }
 
-func (s *service[T]) Replace(ctx context.Context, cmd ReplaceCommand) (T, error) {
-	return s.repo.Update(ctx, cmd.ID, cmd.Version, func(existing T) (T, error) {
-		return s.replaced(ctx, existing, cmd.Request)
+func (s *service[T]) Replace(ctx context.Context, req *protocol.ReplaceRequest) (T, error) {
+	return s.repo.Update(ctx, req.ID, req.Version, func(existing T) (T, error) {
+		return s.replaced(ctx, existing, req)
 	})
 }
 
-func (s *service[T]) Delete(ctx context.Context, id, version string) error {
-	return s.repo.Delete(ctx, id, version)
+func (s *service[T]) Delete(ctx context.Context, req *protocol.DeleteRequest) error {
+	return s.repo.Delete(ctx, req.ID, req.Version)
 }
 
-// Patch applies cmd.Request to the current resource as one unit, per RFC 7644 Section 3.5.2.
-func (s *service[T]) Patch(ctx context.Context, cmd PatchCommand) (Patched[T], error) {
-	patched, err := s.patch(ctx, cmd)
-	if err != nil {
-		return Patched[T]{}, err
-	}
-	return Patched[T]{Resource: patched, Meta: patched.Common().Meta}, nil
-}
-
-func (s *service[T]) patch(ctx context.Context, cmd PatchCommand) (T, error) {
+// Patch applies req to the current resource as one unit, per RFC 7644 Section 3.5.2.
+func (s *service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, error) {
 	var current T
-	patched, err := s.repo.Update(ctx, cmd.ID, cmd.Version, func(existing T) (T, error) {
+	patched, err := s.repo.Update(ctx, req.ID, req.Version, func(existing T) (T, error) {
 		current = existing
-		return s.patched(ctx, existing, cmd.Request)
+		return s.patched(ctx, existing, req)
 	})
 	if errors.Is(err, errUnchanged) {
 		return current, nil
