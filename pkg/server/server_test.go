@@ -2913,7 +2913,7 @@ func TestRFC7644GroupMemberDeltaFastPath(t *testing.T) {
 		group, err := repo.Create(context.Background(), &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})
 		require.NoError(t, err)
 
-		service := server.NewService[*core.Group](repo)
+		service := server.NewService[*core.Group](repo, groupSchemas(), protocol.DefaultLimits)
 		controller := server.NewController(service, groupSchemas(), protocol.DefaultLimits, fullServiceProviderConfig())
 
 		body, err := json.Marshal(protocol.PatchRequest{

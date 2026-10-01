@@ -1,12 +1,10 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/supabase-community/scim-go/pkg/core"
-	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -27,11 +25,6 @@ type controller[T core.Resource] struct {
 	patcher AttributePatcher[T]
 	limits  protocol.Limits
 	config  *core.ServiceProviderConfig
-}
-
-type decodedPatch[T core.Resource] struct {
-	existing T
-	req      *protocol.PatchRequest
 }
 
 func NewController[T core.Resource](service Service[T], schemas core.Schemas, limits protocol.Limits, config *core.ServiceProviderConfig) Controller[T] {
@@ -150,38 +143,30 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return err
 	}
-	if c.patcher != nil {
-		return c.patchWithDelta(w, r, projection)
-	}
-	return c.patchByReplacing(w, r, projection)
-}
-
-// patchByReplacing is RFC 7644 Section 3.5.2's general case: Get the full resource, apply every operation in-process, and Replace it.
-func (c *controller[T]) patchByReplacing(w http.ResponseWriter, r *http.Request, projection protocol.Projection) error {
 	req, err := c.limits.DecodePatchRequest(r.Body)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	existing, ok, err := c.existingWithIfMatch(w, r)
-	if !ok {
-		return err
+	noContent := noContentEligible(r, c.schemas, req.Operations)
+	if found, ok := c.delta(req, noContent); ok {
+		return c.patchDelta(w, r, found)
 	}
-	return c.applyPatch(w, r, projection, decodedPatch[T]{existing, req})
+	result, err := c.service.Patch(r.Context(), PatchCommand{ID: r.PathValue("id"), Version: c.ifMatch(r), Request: req})
+	if err != nil {
+		return protocol.SendError(w, c.lostRace(r, err))
+	}
+	c.setETag(w, result.Meta.Version)
+	return c.sendPatched(w, result.Resource, projection, noContent)
 }
 
-func (c *controller[T]) patchWithDelta(w http.ResponseWriter, r *http.Request, projection protocol.Projection) error {
-	req, err := c.limits.DecodePatchRequest(r.Body)
-	if err != nil {
-		return protocol.SendError(w, err)
+func (c *controller[T]) delta(req *protocol.PatchRequest, noContent bool) (delta, bool) {
+	if c.patcher == nil || !noContent {
+		return delta{}, false
 	}
-	found, ok := eligibleDelta(c.schemas, req.Operations)
-	if !ok || !noContentEligible(r, c.schemas, req.Operations) {
-		existing, ok, err := c.existingWithIfMatch(w, r)
-		if !ok {
-			return err
-		}
-		return c.applyPatch(w, r, projection, decodedPatch[T]{existing, req})
-	}
+	return eligibleDelta(c.schemas, req.Operations)
+}
+
+func (c *controller[T]) patchDelta(w http.ResponseWriter, r *http.Request, found delta) error {
 	meta, _, err := c.patcher.PatchAttribute(r.Context(), r.PathValue("id"), c.ifMatch(r), AttributeDelta{Attribute: found.attribute, Added: found.added, Removed: found.removed})
 	if err != nil {
 		return protocol.SendError(w, c.lostRace(r, err))
@@ -189,36 +174,6 @@ func (c *controller[T]) patchWithDelta(w http.ResponseWriter, r *http.Request, p
 	c.setETag(w, meta.Version)
 	setLocation(w, meta)
 	return protocol.Send(w, http.StatusNoContent, nil)
-}
-
-func (c *controller[T]) existingWithIfMatch(w http.ResponseWriter, r *http.Request) (existing T, ok bool, err error) {
-	existing, ok, err = c.existing(w, r)
-	if !ok {
-		return existing, false, err
-	}
-	if match := c.ifMatch(r); match != "" && existing.Common().Meta.Version != match {
-		return existing, false, protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
-	}
-	return existing, true, nil
-}
-
-func (c *controller[T]) applyPatch(w http.ResponseWriter, r *http.Request, projection protocol.Projection, d decodedPatch[T]) error {
-	existing := d.existing
-	patched, err := d.req.Patch(existing, c.schemas, patch.MaxFilterEvaluations(c.limits.MaxFilterEvaluations), patch.MaxWriteBytes(c.limits.MaxWriteBytes))
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
-	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
-	after, err := stampSchemas(c.schemas, patched)
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
-	replaced, err := c.persist(r, existing, patched, after)
-	if err != nil {
-		return protocol.SendError(w, err)
-	}
-	c.setVersion(w, replaced)
-	return c.sendPatched(w, replaced, projection, noContentEligible(r, c.schemas, d.req.Operations))
 }
 
 // sendPatched returns 204 for a Group PATCH eligible under noContentEligible, or 200 with the resource otherwise, per RFC 7644 Section 3.5.2.
@@ -266,26 +221,6 @@ func (c *controller[T]) setETag(w http.ResponseWriter, version string) {
 	if c.config.SupportsVersioning() {
 		w.Header().Set("ETag", version)
 	}
-}
-
-// persist skips the write when the patch changed nothing, per RFC 7644, Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
-func (c *controller[T]) persist(r *http.Request, existing, patched T, after core.Object) (T, error) {
-	encoded, err := json.Marshal(patched)
-	if err != nil {
-		return existing, scimerrors.ErrInternal("could not encode the resource")
-	}
-	before, err := core.NewObject(existing)
-	if err != nil {
-		return existing, scimerrors.ErrInternal("could not encode the resource")
-	}
-	if unchanged(before, after) {
-		return existing, nil
-	}
-	if err := checkEncodedSize(c.limits, encoded); err != nil {
-		return existing, err
-	}
-	replaced, err := c.service.Replace(withCandidate(withExisting(r.Context(), before), after), patched)
-	return replaced, c.lostRace(r, err)
 }
 
 // prepare stamps schemas into resource and rejects it once it crosses MaxResourceBytes, per RFC 7643, Section 3.

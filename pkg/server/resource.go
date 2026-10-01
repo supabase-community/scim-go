@@ -79,7 +79,7 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	patcher, _ := repository.(AttributePatcher[T])
 	controller := &controller[T]{
 		schemas: schemas,
-		service: NewService(repository, characteristics[T](schemas)),
+		service: NewService(repository, schemas, s.limits, characteristics[T](schemas)),
 		patcher: patcher,
 		limits:  s.limits,
 		config:  s.config,
