@@ -126,13 +126,6 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	return c.send(w, http.StatusOK, replaced, projection)
 }
 
-func (c *controller[T]) version(r *http.Request, existing T) string {
-	if match := c.ifMatch(r); match != "" {
-		return match
-	}
-	return existing.Common().Meta.Version
-}
-
 func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if !c.config.SupportsPatch() {
 		return protocol.SendError(w, scimerrors.ErrNotImplemented(`"PATCH" is not supported`))
@@ -146,7 +139,12 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	noContent := noContentEligible(r, c.schemas, req.Operations)
-	result, err := c.service.Patch(r.Context(), PatchCommand{ID: r.PathValue("id"), Version: c.ifMatch(r), Request: req, NoContent: noContent})
+	result, err := c.service.Patch(r.Context(), PatchCommand{
+		ID:        r.PathValue("id"),
+		Version:   c.ifMatch(r),
+		Request:   req,
+		NoContent: noContent,
+	})
 	if err != nil {
 		return protocol.SendError(w, c.lostRace(r, err))
 	}
@@ -218,6 +216,13 @@ func (c *controller[T]) lostRace(r *http.Request, err error) error {
 		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the patch; retry")
 	}
 	return err
+}
+
+func (c *controller[T]) version(r *http.Request, existing T) string {
+	if match := c.ifMatch(r); match != "" {
+		return match
+	}
+	return existing.Common().Meta.Version
 }
 
 func (c *controller[T]) ifMatch(r *http.Request) string {
