@@ -3371,6 +3371,20 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	t.Run("rejects a malformed JSON body before looking up the resource", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Users/unknown",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{not-json`)),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
 	t.Run("rejects a patch that targets an unknown attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})

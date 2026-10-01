@@ -158,13 +158,13 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 
 // patchByReplacing is RFC 7644 Section 3.5.2's general case: Get the full resource, apply every operation in-process, and Replace it.
 func (c *controller[T]) patchByReplacing(w http.ResponseWriter, r *http.Request, projection protocol.Projection) error {
-	existing, ok, err := c.existingWithIfMatch(w, r)
-	if !ok {
-		return err
-	}
 	req, err := c.limits.DecodePatchRequest(r.Body)
 	if err != nil {
 		return protocol.SendError(w, err)
+	}
+	existing, ok, err := c.existingWithIfMatch(w, r)
+	if !ok {
+		return err
 	}
 	return c.applyPatch(w, r, projection, decodedPatch[T]{existing, req})
 }
