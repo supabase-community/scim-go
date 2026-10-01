@@ -119,6 +119,41 @@ type countingRepository struct {
 	gets int
 }
 
+type countingRepo interface {
+	server.Repository[*core.Group]
+	Gets() int
+}
+
+type countingGroupRepository struct {
+	server.Repository[*core.Group]
+	gets int
+}
+
+type countingGroupDeltaRepository struct {
+	server.Repository[*core.Group]
+	gets int
+}
+
+type stubDeltaRepository struct {
+	server.Repository[*core.Group]
+}
+
+func (stubDeltaRepository) PatchMultiValued(context.Context, string, string, string, []core.Object, []string) (core.Meta, bool, error) {
+	return core.Meta{Version: `W/"stub"`}, true, nil
+}
+
+func groupSchemas() core.Schemas {
+	return core.Schemas{core.NewSchema(core.SchemaGroup).WithName("Group").With(core.GroupAttributes()...)}
+}
+
+func newGroupHandler(tb testing.TB, repo server.Repository[*core.Group]) http.Handler {
+	tb.Helper()
+	return server.New(basePath, fullServiceProviderConfig(),
+		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
+		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).WithRepository(repo)),
+	)
+}
+
 func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 	t.Helper()
 
@@ -206,6 +241,25 @@ func (r *projectingRepository) record(ctx context.Context) {
 func (r *countingRepository) Get(ctx context.Context, id string) (*core.User, error) {
 	r.gets++
 	return r.Repository.Get(ctx, id)
+}
+
+func (r *countingGroupRepository) Get(ctx context.Context, id string) (*core.Group, error) {
+	r.gets++
+	return r.Repository.Get(ctx, id)
+}
+
+func (r *countingGroupRepository) Gets() int { return r.gets }
+
+func (r *countingGroupDeltaRepository) Get(ctx context.Context, id string) (*core.Group, error) {
+	r.gets++
+	return r.Repository.Get(ctx, id)
+}
+
+func (r *countingGroupDeltaRepository) Gets() int { return r.gets }
+
+func (r *countingGroupDeltaRepository) PatchMultiValued(ctx context.Context, id, version, attribute string, added []core.Object, removed []string) (core.Meta, bool, error) {
+	patcher := r.Repository.(server.MultiValuedDeltaPatcher[*core.Group])
+	return patcher.PatchMultiValued(ctx, id, version, attribute, added, removed)
 }
 
 func validate(ctx context.Context, token string) (context.Context, error) {

@@ -18,10 +18,16 @@ type Service[T core.Resource] interface {
 type service[T core.Resource] struct {
 	repo       Repository[T]
 	validators []Validator[T]
+	allowDelta bool
 }
 
 func NewService[T core.Resource](repo Repository[T], validators ...Validator[T]) Service[T] {
 	return &service[T]{repo: repo, validators: validators}
+}
+
+// newMountedService is mount's own constructor; only a service built here may use the member-delta fast path.
+func newMountedService[T core.Resource](repo Repository[T], validators ...Validator[T]) Service[T] {
+	return &service[T]{repo: repo, validators: validators, allowDelta: true}
 }
 
 func (s *service[T]) Get(ctx context.Context, id string) (T, error) {
@@ -59,4 +65,16 @@ func (s *service[T]) validate(ctx context.Context, item T) error {
 		}
 	}
 	return nil
+}
+
+type deltaCapable[T core.Resource] interface {
+	multiValuedDelta() (MultiValuedDeltaPatcher[T], bool)
+}
+
+func (s *service[T]) multiValuedDelta() (MultiValuedDeltaPatcher[T], bool) {
+	if !s.allowDelta || len(s.validators) > 1 {
+		return nil, false
+	}
+	patcher, ok := s.repo.(MultiValuedDeltaPatcher[T])
+	return patcher, ok
 }

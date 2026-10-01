@@ -148,18 +148,66 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return err
 	}
-	existing, ok, err := c.existing(w, r)
+	if patcher, ok := c.deltaPatcher(); ok {
+		return c.patchWithDelta(w, r, projection, patcher)
+	}
+	return c.patchByReplacing(w, r, projection)
+}
+
+// patchByReplacing is RFC 7644 Section 3.5.2's general case: Get the full resource, apply every operation in-process, and Replace it.
+func (c *controller[T]) patchByReplacing(w http.ResponseWriter, r *http.Request, projection protocol.Projection) error {
+	existing, ok, err := c.existingWithIfMatch(w, r)
 	if !ok {
 		return err
-	}
-	if match := c.ifMatch(r); match != "" && existing.Common().Meta.Version != match {
-		return protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
 	}
 	req, err := c.limits.DecodePatchRequest(r.Body)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	patched, err := req.Patch(existing, c.schemas, patch.MaxFilterEvaluations(c.limits.MaxFilterEvaluations), patch.MaxWriteBytes(c.limits.MaxWriteBytes))
+	return c.applyPatch(w, r, projection, decodedPatch[T]{existing, req})
+}
+
+func (c *controller[T]) patchWithDelta(w http.ResponseWriter, r *http.Request, projection protocol.Projection, patcher MultiValuedDeltaPatcher[T]) error {
+	req, err := c.limits.DecodePatchRequest(r.Body)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	found, ok := eligibleDelta(c.schemas, req.Operations)
+	if !ok || !noContentEligible(r, c.schemas, req.Operations) {
+		existing, ok, err := c.existingWithIfMatch(w, r)
+		if !ok {
+			return err
+		}
+		return c.applyPatch(w, r, projection, decodedPatch[T]{existing, req})
+	}
+	meta, _, err := patcher.PatchMultiValued(r.Context(), r.PathValue("id"), c.ifMatch(r), found.attribute, found.added, found.removed)
+	if err != nil {
+		return protocol.SendError(w, c.lostRace(r, err))
+	}
+	c.setETag(w, meta.Version)
+	setLocation(w, meta)
+	return protocol.Send(w, http.StatusNoContent, nil)
+}
+
+func (c *controller[T]) existingWithIfMatch(w http.ResponseWriter, r *http.Request) (existing T, ok bool, err error) {
+	existing, ok, err = c.existing(w, r)
+	if !ok {
+		return existing, false, err
+	}
+	if match := c.ifMatch(r); match != "" && existing.Common().Meta.Version != match {
+		return existing, false, protocol.SendError(w, scimerrors.ErrPreconditionFailed("resource has changed on the server"))
+	}
+	return existing, true, nil
+}
+
+type decodedPatch[T core.Resource] struct {
+	existing T
+	req      *protocol.PatchRequest
+}
+
+func (c *controller[T]) applyPatch(w http.ResponseWriter, r *http.Request, projection protocol.Projection, d decodedPatch[T]) error {
+	existing := d.existing
+	patched, err := d.req.Patch(existing, c.schemas, patch.MaxFilterEvaluations(c.limits.MaxFilterEvaluations), patch.MaxWriteBytes(c.limits.MaxWriteBytes))
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -173,7 +221,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	c.setVersion(w, replaced)
-	return c.sendPatched(w, replaced, projection, noContentEligible(r, c.schemas, req.Operations))
+	return c.sendPatched(w, replaced, projection, noContentEligible(r, c.schemas, d.req.Operations))
 }
 
 // sendPatched returns 204 for a Group PATCH eligible under noContentEligible, or 200 with the resource otherwise, per RFC 7644 Section 3.5.2.
@@ -183,6 +231,14 @@ func (c *controller[T]) sendPatched(w http.ResponseWriter, replaced T, projectio
 		return protocol.Send(w, http.StatusNoContent, nil)
 	}
 	return c.send(w, http.StatusOK, replaced, projection)
+}
+
+func (c *controller[T]) deltaPatcher() (MultiValuedDeltaPatcher[T], bool) {
+	capable, ok := any(c.service).(deltaCapable[T])
+	if !ok {
+		return nil, false
+	}
+	return capable.multiValuedDelta()
 }
 
 func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
@@ -214,8 +270,12 @@ func (c *controller[T]) send(w http.ResponseWriter, status int, resource T, proj
 }
 
 func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
+	c.setETag(w, resource.Common().Meta.Version)
+}
+
+func (c *controller[T]) setETag(w http.ResponseWriter, version string) {
 	if c.config.SupportsVersioning() {
-		w.Header().Set("ETag", resource.Common().Meta.Version)
+		w.Header().Set("ETag", version)
 	}
 }
 

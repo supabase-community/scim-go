@@ -2,12 +2,15 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
 	"slices"
 	"strconv"
 	"sync"
 	"time"
 	"uuid"
 
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -20,6 +23,11 @@ type Repository[T core.Resource] interface {
 	Create(ctx context.Context, item T) (T, error)
 	Replace(ctx context.Context, item T) (T, error)
 	Delete(ctx context.Context, id, version string) error
+}
+
+// MultiValuedDeltaPatcher applies an add/remove delta to one attribute without the full resource; MaxResourceBytes is not enforced on this path.
+type MultiValuedDeltaPatcher[T core.Resource] interface {
+	PatchMultiValued(ctx context.Context, id, version, attribute string, added []core.Object, removed []string) (meta core.Meta, changed bool, err error)
 }
 
 type repository[T core.Resource] struct {
@@ -138,6 +146,88 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 		return zero, err
 	}
 	return item, nil
+}
+
+//nolint:revive // matches the MultiValuedDeltaPatcher[T] interface agreed with repo authors; not grouping params into a struct post hoc.
+func (r *repository[T]) PatchMultiValued(_ context.Context, id, version, attribute string, added []core.Object, removed []string) (meta core.Meta, changed bool, err error) {
+	err = r.withLock(func() error {
+		i, err := r.locate(id, version)
+		if err != nil {
+			return err
+		}
+		existing := r.rows[i]
+		meta = existing.item.Common().Meta
+		attr, ok := r.schemas.Resolve("", attribute, "")
+		if !ok {
+			return scimerrors.ErrInvalidPath(strconv.Quote(attribute) + " is unknown")
+		}
+		elements, _ := existing.object.Get(attribute).([]any)
+		next, didChange := applyMemberDelta(attr, elements, added, removed)
+		if !didChange {
+			return nil
+		}
+		replaced, newMeta, err := r.replaceAttribute(existing, attribute, next)
+		if err != nil {
+			return err
+		}
+		r.owners.release(id, existing.object)
+		r.owners.claim(id, replaced.object)
+		r.rows[i] = replaced
+		meta, changed = newMeta, true
+		return nil
+	})
+	return meta, changed, err
+}
+
+func (r *repository[T]) replaceAttribute(existing row[T], attribute string, next []any) (row[T], core.Meta, error) {
+	object := maps.Clone(existing.object)
+	object.Set(attribute, next)
+	var item T
+	raw, err := json.Marshal(object)
+	if err != nil {
+		return row[T]{}, core.Meta{}, err
+	}
+	if err := json.Unmarshal(raw, &item); err != nil {
+		return row[T]{}, core.Meta{}, err
+	}
+	now := time.Now().UTC()
+	common := item.Common()
+	common.Meta = existing.item.Common().Meta
+	common.Meta.LastModified = now
+	common.Meta.Version = weakETag(now)
+	replaced, err := r.rowOf(item)
+	if err != nil {
+		return row[T]{}, core.Meta{}, err
+	}
+	return replaced, common.Meta, nil
+}
+
+// applyMemberDelta drops removed identities and appends added ones not already present, per RFC 7644 Section 3.5.2.1.
+func applyMemberDelta(attribute *core.Attribute, elements []any, added []core.Object, removed []string) ([]any, bool) {
+	next := slices.Clone(elements)
+	changed := false
+	for _, literal := range removed {
+		key := value.Identity(attribute, core.Object{"value": literal})
+		before := len(next)
+		next = slices.DeleteFunc(next, func(element any) bool {
+			return value.Identity(attribute, asObject(element)) == key
+		})
+		changed = changed || len(next) != before
+	}
+	present := make(map[string]bool, len(next))
+	for _, element := range next {
+		present[value.Identity(attribute, asObject(element))] = true
+	}
+	for _, object := range added {
+		key := value.Identity(attribute, object)
+		if present[key] {
+			continue
+		}
+		present[key] = true
+		next = append(next, map[string]any(object))
+		changed = true
+	}
+	return next, changed
 }
 
 func (r *repository[T]) Delete(_ context.Context, id, version string) error {

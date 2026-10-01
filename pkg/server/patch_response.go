@@ -18,35 +18,55 @@ func noContentEligible(r *http.Request, schemas core.Schemas, ops []patch.Operat
 		return false
 	}
 	for _, op := range ops {
-		if !isMembersOnlyOp(op) {
+		shape, ok := parseAttributeOp(op)
+		if !ok || !strings.EqualFold(shape.attribute, "members") {
 			return false
 		}
 	}
 	return true
 }
 
-func isMembersOnlyOp(op patch.Operation) bool {
+type attributeOp struct {
+	attribute string
+	add       bool
+	literal   any
+}
+
+func parseAttributeOp(op patch.Operation) (attributeOp, bool) {
 	path, err := filter.NewPath(op.Path)
-	if err != nil || path.URI != "" || path.SubAttribute != "" || !strings.EqualFold(path.Name, "members") {
-		return false
+	if err != nil || path.URI != "" || path.SubAttribute != "" {
+		return attributeOp{}, false
 	}
 	switch patch.Op(strings.ToLower(string(op.Op))) {
 	case patch.OpAdd:
-		return path.ValueFilter == nil
+		if path.ValueFilter != nil {
+			return attributeOp{}, false
+		}
+		return attributeOp{attribute: path.Name, add: true}, true
 	case patch.OpRemove:
-		return isBareValueEquals(path.ValueFilter)
+		literal, ok := bareValueLiteral(path.ValueFilter)
+		if !ok {
+			return attributeOp{}, false
+		}
+		return attributeOp{attribute: path.Name, literal: literal}, true
 	default:
-		return false
+		return attributeOp{}, false
 	}
 }
 
-func isBareValueEquals(node *filter.Node) bool {
+func bareValueLiteral(node *filter.Node) (any, bool) {
 	if node == nil || node.Not() {
-		return false
+		return nil, false
 	}
 	if filter.Operator(node.Operator()) != filter.OpEquals {
-		return false
+		return nil, false
 	}
 	attr := node.AttrPath()
-	return attr.URI == "" && attr.SubAttribute == "" && strings.EqualFold(attr.Name, "value") && node.Value() != nil
+	if attr.URI != "" || attr.SubAttribute != "" || !strings.EqualFold(attr.Name, "value") {
+		return nil, false
+	}
+	if value := node.Value(); value != nil {
+		return value, true
+	}
+	return nil, false
 }

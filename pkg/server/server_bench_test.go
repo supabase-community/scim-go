@@ -11,6 +11,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/server"
 )
 
 func BenchmarkServerUsers(b *testing.B) {
@@ -65,6 +66,31 @@ func BenchmarkServerPatchManyAddresses(b *testing.B) {
 func BenchmarkServerPatchGroupMembers(b *testing.B) {
 	handler := newTestHandler(b)
 	for _, n := range []int{100, 1000, 10000} {
+		location := serve(b, handler, http.MethodPost, basePath+"/Groups", benchBody(b, benchGroup(n, "seed"+strconv.Itoa(n))), http.StatusCreated).Header().Get("Location")
+		add := benchBody(b, protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`{"value":"toggle","$ref":"https://example.com/Users/toggle","type":"User"}`)}},
+		})
+		remove := benchBody(b, protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpRemove, Path: `members[value eq "toggle"]`}},
+		})
+		b.Run(strconv.Itoa(n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; b.Loop(); i++ {
+				body := add
+				if i%2 == 1 {
+					body = remove
+				}
+				serve(b, handler, http.MethodPatch, location, body, http.StatusNoContent)
+			}
+		})
+	}
+}
+
+func BenchmarkServerPatchGroupMembersFastPathFloor(b *testing.B) {
+	for _, n := range []int{100, 1000, 10000} {
+		handler := newGroupHandler(b, stubDeltaRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())})
 		location := serve(b, handler, http.MethodPost, basePath+"/Groups", benchBody(b, benchGroup(n, "seed"+strconv.Itoa(n))), http.StatusCreated).Header().Get("Location")
 		add := benchBody(b, protocol.PatchRequest{
 			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
