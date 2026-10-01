@@ -3,12 +3,8 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"maps"
 	"net/http"
-	"reflect"
-	"strconv"
 
-	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -213,7 +209,7 @@ func (c *controller[T]) applyPatch(w http.ResponseWriter, r *http.Request, proje
 		return protocol.SendError(w, err)
 	}
 	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
-	after, err := c.stampSchemas(patched)
+	after, err := stampSchemas(c.schemas, patched)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -285,7 +281,7 @@ func (c *controller[T]) persist(r *http.Request, existing, patched T, after core
 	if unchanged(before, after) {
 		return existing, nil
 	}
-	if err := c.checkEncodedSize(encoded); err != nil {
+	if err := checkEncodedSize(c.limits, encoded); err != nil {
 		return existing, err
 	}
 	replaced, err := c.service.Replace(withCandidate(withExisting(r.Context(), before), after), patched)
@@ -294,29 +290,14 @@ func (c *controller[T]) persist(r *http.Request, existing, patched T, after core
 
 // prepare stamps schemas into resource and rejects it once it crosses MaxResourceBytes, per RFC 7643, Section 3.
 func (c *controller[T]) prepare(w http.ResponseWriter, resource T) (after core.Object, ok bool, err error) {
-	after, err = c.stampSchemas(resource)
+	after, err = stampSchemas(c.schemas, resource)
 	if err != nil {
 		return after, false, protocol.SendError(w, err)
 	}
-	if err := c.checkSize(resource); err != nil {
+	if err := checkSize(c.limits, resource); err != nil {
 		return after, false, protocol.SendError(w, err)
 	}
 	return after, true, nil
-}
-
-func (c *controller[T]) checkSize(resource T) error {
-	encoded, err := json.Marshal(resource)
-	if err != nil {
-		return scimerrors.ErrInternal("could not encode the resource")
-	}
-	return c.checkEncodedSize(encoded)
-}
-
-func (c *controller[T]) checkEncodedSize(encoded []byte) error {
-	if c.limits.MaxResourceBytes > 0 && len(encoded) > c.limits.MaxResourceBytes {
-		return scimerrors.ErrTooLarge("the resource would exceed " + strconv.Itoa(c.limits.MaxResourceBytes) + " bytes")
-	}
-	return nil
 }
 
 func (c *controller[T]) lostRace(r *http.Request, err error) error {
@@ -332,36 +313,4 @@ func (c *controller[T]) ifMatch(r *http.Request) string {
 		return ""
 	}
 	return match
-}
-
-// stampSchemas lists the base schema plus every extension with assigned data, per RFC 7643, Section 3.
-func (c *controller[T]) stampSchemas(resource T) (core.Object, error) {
-	object, err := core.NewObject(resource)
-	if err != nil {
-		return nil, err
-	}
-	uris := []core.SchemaURI{c.schemas.Base().ID}
-	for _, extension := range c.schemas.Extensions() {
-		if !value.IsUnassigned(object.Get(string(extension.ID))) {
-			uris = append(uris, extension.ID)
-		}
-	}
-	resource.Common().Schemas = uris
-	object.Set("schemas", schemaURIsToAny(uris))
-	return object, nil
-}
-
-func schemaURIsToAny(uris []core.SchemaURI) []any {
-	ids := make([]any, len(uris))
-	for i, uri := range uris {
-		ids[i] = string(uri)
-	}
-	return ids
-}
-
-func unchanged(before, after core.Object) bool {
-	before, after = maps.Clone(before), maps.Clone(after)
-	before.Remove("meta")
-	after.Remove("meta")
-	return reflect.DeepEqual(before, after)
 }
