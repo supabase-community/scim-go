@@ -3432,6 +3432,26 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.5.2.2: if a required attribute is removed or becomes unassigned, the server SHALL return "mutability".
+	t.Run("rejects a remove that unassigns a required attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpRemove, Path: "userName"}},
+			}),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+		stored := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, stored).UserName)
+	})
+
 	t.Run("rejects a remove without a path with noTarget", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})

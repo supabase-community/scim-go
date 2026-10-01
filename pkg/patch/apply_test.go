@@ -1424,6 +1424,19 @@ func TestApplyRemoveRejectsAnAssignedTopLevelImmutableAttribute(t *testing.T) {
 	assert.Equal(t, "1", item["employeeNumber"])
 }
 
+// RFC 7644 Section 3.5.2.2: an attribute that becomes unassigned and is required SHALL return "mutability".
+func TestApplyRemoveRejectsARequiredTopLevelAttribute(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+			core.NewAttribute("userName", core.TypeString).AsRequired(),
+		),
+	}
+	item := core.Object{"userName": "bjensen"}
+
+	requireMutability(t, apply(item, schemas, operation(patch.OpRemove, "userName", "")))
+	assert.Equal(t, "bjensen", item["userName"])
+}
+
 func badgeSchema() []*core.Schema {
 	return []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(

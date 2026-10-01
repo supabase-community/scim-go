@@ -2,6 +2,7 @@ package patch
 
 import (
 	"encoding/json"
+	"strconv"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -144,6 +145,9 @@ func (t *target) remove() error {
 func (t *target) gateHolderRemoval(holder core.Object) error {
 	held := holder.Get(t.key())
 	if err := eachSub(t.attr, held, gateRemove); err != nil {
+		return err
+	}
+	if err := gateRequired(t.attr, held); err != nil {
 		return err
 	}
 	if err := gateImmutableWrite(t.attr, held, nil); err != nil {
@@ -348,6 +352,14 @@ func gateRemove(sub *core.Attribute, held any) error {
 		return nil
 	}
 	return gate(sub)
+}
+
+// RFC 7644 Section 3.5.2.2: an attribute that is removed or becomes unassigned and is required SHALL return "mutability".
+func gateRequired(attr *core.Attribute, held any) error {
+	if !attr.Required || value.IsUnassigned(held) {
+		return nil
+	}
+	return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is required")
 }
 
 func subAttr(parent *core.Attribute, name string) *core.Attribute {
