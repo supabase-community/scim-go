@@ -22,7 +22,6 @@ type Repository[T core.Resource] interface {
 	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
 	Replace(ctx context.Context, item T) (T, error)
-	// Update locks the full stored resource, rejects a stale non-empty version (RFC 7644 Section 3.14), and saves what change returns, or nothing when change fails.
 	Update(ctx context.Context, id, version string, change func(current T) (T, error)) (T, error)
 	Delete(ctx context.Context, id, version string) error
 }

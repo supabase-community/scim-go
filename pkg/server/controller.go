@@ -101,24 +101,15 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return err
 	}
-	existing, ok, err := c.existing(w, r)
-	if !ok {
-		return err
-	}
-	resource, err := protocol.DecodeResource[T](r.Body, existing, c.schemas)
+	req, err := protocol.DecodeReplaceRequest(r.Body)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	resource.Common().Meta = core.Meta{Version: c.version(r, existing)}
-	after, ok, err := c.prepare(w, resource)
-	if !ok {
-		return err
-	}
-	before, err := core.NewObject(existing)
-	if err != nil {
-		return protocol.SendError(w, scimerrors.ErrInternal("could not encode the resource"))
-	}
-	replaced, err := c.service.Replace(withCandidate(withExisting(r.Context(), before), after), resource)
+	replaced, err := c.service.Replace(r.Context(), ReplaceCommand{
+		ID:      r.PathValue("id"),
+		Version: c.ifMatch(r),
+		Request: req,
+	})
 	if err != nil {
 		return protocol.SendError(w, c.lostRace(r, err))
 	}
@@ -216,13 +207,6 @@ func (c *controller[T]) lostRace(r *http.Request, err error) error {
 		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
 	}
 	return err
-}
-
-func (c *controller[T]) version(r *http.Request, existing T) string {
-	if match := c.ifMatch(r); match != "" {
-		return match
-	}
-	return existing.Common().Meta.Version
 }
 
 func (c *controller[T]) ifMatch(r *http.Request) string {

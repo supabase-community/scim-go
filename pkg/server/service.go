@@ -26,7 +26,7 @@ type Service[T core.Resource] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
-	Replace(ctx context.Context, item T) (T, error)
+	Replace(ctx context.Context, cmd ReplaceCommand) (T, error)
 	Patch(ctx context.Context, cmd PatchCommand) (Patched[T], error)
 	Delete(ctx context.Context, id, version string) error
 }
@@ -37,6 +37,12 @@ type service[T core.Resource] struct {
 	limits     Limits
 	validators []Validator[T]
 	patcher    AttributePatcher[T]
+}
+
+type ReplaceCommand struct {
+	ID      string
+	Version string
+	Request *protocol.ReplaceRequest
 }
 
 type PatchCommand struct {
@@ -71,12 +77,10 @@ func (s *service[T]) Create(ctx context.Context, item T) (T, error) {
 	return s.repo.Create(ctx, item)
 }
 
-func (s *service[T]) Replace(ctx context.Context, item T) (T, error) {
-	if err := s.validate(ctx, item); err != nil {
-		var zero T
-		return zero, err
-	}
-	return s.repo.Replace(ctx, item)
+func (s *service[T]) Replace(ctx context.Context, cmd ReplaceCommand) (T, error) {
+	return s.repo.Update(ctx, cmd.ID, cmd.Version, func(existing T) (T, error) {
+		return s.replace(ctx, existing, cmd.Request)
+	})
 }
 
 func (s *service[T]) Delete(ctx context.Context, id, version string) error {
@@ -127,7 +131,6 @@ func (s *service[T]) patchOnce(ctx context.Context, cmd PatchCommand) (T, error)
 	return patched, err
 }
 
-// patch returns errUnchanged when the request changes nothing, per RFC 7644, Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
 func (s *service[T]) patch(ctx context.Context, existing T, req *protocol.PatchRequest) (T, error) {
 	patched, after, err := s.apply(existing, req)
 	if err != nil {
@@ -137,6 +140,7 @@ func (s *service[T]) patch(ctx context.Context, existing T, req *protocol.PatchR
 	if err != nil {
 		return patched, scimerrors.ErrInternal("could not encode the resource")
 	}
+	// RFC 7644 Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
 	if unchanged(before, after) {
 		return patched, errUnchanged
 	}
@@ -154,6 +158,25 @@ func (s *service[T]) apply(existing T, req *protocol.PatchRequest) (T, core.Obje
 	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
 	after, err := stampSchemas(s.schemas, patched)
 	return patched, after, err
+}
+
+func (s *service[T]) replace(ctx context.Context, existing T, req *protocol.ReplaceRequest) (T, error) {
+	resource, err := req.Replace(existing, s.schemas)
+	if err != nil {
+		return resource, err
+	}
+	after, err := stampSchemas(s.schemas, resource)
+	if err != nil {
+		return resource, err
+	}
+	if err := checkSize(s.limits, resource); err != nil {
+		return resource, err
+	}
+	before, err := core.NewObject(existing)
+	if err != nil {
+		return resource, scimerrors.ErrInternal("could not encode the resource")
+	}
+	return resource, s.validate(withCandidate(withExisting(ctx, before), after), resource)
 }
 
 func (s *service[T]) validate(ctx context.Context, item T) error {

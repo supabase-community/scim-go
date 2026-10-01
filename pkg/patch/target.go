@@ -28,32 +28,32 @@ type filterState struct {
 	matched []bool
 }
 
-func (t *target) write(kind Op, value any) error {
-	if _, ok := value.(map[string]any); t.key() == "" && !ok {
+func (t *target) write(kind Op, incoming any) error {
+	if _, ok := incoming.(map[string]any); t.key() == "" && !ok {
 		return scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
 	}
-	if err := eachSub(t.owner(), value, gateWrite); err != nil {
+	if err := eachSub(t.owner(), incoming, gateWrite); err != nil {
 		return err
 	}
 	holders, err := t.holders(true)
 	if err != nil {
 		return err
 	}
-	if err := t.chargeOutput(holders, value); err != nil {
+	if err := t.chargeOutput(holders, incoming); err != nil {
 		return err
 	}
 	if t.isListAdd(kind) {
-		value = t.fresh(value)
+		incoming = t.fresh(incoming)
 	}
 	before := t.elements()
 	written := t.written(before, kind)
 	for _, holder := range holders {
-		if err := t.put(holder, kind, clone(value)); err != nil {
+		if err := t.put(holder, kind, value.Clone(incoming)); err != nil {
 			return err
 		}
 	}
-	t.demoteIfPromoted(kind, before, written, value)
-	t.record(kind, value)
+	t.demoteIfPromoted(kind, before, written, incoming)
+	t.record(kind, incoming)
 	return nil
 }
 
@@ -394,23 +394,4 @@ func subAttr(parent *core.Attribute, name string) *core.Attribute {
 		return sub
 	}
 	return permissiveAttr
-}
-
-func clone(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		cloned := make(map[string]any, len(typed))
-		for key, element := range typed {
-			cloned[key] = clone(element)
-		}
-		return cloned
-	case []any:
-		cloned := make([]any, len(typed))
-		for i, element := range typed {
-			cloned[i] = clone(element)
-		}
-		return cloned
-	default:
-		return typed
-	}
 }

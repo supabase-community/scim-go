@@ -3036,12 +3036,13 @@ func TestRFC7644ConcurrentVersionlessPUTsCannotBothPassImmutabilityValidation(t 
 
 	statuses := []int{responses[0].StatusCode, responses[1].StatusCode}
 	slices.Sort(statuses)
-	require.Equal(t, []int{http.StatusOK, http.StatusConflict}, statuses)
+	require.Equal(t, []int{http.StatusOK, http.StatusBadRequest}, statuses)
 
-	winner := "a"
+	winner, loser := "a", responses[1]
 	if responses[0].StatusCode != http.StatusOK {
-		winner = "b"
+		winner, loser = "b", responses[0]
 	}
+	assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, loser).ScimType)
 	final := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))))
 	assert.Equal(t, winner, final.EnterpriseUser.EmployeeNumber)
 }

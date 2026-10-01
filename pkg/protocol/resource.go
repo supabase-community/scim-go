@@ -12,14 +12,20 @@ import (
 
 // DecodeResource decodes a resource body; RFC 7644 Sections 3.3 and 3.5.1: readOnly attribute values SHALL be ignored.
 func DecodeResource[T any](body io.Reader, existing any, schemas core.Schemas) (T, error) {
-	var item T
 	document, err := readDocument(body)
 	if err != nil {
+		var item T
 		return item, err
 	}
+	return resourceFrom[T](document, existing, schemas)
+}
+
+func resourceFrom[T any](document core.Object, existing any, schemas core.Schemas) (T, error) {
 	var prior core.Object
 	if existing != nil {
+		var err error
 		if prior, err = core.NewObject(existing); err != nil {
+			var item T
 			return item, err
 		}
 	}
