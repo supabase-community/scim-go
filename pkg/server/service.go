@@ -2,11 +2,9 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"maps"
 	"reflect"
-	"strconv"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -145,9 +143,6 @@ func (s *service[T]) compare(existing, candidate T) (before, after core.Object, 
 }
 
 func (s *service[T]) admit(ctx context.Context, before, after core.Object, resource T) error {
-	if err := checkSize(s.limits, resource); err != nil {
-		return err
-	}
 	if before != nil {
 		ctx = withExisting(ctx, before)
 	}
@@ -186,21 +181,6 @@ func schemaURIsToAny(uris []core.SchemaURI) []any {
 		ids[i] = string(uri)
 	}
 	return ids
-}
-
-func checkSize[T core.Resource](limits Limits, resource T) error {
-	encoded, err := json.Marshal(resource)
-	if err != nil {
-		return scimerrors.ErrInternal("could not encode the resource")
-	}
-	return checkEncodedSize(limits, encoded)
-}
-
-func checkEncodedSize(limits Limits, encoded []byte) error {
-	if limits.MaxResourceBytes > 0 && len(encoded) > limits.MaxResourceBytes {
-		return scimerrors.ErrTooLarge("the resource would exceed " + strconv.Itoa(limits.MaxResourceBytes) + " bytes")
-	}
-	return nil
 }
 
 func unchanged(before, after core.Object) bool {

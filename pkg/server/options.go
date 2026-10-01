@@ -37,11 +37,6 @@ func MaxBodySize(n int64) Option[*Server] {
 	return func(s *Server) { s.maxBodySize = n }
 }
 
-// MaxResourceBytes caps the encoded size a resource may reach after a write; larger results get 413, and zero lifts the cap.
-func MaxResourceBytes(n int) Option[*Server] {
-	return func(s *Server) { s.limits.MaxResourceBytes = n }
-}
-
 // WithBaseURL sets the public base URL that each generated meta.location starts with, per RFC 7643, Section 3.1.
 func WithBaseURL(baseURL string) Option[*Server] {
 	return func(s *Server) { s.baseURL = baseURL }
