@@ -128,10 +128,7 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 		if err != nil {
 			return err
 		}
-		now := time.Now().UTC()
-		common.Meta = r.rows[i].item.Common().Meta
-		common.Meta.LastModified = now
-		common.Meta.Version = weakETag(now)
+		common.Meta = bumpMeta(r.rows[i].item.Common().Meta)
 		replaced, err := r.rowOf(item)
 		if err != nil {
 			return err
@@ -190,16 +187,20 @@ func (r *repository[T]) replaceAttribute(existing row[T], attribute string, next
 	if err := json.Unmarshal(raw, &item); err != nil {
 		return row[T]{}, core.Meta{}, err
 	}
-	now := time.Now().UTC()
 	common := item.Common()
-	common.Meta = existing.item.Common().Meta
-	common.Meta.LastModified = now
-	common.Meta.Version = weakETag(now)
+	common.Meta = bumpMeta(existing.item.Common().Meta)
 	replaced, err := r.rowOf(item)
 	if err != nil {
 		return row[T]{}, core.Meta{}, err
 	}
 	return replaced, common.Meta, nil
+}
+
+func bumpMeta(current core.Meta) core.Meta {
+	now := time.Now().UTC()
+	current.LastModified = now
+	current.Version = weakETag(now)
+	return current
 }
 
 // applyMemberDelta drops removed identities and appends added ones not already present, per RFC 7644 Section 3.5.2.1.
