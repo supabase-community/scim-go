@@ -45,17 +45,43 @@ func (t *target) write(kind Op, value any) error {
 	if t.isListAdd(kind) {
 		value = t.fresh(value)
 	}
-	written := t.written(t.elements(), kind)
+	before := t.elements()
+	written := t.written(before, kind)
 	for _, holder := range holders {
 		if err := t.put(holder, kind, clone(value)); err != nil {
 			return err
 		}
 	}
-	if promotes(t.key(), value) {
-		demote(t.elements(), written)
-	}
+	t.demoteIfPromoted(kind, before, written, value)
 	t.record(kind, value)
 	return nil
+}
+
+func (t *target) demoteIfPromoted(kind Op, before []any, written func(int) bool, value any) {
+	switch {
+	case !promotes(t.key(), value):
+		return
+	case t.isListAdd(kind):
+		t.demotePrimaries(before, value)
+	default:
+		demote(t.elements(), written)
+	}
+}
+
+// RFC 7644 Section 3.5.2: the hot path for repeated top-level list-adds of "primary" - demotes only the
+// elements this attribute's cached index already knows hold it, instead of rescanning the whole list.
+func (t *target) demotePrimaries(before []any, added any) {
+	ix := t.index(before)
+	for _, held := range ix.primaries {
+		setPrimaryFalse(held)
+	}
+	after := t.elements()
+	ix.primaries = ix.primaries[:0]
+	for _, element := range after[len(before):] {
+		if value.Primary(element) {
+			ix.primaries = append(ix.primaries, element)
+		}
+	}
 }
 
 func (t *target) chargeOutput(holders []core.Object, value any) error {

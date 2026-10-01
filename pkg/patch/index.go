@@ -9,10 +9,11 @@ import (
 
 // RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
 type index struct {
-	attr *core.Attribute
-	set  *value.Set
-	ids  map[string]bool
-	size int
+	attr      *core.Attribute
+	set       *value.Set
+	ids       map[string]bool
+	size      int
+	primaries []any
 }
 
 type indexCache map[string]*index
@@ -25,6 +26,11 @@ func newIndex(attr *core.Attribute, existing []any) *index {
 		ix.set = value.NewSet(attr, nil)
 	}
 	ix.add(existing)
+	for _, element := range existing {
+		if value.Primary(element) {
+			ix.primaries = append(ix.primaries, element)
+		}
+	}
 	return ix
 }
 
