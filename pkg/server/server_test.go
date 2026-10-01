@@ -4398,19 +4398,96 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: racer})
 		patch := func(options ...Option[*http.Request]) int {
-			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, append(options,
-				WithBearerToken(validToken),
-				WithContentType(protocol.MediaType),
-				WithRequestBodyAs(t, protocol.PatchRequest{
-					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-					Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
-				}),
-			)...)
-			return Response(t, srv, request).StatusCode
+			return Response(t, srv, patchActive(t, srv, id, options...)).StatusCode
 		}
 
 		assert.Equal(t, http.StatusConflict, patch())
 		assert.Equal(t, http.StatusPreconditionFailed, patch(WithHeader("If-Match", etag)))
+	})
+
+	t.Run("reapplies a versionless patch that loses a race to the current version", func(t *testing.T) {
+		races := &races{}
+		srv := newTestServer(t, withRaces(races))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		races.lose = 2
+
+		response := Response(t, srv, patchActive(t, srv, id))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.True(t, *ReadBodyAs[core.User](t, response).Active)
+		assert.Equal(t, 3, races.count())
+	})
+
+	t.Run("answers 409 once a versionless patch exhausts its retries", func(t *testing.T) {
+		races := &races{}
+		srv := newTestServer(t, withRaces(races))
+		id, _ := create(t, srv, &core.User{UserName: racer})
+
+		assert.Equal(t, http.StatusConflict, Response(t, srv, patchActive(t, srv, id)).StatusCode)
+		assert.Equal(t, 3, races.count())
+	})
+
+	t.Run("does not retry a patch sent with If-Match", func(t *testing.T) {
+		races := &races{}
+		srv := newTestServer(t, withRaces(races))
+		id, etag := create(t, srv, &core.User{UserName: racer})
+
+		assert.Equal(t, http.StatusPreconditionFailed, Response(t, srv, patchActive(t, srv, id, WithHeader("If-Match", etag))).StatusCode)
+		assert.Equal(t, 1, races.count())
+	})
+
+	t.Run("does not retry when MaxPatchRetries is zero", func(t *testing.T) {
+		races := &races{}
+		srv := newTestServer(t, withRaces(races), withOption(server.MaxPatchRetries(0)))
+		id, _ := create(t, srv, &core.User{UserName: racer})
+
+		assert.Equal(t, http.StatusConflict, Response(t, srv, patchActive(t, srv, id)).StatusCode)
+		assert.Equal(t, 1, races.count())
+	})
+
+	t.Run("stops retrying a versionless patch once the request is canceled", func(t *testing.T) {
+		races := &races{}
+		schemas := core.Schemas{core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...)}
+		repo := racingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), races: races}
+		user, err := repo.Create(context.Background(), &core.User{UserName: racer})
+		require.NoError(t, err)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err = server.NewService[*core.User](repo, schemas, protocol.DefaultLimits).Patch(ctx, server.PatchCommand{
+			ID:      user.ID,
+			Request: &protocol.PatchRequest{Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}}},
+		})
+
+		require.ErrorIs(t, err, scimerrors.ErrPreconditionFailed(""))
+		assert.Equal(t, 1, races.count())
+	})
+
+	t.Run("keeps both of two concurrent versionless patches", func(t *testing.T) {
+		srv := newTestServer(t, withReplaceGate(newRaceGate(2)))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		statuses := make([]int, 2)
+		var wg sync.WaitGroup
+		for i, op := range []patch.Operation{
+			{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")},
+			{Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)},
+		} {
+			wg.Go(func() {
+				request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+					WithBearerToken(validToken),
+					WithContentType(protocol.MediaType),
+					WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{op}}),
+				)
+				statuses[i] = Response(t, srv, request).StatusCode
+			})
+		}
+		wg.Wait()
+
+		assert.Equal(t, []int{http.StatusOK, http.StatusOK}, statuses)
+		user := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))))
+		assert.True(t, *user.Active)
+		assert.Equal(t, "Tour Guide", user.Title)
 	})
 
 	t.Run("retrieves a resource only if it changed with If-None-Match", func(t *testing.T) {

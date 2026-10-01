@@ -2,10 +2,14 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"maps"
+	"math/big"
 	"reflect"
 	"strconv"
+	"time"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -13,6 +17,8 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
+
+const retryBackoff = 2 * time.Millisecond
 
 type Service[T core.Resource] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
@@ -77,7 +83,7 @@ func (s *service[T]) Patch(ctx context.Context, cmd PatchCommand) (Patched[T], e
 		meta, _, err := s.patcher.PatchAttribute(ctx, cmd.ID, cmd.Version, AttributeDelta{Attribute: found.attribute, Added: found.added, Removed: found.removed})
 		return Patched[T]{Meta: meta}, err
 	}
-	patched, err := s.patchOnce(ctx, cmd)
+	patched, err := s.patchWithRetry(ctx, cmd)
 	if err != nil {
 		return Patched[T]{}, err
 	}
@@ -89,6 +95,18 @@ func (s *service[T]) delta(cmd PatchCommand) (delta, bool) {
 		return delta{}, false
 	}
 	return eligibleDelta(s.schemas, cmd.Request.Operations)
+}
+
+// patchWithRetry reapplies a versionless PATCH to the current resource after a lost race, since RFC 7644 Section 3.14 leaves the version to the client.
+func (s *service[T]) patchWithRetry(ctx context.Context, cmd PatchCommand) (T, error) {
+	patched, err := s.patchOnce(ctx, cmd)
+	for retry := range s.limits.PatchRetries {
+		if !lostRace(cmd, err) || !pause(ctx, retry) {
+			break
+		}
+		patched, err = s.patchOnce(ctx, cmd)
+	}
+	return patched, err
 }
 
 func (s *service[T]) patchOnce(ctx context.Context, cmd PatchCommand) (T, error) {
@@ -198,4 +216,31 @@ func unchanged(before, after core.Object) bool {
 	before.Remove("meta")
 	after.Remove("meta")
 	return reflect.DeepEqual(before, after)
+}
+
+func lostRace(cmd PatchCommand, err error) bool {
+	return cmd.Version == "" && isPreconditionFailed(err)
+}
+
+func isPreconditionFailed(err error) bool {
+	return errors.Is(err, scimerrors.ErrPreconditionFailed(""))
+}
+
+func pause(ctx context.Context, retry int) bool {
+	timer := time.NewTimer(jitter(retryBackoff << min(retry, 4)))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func jitter(limit time.Duration) time.Duration {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(limit)))
+	if err != nil {
+		return limit
+	}
+	return time.Duration(n.Int64())
 }

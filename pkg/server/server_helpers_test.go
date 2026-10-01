@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -43,6 +44,7 @@ type testServer struct {
 	config      *core.ServiceProviderConfig
 	options     []server.Option[*server.Server]
 	replaceGate *raceGate
+	races       *races
 }
 
 type raceGate struct {
@@ -65,6 +67,29 @@ func (g *raceGate) arrive() {
 		close(g.release)
 	}
 	<-g.release
+}
+
+type races struct {
+	mu       sync.Mutex
+	lose     int
+	replaces int
+}
+
+func (r *races) replace() (lost bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.replaces++
+	if r.lose > 0 {
+		r.lose--
+		return true
+	}
+	return false
+}
+
+func (r *races) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.replaces
 }
 
 type testOption func(*testServer)
@@ -103,6 +128,7 @@ type gadget struct {
 type racingRepository struct {
 	server.Repository[*core.User]
 	replaceGate *raceGate
+	races       *races
 }
 
 type inspectingRepository struct {
@@ -163,7 +189,7 @@ func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 	tb.Helper()
 
-	s := &testServer{config: fullServiceProviderConfig()}
+	s := &testServer{config: fullServiceProviderConfig(), races: &races{}}
 	for _, option := range options {
 		option(s)
 	}
@@ -173,6 +199,7 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 			core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...),
 		}),
 		replaceGate: s.replaceGate,
+		races:       s.races,
 	}
 	standard := []server.Option[*server.Server]{
 		server.ErrorHandler(func(_ *http.Request, err error) {
@@ -207,8 +234,12 @@ func withReplaceGate(gate *raceGate) testOption {
 	return func(s *testServer) { s.replaceGate = gate }
 }
 
+func withRaces(r *races) testOption {
+	return func(s *testServer) { s.races = r }
+}
+
 func (r racingRepository) Replace(ctx context.Context, user *core.User) (*core.User, error) {
-	if user.UserName == racer {
+	if lost := r.races.replace(); lost || user.UserName == racer {
 		return nil, scimerrors.ErrPreconditionFailed("resource has changed on the server")
 	}
 	if r.replaceGate != nil {
@@ -372,4 +403,17 @@ func patchUser(t *testing.T, srv *httptest.Server, id string, operations ...patc
 	response := Response(t, srv, request)
 	require.Equal(t, http.StatusOK, response.StatusCode)
 	return ReadBodyAs[core.User](t, response)
+}
+
+func patchActive(t *testing.T, srv *httptest.Server, id string, options ...Option[*http.Request]) *http.Request {
+	t.Helper()
+
+	return Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, append(options,
+		WithBearerToken(validToken),
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
+		}),
+	)...)
 }

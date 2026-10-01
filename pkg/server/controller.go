@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -215,7 +214,7 @@ func (c *controller[T]) prepare(w http.ResponseWriter, resource T) (after core.O
 }
 
 func (c *controller[T]) lostRace(r *http.Request, err error) error {
-	if c.ifMatch(r) == "" && errors.Is(err, scimerrors.ErrPreconditionFailed("")) {
+	if c.ifMatch(r) == "" && isPreconditionFailed(err) {
 		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the patch; retry")
 	}
 	return err
