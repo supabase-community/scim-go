@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/supabase-community/scim-go/compare/v0.8.2...v0.8.3) (2026-10-01)
+
+
+### Performance Improvements
+
+* **server:** avoid refetching the resource for PATCH and PUT validation ([212eeee](https://github.com/supabase-community/scim-go/commit/212eeeef2043d4abde3a44153a66f6009917ace0))
+
 ## [0.8.2](https://github.com/supabase-community/scim-go/compare/v0.8.1...v0.8.2) (2026-10-01)
 
 
