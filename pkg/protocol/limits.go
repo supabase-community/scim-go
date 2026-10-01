@@ -9,18 +9,14 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// Limits holds the count bounds of RFC 7644 Section 3.4.2.4, the MaxOperations, MaxFilterEvaluations, MaxWriteBytes, and MaxResourceBytes caps that zero lifts, and the PatchRetries of a versionless PATCH that loses a race, where zero means none.
+// Limits holds the count bounds of RFC 7644 Section 3.4.2.4 and the MaxOperations cap that zero lifts.
 type Limits struct {
-	DefaultCount         int
-	MaxCount             int
-	MaxOperations        int
-	MaxFilterEvaluations int
-	MaxWriteBytes        int
-	MaxResourceBytes     int
-	PatchRetries         int
+	DefaultCount  int
+	MaxCount      int
+	MaxOperations int
 }
 
-var DefaultLimits = Limits{DefaultCount: 100, MaxCount: 100, MaxOperations: 100, MaxFilterEvaluations: 10_000_000, MaxWriteBytes: 8 << 20, MaxResourceBytes: 10 << 20, PatchRetries: 2}
+var DefaultLimits = Limits{DefaultCount: 100, MaxCount: 100, MaxOperations: 100}
 
 // ParseSearchRequest reads the query parameters of RFC 7644, Section 3.4.2.
 func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {
