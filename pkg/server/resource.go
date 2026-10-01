@@ -76,17 +76,7 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	if repository == nil {
 		repository = NewRepository[T](s.base()+c.endpoint, schemas)
 	}
-	controller := &controller[T]{
-		schemas: schemas,
-		service: &service[T]{
-			repo:       repository,
-			schemas:    schemas,
-			limits:     s.limits,
-			validators: []Validator[T]{characteristics[T](schemas)},
-		},
-		limits: s.limits,
-		config: s.config,
-	}
+	controller := NewController(NewService(repository, schemas, s.limits), schemas, s.limits, s.config)
 
 	s.mux.HandleFunc("GET "+path, s.handle(controller.List))
 	s.mux.HandleFunc("POST "+path, s.handle(controller.Create))

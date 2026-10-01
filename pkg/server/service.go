@@ -33,6 +33,7 @@ type service[T core.Resource] struct {
 }
 
 func NewService[T core.Resource](repo Repository[T], schemas core.Schemas, limits Limits, validators ...Validator[T]) Service[T] {
+	validators = append([]Validator[T]{characteristics[T](schemas)}, validators...)
 	return &service[T]{repo: repo, schemas: schemas, limits: limits, validators: validators}
 }
 
