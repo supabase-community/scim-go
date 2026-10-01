@@ -28,6 +28,7 @@ type Controller[T core.Resource] interface {
 type controller[T core.Resource] struct {
 	schemas core.Schemas
 	service Service[T]
+	patcher AttributePatcher[T]
 	limits  protocol.Limits
 	config  *core.ServiceProviderConfig
 }
@@ -153,8 +154,8 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return err
 	}
-	if patcher, ok := c.deltaPatcher(); ok {
-		return c.patchWithDelta(w, r, projection, patcher)
+	if c.patcher != nil {
+		return c.patchWithDelta(w, r, projection)
 	}
 	return c.patchByReplacing(w, r, projection)
 }
@@ -172,7 +173,7 @@ func (c *controller[T]) patchByReplacing(w http.ResponseWriter, r *http.Request,
 	return c.applyPatch(w, r, projection, decodedPatch[T]{existing, req})
 }
 
-func (c *controller[T]) patchWithDelta(w http.ResponseWriter, r *http.Request, projection protocol.Projection, patcher MultiValuedDeltaPatcher[T]) error {
+func (c *controller[T]) patchWithDelta(w http.ResponseWriter, r *http.Request, projection protocol.Projection) error {
 	req, err := c.limits.DecodePatchRequest(r.Body)
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -185,7 +186,7 @@ func (c *controller[T]) patchWithDelta(w http.ResponseWriter, r *http.Request, p
 		}
 		return c.applyPatch(w, r, projection, decodedPatch[T]{existing, req})
 	}
-	meta, _, err := patcher.PatchMultiValued(r.Context(), r.PathValue("id"), c.ifMatch(r), found.attribute, found.added, found.removed)
+	meta, _, err := c.patcher.PatchAttribute(r.Context(), r.PathValue("id"), c.ifMatch(r), found.attribute, found.added, found.removed)
 	if err != nil {
 		return protocol.SendError(w, c.lostRace(r, err))
 	}
@@ -231,14 +232,6 @@ func (c *controller[T]) sendPatched(w http.ResponseWriter, replaced T, projectio
 		return protocol.Send(w, http.StatusNoContent, nil)
 	}
 	return c.send(w, http.StatusOK, replaced, projection)
-}
-
-func (c *controller[T]) deltaPatcher() (MultiValuedDeltaPatcher[T], bool) {
-	capable, ok := any(c.service).(deltaCapable[T])
-	if !ok {
-		return nil, false
-	}
-	return capable.multiValuedDelta()
 }
 
 func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {

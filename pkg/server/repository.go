@@ -25,9 +25,9 @@ type Repository[T core.Resource] interface {
 	Delete(ctx context.Context, id, version string) error
 }
 
-// MultiValuedDeltaPatcher applies an add/remove delta to one attribute without the full resource; MaxResourceBytes is not enforced on this path.
-type MultiValuedDeltaPatcher[T core.Resource] interface {
-	PatchMultiValued(ctx context.Context, id, version, attribute string, added []core.Object, removed []string) (meta core.Meta, changed bool, err error)
+// AttributePatcher applies an add/remove delta to one attribute without the full resource; MaxResourceBytes is not enforced on this path.
+type AttributePatcher[T core.Resource] interface {
+	PatchAttribute(ctx context.Context, id, version, attribute string, added []core.Object, removed []string) (meta core.Meta, changed bool, err error)
 }
 
 type repository[T core.Resource] struct {
@@ -145,8 +145,8 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 	return item, nil
 }
 
-//nolint:revive // matches the MultiValuedDeltaPatcher[T] interface agreed with repo authors; not grouping params into a struct post hoc.
-func (r *repository[T]) PatchMultiValued(_ context.Context, id, version, attribute string, added []core.Object, removed []string) (meta core.Meta, changed bool, err error) {
+//nolint:revive // matches the AttributePatcher[T] interface agreed with repo authors; not grouping params into a struct post hoc.
+func (r *repository[T]) PatchAttribute(_ context.Context, id, version, attribute string, added []core.Object, removed []string) (meta core.Meta, changed bool, err error) {
 	err = r.withLock(func() error {
 		i, err := r.locate(id, version)
 		if err != nil {
