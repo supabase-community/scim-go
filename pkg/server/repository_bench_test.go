@@ -38,9 +38,10 @@ func benchRepository(b *testing.B, size int) {
 			_, err := repository.Get(ctx, seeded.ID)
 			return err
 		}},
-		{"Replace", func() error {
-			seeded.Meta.Version = ""
-			_, err := repository.Replace(ctx, seeded)
+		{"Update", func() error {
+			_, err := repository.Update(ctx, seeded.ID, "", func(current *core.User) (*core.User, error) {
+				return current, nil
+			})
 			return err
 		}},
 		{"List", func() error {

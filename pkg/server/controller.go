@@ -83,11 +83,7 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	after, ok, err := c.prepare(w, resource)
-	if !ok {
-		return err
-	}
-	created, err := c.service.Create(withCandidate(r.Context(), after), resource)
+	created, err := c.service.Create(r.Context(), resource)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -111,7 +107,7 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 		Request: req,
 	})
 	if err != nil {
-		return protocol.SendError(w, c.lostRace(r, err))
+		return protocol.SendError(w, err)
 	}
 	c.setVersion(w, replaced)
 	return c.send(w, http.StatusOK, replaced, projection)
@@ -137,7 +133,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 		NoContent: noContent,
 	})
 	if err != nil {
-		return protocol.SendError(w, c.lostRace(r, err))
+		return protocol.SendError(w, err)
 	}
 	c.setETag(w, result.Meta.Version)
 	return c.sendPatched(w, result, projection, noContent)
@@ -188,25 +184,6 @@ func (c *controller[T]) setETag(w http.ResponseWriter, version string) {
 	if c.config.SupportsVersioning() {
 		w.Header().Set("ETag", version)
 	}
-}
-
-// prepare stamps schemas into resource and rejects it once it crosses MaxResourceBytes, per RFC 7643, Section 3.
-func (c *controller[T]) prepare(w http.ResponseWriter, resource T) (after core.Object, ok bool, err error) {
-	after, err = stampSchemas(c.schemas, resource)
-	if err != nil {
-		return after, false, protocol.SendError(w, err)
-	}
-	if err := checkSize(c.limits, resource); err != nil {
-		return after, false, protocol.SendError(w, err)
-	}
-	return after, true, nil
-}
-
-func (c *controller[T]) lostRace(r *http.Request, err error) error {
-	if c.ifMatch(r) == "" && isPreconditionFailed(err) {
-		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
-	}
-	return err
 }
 
 func (c *controller[T]) ifMatch(r *http.Request) string {

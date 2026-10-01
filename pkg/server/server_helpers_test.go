@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -17,7 +16,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
-	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
@@ -43,10 +41,9 @@ var tokens = map[string]error{
 }
 
 type testServer struct {
-	config      *core.ServiceProviderConfig
-	options     []server.Option[*server.Server]
-	replaceGate *raceGate
-	races       *races
+	config     *core.ServiceProviderConfig
+	options    []server.Option[*server.Server]
+	updateGate *raceGate
 }
 
 type raceGate struct {
@@ -69,33 +66,6 @@ func (g *raceGate) arrive() {
 		close(g.release)
 	}
 	<-g.release
-}
-
-type races struct {
-	mu       sync.Mutex
-	lose     int
-	replaces int
-}
-
-func alwaysLosing() *races {
-	return &races{lose: math.MaxInt}
-}
-
-func (r *races) replace() (lost bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.replaces++
-	if r.lose > 0 {
-		r.lose--
-		return true
-	}
-	return false
-}
-
-func (r *races) count() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.replaces
 }
 
 type testOption func(*testServer)
@@ -131,10 +101,9 @@ type gadget struct {
 	Parts []part
 }
 
-type racingRepository struct {
+type gatedRepository struct {
 	server.Repository[*core.User]
-	replaceGate *raceGate
-	races       *races
+	gate *raceGate
 }
 
 type inspectingRepository struct {
@@ -199,14 +168,13 @@ func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 	tb.Helper()
 
-	s := &testServer{config: fullServiceProviderConfig(), races: &races{}}
+	s := &testServer{config: fullServiceProviderConfig()}
 	for _, option := range options {
 		option(s)
 	}
-	users := racingRepository{
-		Repository:  server.NewRepository[*core.User](basePath+"/Users", append(userSchemas(), core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...))),
-		replaceGate: s.replaceGate,
-		races:       s.races,
+	users := gatedRepository{
+		Repository: server.NewRepository[*core.User](basePath+"/Users", append(userSchemas(), core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...))),
+		gate:       s.updateGate,
 	}
 	standard := []server.Option[*server.Server]{
 		server.ErrorHandler(func(_ *http.Request, err error) {
@@ -237,30 +205,13 @@ func withOption(options ...server.Option[*server.Server]) testOption {
 	return func(s *testServer) { s.options = append(s.options, options...) }
 }
 
-func withReplaceGate(gate *raceGate) testOption {
-	return func(s *testServer) { s.replaceGate = gate }
+func withUpdateGate(gate *raceGate) testOption {
+	return func(s *testServer) { s.updateGate = gate }
 }
 
-func withRaces(r *races) testOption {
-	return func(s *testServer) { s.races = r }
-}
-
-func (r racingRepository) Replace(ctx context.Context, user *core.User) (*core.User, error) {
-	if r.races.replace() {
-		return nil, scimerrors.ErrPreconditionFailed("resource has changed on the server")
-	}
-	if r.replaceGate != nil {
-		r.replaceGate.arrive()
-	}
-	return r.Repository.Replace(ctx, user)
-}
-
-func (r racingRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
-	if r.races.replace() {
-		return nil, scimerrors.ErrPreconditionFailed("resource has changed on the server")
-	}
-	if r.replaceGate != nil {
-		r.replaceGate.arrive()
+func (r gatedRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
+	if r.gate != nil {
+		r.gate.arrive()
 	}
 	return r.Repository.Update(ctx, id, version, change)
 }

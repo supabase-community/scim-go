@@ -32,11 +32,6 @@ func MaxPatchWriteBytes(n int) Option[*Server] {
 	return func(s *Server) { s.limits.MaxWriteBytes = n }
 }
 
-// MaxPatchRetries sets how many times a PATCH without If-Match that loses a race to another write is reapplied before it gets 409; zero disables the retry.
-func MaxPatchRetries(n int) Option[*Server] {
-	return func(s *Server) { s.limits.PatchRetries = n }
-}
-
 // MaxBodySize caps the request body; larger bodies get 413, per RFC 7644, Section 3.12.
 func MaxBodySize(n int64) Option[*Server] {
 	return func(s *Server) { s.maxBodySize = n }

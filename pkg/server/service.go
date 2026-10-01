@@ -2,14 +2,11 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"maps"
-	"math/big"
 	"reflect"
 	"strconv"
-	"time"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -17,8 +14,6 @@ import (
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
-
-const retryBackoff = 2 * time.Millisecond
 
 var errUnchanged = errors.New("server: the patch changes nothing")
 
@@ -70,7 +65,11 @@ func (s *service[T]) List(ctx context.Context, query *protocol.SearchRequest) ([
 }
 
 func (s *service[T]) Create(ctx context.Context, item T) (T, error) {
-	if err := s.validate(ctx, item); err != nil {
+	after, err := stampSchemas(s.schemas, item)
+	if err != nil {
+		return item, err
+	}
+	if err := s.admit(ctx, nil, after, item); err != nil {
 		var zero T
 		return zero, err
 	}
@@ -79,7 +78,7 @@ func (s *service[T]) Create(ctx context.Context, item T) (T, error) {
 
 func (s *service[T]) Replace(ctx context.Context, cmd ReplaceCommand) (T, error) {
 	return s.repo.Update(ctx, cmd.ID, cmd.Version, func(existing T) (T, error) {
-		return s.replace(ctx, existing, cmd.Request)
+		return s.replaced(ctx, existing, cmd.Request)
 	})
 }
 
@@ -93,7 +92,7 @@ func (s *service[T]) Patch(ctx context.Context, cmd PatchCommand) (Patched[T], e
 		meta, _, err := s.patcher.PatchAttribute(ctx, cmd.ID, cmd.Version, found)
 		return Patched[T]{Meta: meta}, err
 	}
-	patched, err := s.patchWithRetry(ctx, cmd)
+	patched, err := s.patch(ctx, cmd)
 	if err != nil {
 		return Patched[T]{}, err
 	}
@@ -107,23 +106,11 @@ func (s *service[T]) delta(cmd PatchCommand) (AttributeDelta, bool) {
 	return eligibleDelta(s.schemas, cmd.Request.Operations)
 }
 
-// patchWithRetry reapplies a versionless PATCH to the current resource after a lost race, since RFC 7644 Section 3.14 leaves the version to the client.
-func (s *service[T]) patchWithRetry(ctx context.Context, cmd PatchCommand) (T, error) {
-	patched, err := s.patchOnce(ctx, cmd)
-	for retry := range s.limits.PatchRetries {
-		if !retryable(cmd, err) || !pause(ctx, retry) {
-			break
-		}
-		patched, err = s.patchOnce(ctx, cmd)
-	}
-	return patched, err
-}
-
-func (s *service[T]) patchOnce(ctx context.Context, cmd PatchCommand) (T, error) {
+func (s *service[T]) patch(ctx context.Context, cmd PatchCommand) (T, error) {
 	var current T
 	patched, err := s.repo.Update(ctx, cmd.ID, cmd.Version, func(existing T) (T, error) {
 		current = existing
-		return s.patch(ctx, existing, cmd.Request)
+		return s.patched(ctx, existing, cmd.Request)
 	})
 	if errors.Is(err, errUnchanged) {
 		return current, nil
@@ -131,52 +118,53 @@ func (s *service[T]) patchOnce(ctx context.Context, cmd PatchCommand) (T, error)
 	return patched, err
 }
 
-func (s *service[T]) patch(ctx context.Context, existing T, req *protocol.PatchRequest) (T, error) {
-	patched, after, err := s.apply(existing, req)
+func (s *service[T]) patched(ctx context.Context, existing T, req *protocol.PatchRequest) (T, error) {
+	patched, err := req.Patch(existing, s.schemas, patch.MaxFilterEvaluations(s.limits.MaxFilterEvaluations), patch.MaxWriteBytes(s.limits.MaxWriteBytes))
 	if err != nil {
 		return patched, err
 	}
-	before, err := core.NewObject(existing)
+	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
+	before, after, err := s.compare(existing, patched)
 	if err != nil {
-		return patched, scimerrors.ErrInternal("could not encode the resource")
+		return patched, err
 	}
 	// RFC 7644 Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
 	if unchanged(before, after) {
 		return patched, errUnchanged
 	}
-	if err := checkSize(s.limits, patched); err != nil {
-		return patched, err
-	}
-	return patched, s.validate(withCandidate(withExisting(ctx, before), after), patched)
+	return patched, s.admit(ctx, before, after, patched)
 }
 
-func (s *service[T]) apply(existing T, req *protocol.PatchRequest) (T, core.Object, error) {
-	patched, err := req.Patch(existing, s.schemas, patch.MaxFilterEvaluations(s.limits.MaxFilterEvaluations), patch.MaxWriteBytes(s.limits.MaxWriteBytes))
-	if err != nil {
-		return patched, nil, err
-	}
-	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
-	after, err := stampSchemas(s.schemas, patched)
-	return patched, after, err
-}
-
-func (s *service[T]) replace(ctx context.Context, existing T, req *protocol.ReplaceRequest) (T, error) {
+func (s *service[T]) replaced(ctx context.Context, existing T, req *protocol.ReplaceRequest) (T, error) {
 	resource, err := req.Replace(existing, s.schemas)
 	if err != nil {
 		return resource, err
 	}
-	after, err := stampSchemas(s.schemas, resource)
+	before, after, err := s.compare(existing, resource)
 	if err != nil {
 		return resource, err
 	}
+	return resource, s.admit(ctx, before, after, resource)
+}
+
+func (s *service[T]) compare(existing, candidate T) (before, after core.Object, err error) {
+	if after, err = stampSchemas(s.schemas, candidate); err != nil {
+		return nil, nil, err
+	}
+	if before, err = core.NewObject(existing); err != nil {
+		return nil, nil, scimerrors.ErrInternal("could not encode the resource")
+	}
+	return before, after, nil
+}
+
+func (s *service[T]) admit(ctx context.Context, before, after core.Object, resource T) error {
 	if err := checkSize(s.limits, resource); err != nil {
-		return resource, err
+		return err
 	}
-	before, err := core.NewObject(existing)
-	if err != nil {
-		return resource, scimerrors.ErrInternal("could not encode the resource")
+	if before != nil {
+		ctx = withExisting(ctx, before)
 	}
-	return resource, s.validate(withCandidate(withExisting(ctx, before), after), resource)
+	return s.validate(withCandidate(ctx, after), resource)
 }
 
 func (s *service[T]) validate(ctx context.Context, item T) error {
@@ -233,34 +221,4 @@ func unchanged(before, after core.Object) bool {
 	before.Remove("meta")
 	after.Remove("meta")
 	return reflect.DeepEqual(before, after)
-}
-
-func retryable(cmd PatchCommand, err error) bool {
-	return cmd.Version == "" && isPreconditionFailed(err)
-}
-
-func isPreconditionFailed(err error) bool {
-	return errors.Is(err, scimerrors.ErrPreconditionFailed(""))
-}
-
-func pause(ctx context.Context, retry int) bool {
-	if ctx.Err() != nil {
-		return false
-	}
-	timer := time.NewTimer(jitter(retryBackoff << min(retry, 4)))
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
-	}
-}
-
-func jitter(limit time.Duration) time.Duration {
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(limit)))
-	if err != nil {
-		return limit
-	}
-	return time.Duration(n.Int64())
 }

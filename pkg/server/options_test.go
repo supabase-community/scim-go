@@ -48,10 +48,6 @@ func (r failingRepository) List(context.Context, *protocol.SearchRequest) ([]*co
 	return nil, 0, r.cause
 }
 
-func (r failingRepository) Replace(context.Context, *core.User) (*core.User, error) {
-	return nil, r.cause
-}
-
 func (r failingRepository) Update(context.Context, string, string, func(*core.User) (*core.User, error)) (*core.User, error) {
 	return nil, r.cause
 }

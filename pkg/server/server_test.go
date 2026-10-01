@@ -3016,7 +3016,7 @@ func TestRFC7644GroupMemberDeltaFastPath(t *testing.T) {
 
 func TestRFC7644ConcurrentVersionlessPUTsCannotBothPassImmutabilityValidation(t *testing.T) {
 	gate := newRaceGate(2)
-	srv := newTestServer(t, withReplaceGate(gate))
+	srv := newTestServer(t, withUpdateGate(gate))
 	id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 	put := func(employeeNumber string) *http.Response {
@@ -4374,7 +4374,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 					WithContentType(protocol.MediaType),
 					WithRequestBody([]byte(`{"userName":"bjensen"}`)),
 				)
-				assert.Contains(t, []int{http.StatusOK, http.StatusConflict}, Response(t, srv, request).StatusCode)
+				assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
 			})
 			wg.Go(func() {
 				request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
@@ -4385,7 +4385,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 						Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
 					}),
 				)
-				assert.Contains(t, []int{http.StatusOK, http.StatusConflict}, Response(t, srv, request).StatusCode)
+				assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
 			})
 		}
 		wg.Wait()
@@ -4395,89 +4395,8 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, 9, list.TotalResults)
 	})
 
-	t.Run("answers a patch that loses a race with 409 unless the client sent If-Match", func(t *testing.T) {
-		srv := newTestServer(t, withRaces(alwaysLosing()))
-		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
-		patch := func(options ...Option[*http.Request]) int {
-			return Response(t, srv, patchRequest(t, srv, id, activate, options...)).StatusCode
-		}
-
-		assert.Equal(t, http.StatusConflict, patch())
-		assert.Equal(t, http.StatusPreconditionFailed, patch(WithHeader("If-Match", etag)))
-	})
-
-	t.Run("answers a put that loses a race with a 409 that does not mention a patch", func(t *testing.T) {
-		srv := newTestServer(t, withRaces(alwaysLosing()))
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-
-		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
-		))
-
-		require.Equal(t, http.StatusConflict, response.StatusCode)
-		assert.NotContains(t, ReadBodyAs[scimerrors.Error](t, response).Detail, "patch")
-	})
-
-	t.Run("reapplies a versionless patch that loses a race to the current version", func(t *testing.T) {
-		races := &races{lose: 2}
-		srv := newTestServer(t, withRaces(races))
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-
-		response := Response(t, srv, patchRequest(t, srv, id, activate))
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.True(t, *ReadBodyAs[core.User](t, response).Active)
-		assert.Equal(t, 3, races.count())
-	})
-
-	t.Run("answers 409 once a versionless patch exhausts its retries", func(t *testing.T) {
-		races := alwaysLosing()
-		srv := newTestServer(t, withRaces(races))
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-
-		assert.Equal(t, http.StatusConflict, Response(t, srv, patchRequest(t, srv, id, activate)).StatusCode)
-		assert.Equal(t, 3, races.count())
-	})
-
-	t.Run("does not retry a patch sent with If-Match", func(t *testing.T) {
-		races := alwaysLosing()
-		srv := newTestServer(t, withRaces(races))
-		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
-
-		assert.Equal(t, http.StatusPreconditionFailed, Response(t, srv, patchRequest(t, srv, id, activate, WithHeader("If-Match", etag))).StatusCode)
-		assert.Equal(t, 1, races.count())
-	})
-
-	t.Run("does not retry when MaxPatchRetries is zero", func(t *testing.T) {
-		races := alwaysLosing()
-		srv := newTestServer(t, withRaces(races), withOption(server.MaxPatchRetries(0)))
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-
-		assert.Equal(t, http.StatusConflict, Response(t, srv, patchRequest(t, srv, id, activate)).StatusCode)
-		assert.Equal(t, 1, races.count())
-	})
-
-	t.Run("stops retrying a versionless patch once the request is canceled", func(t *testing.T) {
-		races := alwaysLosing()
-		repo := racingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", userSchemas()), races: races}
-		user, err := repo.Create(context.Background(), &core.User{UserName: "bjensen"})
-		require.NoError(t, err)
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		_, err = server.NewService[*core.User](repo, userSchemas(), server.DefaultLimits).Patch(ctx, server.PatchCommand{
-			ID:      user.ID,
-			Request: &protocol.PatchRequest{Operations: []patch.Operation{activate}},
-		})
-
-		require.ErrorIs(t, err, scimerrors.ErrPreconditionFailed(""))
-		assert.Equal(t, 1, races.count())
-	})
-
-	t.Run("keeps both of two concurrent versionless patches without a retry", func(t *testing.T) {
-		srv := newTestServer(t, withReplaceGate(newRaceGate(2)), withOption(server.MaxPatchRetries(0)))
+	t.Run("keeps both of two concurrent versionless patches", func(t *testing.T) {
+		srv := newTestServer(t, withUpdateGate(newRaceGate(2)))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		statuses := make([]int, 2)

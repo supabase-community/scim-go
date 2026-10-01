@@ -21,7 +21,6 @@ type Repository[T core.Resource] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
-	Replace(ctx context.Context, item T) (T, error)
 	Update(ctx context.Context, id, version string, change func(current T) (T, error)) (T, error)
 	Delete(ctx context.Context, id, version string) error
 }
@@ -120,22 +119,6 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 		r.rows = append(r.rows, created)
 		r.owners.claim(common.ID, created.object)
 		return nil
-	})
-	if err != nil {
-		var zero T
-		return zero, err
-	}
-	return item, nil
-}
-
-func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
-	err := r.withLock(func() error {
-		common := item.Common()
-		i, err := r.locate(common.ID, common.Meta.Version)
-		if err != nil {
-			return err
-		}
-		return r.store(i, item)
 	})
 	if err != nil {
 		var zero T
