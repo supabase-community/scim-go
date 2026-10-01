@@ -173,6 +173,15 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	c.setVersion(w, replaced)
+	return c.sendPatched(w, replaced, projection, noContentEligible(r, c.schemas, req.Operations))
+}
+
+// sendPatched returns 204 for a Group PATCH eligible under noContentEligible, or 200 with the resource otherwise, per RFC 7644 Section 3.5.2.
+func (c *controller[T]) sendPatched(w http.ResponseWriter, replaced T, projection protocol.Projection, noContent bool) error {
+	if noContent {
+		setLocation(w, replaced.Common().Meta)
+		return protocol.Send(w, http.StatusNoContent, nil)
+	}
 	return c.send(w, http.StatusOK, replaced, projection)
 }
 

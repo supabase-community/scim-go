@@ -2868,6 +2868,129 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.True(t, *patched.Active)
 	})
 
+	// RFC 7644 Section 3.5.2: a server MAY return 204 with no body for a successful PATCH.
+	t.Run("returns 204 with an ETag for a group member add or remove, and is case-insensitive about the op and the path", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		group := ReadBodyAs[core.Group](t, created)
+
+		for _, test := range []struct {
+			name string
+			op   patch.Operation
+		}{
+			{"add", patch.Operation{Op: patch.OpAdd, Path: "Members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
+			{"add with a capitalized op", patch.Operation{Op: patch.Op("Add"), Path: "members", Value: json.RawMessage(`[{"value":"u-3","type":"User"}]`)}},
+			{"remove", patch.Operation{Op: patch.OpRemove, Path: `MEMBERS[value eq "u-2"]`}},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
+					WithBearerToken(validToken),
+					WithContentType(protocol.MediaType),
+					WithRequestBodyAs(t, protocol.PatchRequest{
+						Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+						Operations: []patch.Operation{test.op},
+					}),
+				))
+
+				require.Equal(t, http.StatusNoContent, response.StatusCode)
+				assert.NotEmpty(t, response.Header.Get("ETag"))
+				body, err := io.ReadAll(response.Body)
+				require.NoError(t, err)
+				assert.Empty(t, body)
+			})
+		}
+	})
+
+	// RFC 7644 Section 3.5.2: the server MUST return 200 if the "attributes" parameter is specified.
+	t.Run("returns 200 with a body for a group member patch when attributes or excludedAttributes is requested", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		group := ReadBodyAs[core.Group](t, created)
+
+		for _, query := range []string{"?attributes=displayName", "?excludedAttributes=displayName"} {
+			t.Run(query, func(t *testing.T) {
+				response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID+query,
+					WithBearerToken(validToken),
+					WithContentType(protocol.MediaType),
+					WithRequestBodyAs(t, protocol.PatchRequest{
+						Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+						Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
+					}),
+				))
+
+				require.Equal(t, http.StatusOK, response.StatusCode)
+				body, err := io.ReadAll(response.Body)
+				require.NoError(t, err)
+				assert.NotEmpty(t, body)
+			})
+		}
+	})
+
+	// RFC 7644 Section 3.5.2: 204 is scoped to a patch where every operation touches only "members".
+	t.Run("returns 200 with a body when a group member patch is mixed with a non-member operation", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		group := ReadBodyAs[core.Group](t, created)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{
+					{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)},
+					{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"renamed"`)},
+				},
+			}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		body, err := io.ReadAll(response.Body)
+		require.NoError(t, err)
+		assert.NotEmpty(t, body)
+	})
+
+	// RFC 7644 Section 3.5.2: a path-less replace is a different operation shape and does not qualify for 204.
+	t.Run("returns 200 with a body for a path-less replace that only sets members", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		group := ReadBodyAs[core.Group](t, created)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Value: json.RawMessage(`{"members":[{"value":"u-2","type":"User"}]}`)}},
+			}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		body, err := io.ReadAll(response.Body)
+		require.NoError(t, err)
+		assert.NotEmpty(t, body)
+	})
+
 	// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute.
 	t.Run("rejects a patch that targets a readOnly attribute", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -3171,11 +3294,11 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			{"accepts the same extension value", "/Users", user, patch.Operation{Op: patch.OpReplace, Path: extension + ":employeeNumber", Value: json.RawMessage(`"E1"`)}, http.StatusOK},
 			{"accepts adding a member", "/Kits", gear, patch.Operation{Op: patch.OpAdd, Path: "parts", Value: json.RawMessage(`[{"serial":"s-3"}]`)}, http.StatusOK},
 			{"accepts removing a member", "/Kits", gear, patch.Operation{Op: patch.OpRemove, Path: `parts[serial eq "s-1"]`}, http.StatusOK},
-			{"accepts adding a group member", "/Groups", team, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-3","type":"User"}]`)}, http.StatusOK},
-			{"accepts adding a group member that repeats a value with another type", "/Groups", team, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"Group"}]`)}, http.StatusOK},
+			{"accepts adding a group member", "/Groups", team, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-3","type":"User"}]`)}, http.StatusNoContent},
+			{"accepts adding a group member that repeats a value with another type", "/Groups", team, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"Group"}]`)}, http.StatusNoContent},
 			{"accepts a group member type that differs only in case", "/Groups", team, patch.Operation{Op: patch.OpReplace, Path: `members[value eq "u-1"].type`, Value: json.RawMessage(`"user"`)}, http.StatusOK},
 			{"accepts an extension value that differs only in case", "/Users", user, patch.Operation{Op: patch.OpReplace, Path: extension + ":employeeNumber", Value: json.RawMessage(`"e1"`)}, http.StatusOK},
-			{"accepts removing a group member", "/Groups", team, patch.Operation{Op: patch.OpRemove, Path: `members[value eq "u-1"]`}, http.StatusOK},
+			{"accepts removing a group member", "/Groups", team, patch.Operation{Op: patch.OpRemove, Path: `members[value eq "u-1"]`}, http.StatusNoContent},
 			{"accepts replacing the group members", "/Groups", team, patch.Operation{Op: patch.OpReplace, Path: "members", Value: json.RawMessage(`[{"value":"u-3","type":"User"}]`)}, http.StatusOK},
 			{"rejects a changed immutable sub-attribute of a group member", "/Groups", team, patch.Operation{Op: patch.OpReplace, Path: `members[value eq "u-1"].type`, Value: json.RawMessage(`"Group"`)}, http.StatusBadRequest},
 		} {
@@ -3213,9 +3336,10 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 				{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"Group"}]`)},
 			}}),
 		))
-		require.Equal(t, http.StatusOK, response.StatusCode)
+		require.Equal(t, http.StatusNoContent, response.StatusCode)
 
-		patched := ReadBodyAs[core.Group](t, response)
+		fetched := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Groups/"+id, WithBearerToken(validToken)))
+		patched := ReadBodyAs[core.Group](t, fetched)
 		require.Len(t, patched.Members, 1)
 		assert.Equal(t, core.ResourceTypeName("User"), patched.Members[0].Type)
 	})
@@ -3388,8 +3512,9 @@ func TestRFC7644AddOperation(t *testing.T) {
 		)
 		response := Response(t, srv, request)
 
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		patched := ReadBodyAs[core.Group](t, response)
+		require.Equal(t, http.StatusNoContent, response.StatusCode)
+		fetched := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Groups/"+group.ID, WithBearerToken(validToken)))
+		patched := ReadBodyAs[core.Group](t, fetched)
 		assert.Len(t, patched.Members, 1)
 		assert.Equal(t, group.Meta.Version, patched.Meta.Version)
 		assert.Equal(t, group.Meta.LastModified, patched.Meta.LastModified)

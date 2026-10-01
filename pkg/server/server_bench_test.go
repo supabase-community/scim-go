@@ -81,7 +81,7 @@ func BenchmarkServerPatchGroupMembers(b *testing.B) {
 				if i%2 == 1 {
 					body = remove
 				}
-				serve(b, handler, http.MethodPatch, location, body, http.StatusOK)
+				serve(b, handler, http.MethodPatch, location, body, http.StatusNoContent)
 			}
 		})
 	}
