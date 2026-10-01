@@ -4398,7 +4398,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t, withRaces(alwaysLosing()))
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 		patch := func(options ...Option[*http.Request]) int {
-			return Response(t, srv, patchActive(t, srv, id, options...)).StatusCode
+			return Response(t, srv, patchRequest(t, srv, id, activate, options...)).StatusCode
 		}
 
 		assert.Equal(t, http.StatusConflict, patch())
@@ -4410,7 +4410,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t, withRaces(races))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
-		response := Response(t, srv, patchActive(t, srv, id))
+		response := Response(t, srv, patchRequest(t, srv, id, activate))
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.True(t, *ReadBodyAs[core.User](t, response).Active)
@@ -4422,7 +4422,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t, withRaces(races))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
-		assert.Equal(t, http.StatusConflict, Response(t, srv, patchActive(t, srv, id)).StatusCode)
+		assert.Equal(t, http.StatusConflict, Response(t, srv, patchRequest(t, srv, id, activate)).StatusCode)
 		assert.Equal(t, 3, races.count())
 	})
 
@@ -4431,7 +4431,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t, withRaces(races))
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
-		assert.Equal(t, http.StatusPreconditionFailed, Response(t, srv, patchActive(t, srv, id, WithHeader("If-Match", etag))).StatusCode)
+		assert.Equal(t, http.StatusPreconditionFailed, Response(t, srv, patchRequest(t, srv, id, activate, WithHeader("If-Match", etag))).StatusCode)
 		assert.Equal(t, 1, races.count())
 	})
 
@@ -4440,22 +4440,21 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t, withRaces(races), withOption(server.MaxPatchRetries(0)))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
-		assert.Equal(t, http.StatusConflict, Response(t, srv, patchActive(t, srv, id)).StatusCode)
+		assert.Equal(t, http.StatusConflict, Response(t, srv, patchRequest(t, srv, id, activate)).StatusCode)
 		assert.Equal(t, 1, races.count())
 	})
 
 	t.Run("stops retrying a versionless patch once the request is canceled", func(t *testing.T) {
 		races := alwaysLosing()
-		schemas := core.Schemas{core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...)}
-		repo := racingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), races: races}
+		repo := racingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", userSchemas()), races: races}
 		user, err := repo.Create(context.Background(), &core.User{UserName: "bjensen"})
 		require.NoError(t, err)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		_, err = server.NewService[*core.User](repo, schemas, protocol.DefaultLimits).Patch(ctx, server.PatchCommand{
+		_, err = server.NewService[*core.User](repo, userSchemas(), protocol.DefaultLimits).Patch(ctx, server.PatchCommand{
 			ID:      user.ID,
-			Request: &protocol.PatchRequest{Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}}},
+			Request: &protocol.PatchRequest{Operations: []patch.Operation{activate}},
 		})
 
 		require.ErrorIs(t, err, scimerrors.ErrPreconditionFailed(""))
@@ -4468,18 +4467,8 @@ func TestRFC7644VersioningResources(t *testing.T) {
 
 		statuses := make([]int, 2)
 		var wg sync.WaitGroup
-		for i, op := range []patch.Operation{
-			{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")},
-			{Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)},
-		} {
-			wg.Go(func() {
-				request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-					WithBearerToken(validToken),
-					WithContentType(protocol.MediaType),
-					WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{op}}),
-				)
-				statuses[i] = Response(t, srv, request).StatusCode
-			})
+		for i, op := range []patch.Operation{activate, {Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}} {
+			wg.Go(func() { statuses[i] = Response(t, srv, patchRequest(t, srv, id, op)).StatusCode })
 		}
 		wg.Wait()
 

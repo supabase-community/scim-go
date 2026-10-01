@@ -34,6 +34,8 @@ const (
 
 var errUnreachable = errors.New("dial tcp 10.0.0.1:5432: connection refused")
 
+var activate = patch.Operation{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}
+
 var tokens = map[string]error{
 	validToken:       nil,
 	expiredToken:     fmt.Errorf("%w: expired at noon", server.ErrInvalidToken),
@@ -172,6 +174,10 @@ func (stubDeltaRepository) PatchAttribute(context.Context, string, string, serve
 	return core.Meta{Version: `W/"stub"`}, true, nil
 }
 
+func userSchemas() core.Schemas {
+	return core.Schemas{core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...)}
+}
+
 func groupSchemas() core.Schemas {
 	return core.Schemas{core.NewSchema(core.SchemaGroup).WithName("Group").With(core.GroupAttributes()...)}
 }
@@ -198,10 +204,7 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 		option(s)
 	}
 	users := racingRepository{
-		Repository: server.NewRepository[*core.User](basePath+"/Users", core.Schemas{
-			core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...),
-			core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...),
-		}),
+		Repository:  server.NewRepository[*core.User](basePath+"/Users", append(userSchemas(), core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...))),
 		replaceGate: s.replaceGate,
 		races:       s.races,
 	}
@@ -409,15 +412,12 @@ func patchUser(t *testing.T, srv *httptest.Server, id string, operations ...patc
 	return ReadBodyAs[core.User](t, response)
 }
 
-func patchActive(t *testing.T, srv *httptest.Server, id string, options ...Option[*http.Request]) *http.Request {
+func patchRequest(t *testing.T, srv *httptest.Server, id string, op patch.Operation, options ...Option[*http.Request]) *http.Request {
 	t.Helper()
 
 	return Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, append(options,
 		WithBearerToken(validToken),
 		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, protocol.PatchRequest{
-			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-			Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
-		}),
+		WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{op}}),
 	)...)
 }

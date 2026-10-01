@@ -18,7 +18,7 @@ func BenchmarkRepository(b *testing.B) {
 
 func benchRepository(b *testing.B, size int) {
 	ctx := b.Context()
-	repository := server.NewRepository[*core.User](basePath+"/Users", core.Schemas{core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...)})
+	repository := server.NewRepository[*core.User](basePath+"/Users", userSchemas())
 	var seeded *core.User
 	for i := range size {
 		seeded = seed(ctx, b, repository, "seed"+strconv.Itoa(i))
