@@ -20,6 +20,8 @@ import (
 
 const retryBackoff = 2 * time.Millisecond
 
+var errUnchanged = errors.New("server: the patch changes nothing")
+
 type Service[T core.Resource] interface {
 	List(ctx context.Context, query *protocol.SearchRequest) (items []T, total int, err error)
 	Get(ctx context.Context, id string) (T, error)
@@ -114,27 +116,34 @@ func (s *service[T]) patchWithRetry(ctx context.Context, cmd PatchCommand) (T, e
 }
 
 func (s *service[T]) patchOnce(ctx context.Context, cmd PatchCommand) (T, error) {
-	existing, err := s.current(ctx, cmd.ID, cmd.Version)
-	if err != nil {
-		return existing, err
+	var current T
+	patched, err := s.repo.Update(ctx, cmd.ID, cmd.Version, func(existing T) (T, error) {
+		current = existing
+		return s.patch(ctx, existing, cmd.Request)
+	})
+	if errors.Is(err, errUnchanged) {
+		return current, nil
 	}
-	patched, after, err := s.apply(existing, cmd.Request)
-	if err != nil {
-		return existing, err
-	}
-	return s.persist(ctx, existing, patched, after)
+	return patched, err
 }
 
-// current rejects a stale non-empty version, per RFC 7644 Section 3.14.
-func (s *service[T]) current(ctx context.Context, id, version string) (T, error) {
-	existing, err := s.repo.Get(ctx, id)
+// patch returns errUnchanged when the request changes nothing, per RFC 7644, Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
+func (s *service[T]) patch(ctx context.Context, existing T, req *protocol.PatchRequest) (T, error) {
+	patched, after, err := s.apply(existing, req)
 	if err != nil {
-		return existing, err
+		return patched, err
 	}
-	if version != "" && existing.Common().Meta.Version != version {
-		return existing, scimerrors.ErrPreconditionFailed("resource has changed on the server")
+	before, err := core.NewObject(existing)
+	if err != nil {
+		return patched, scimerrors.ErrInternal("could not encode the resource")
 	}
-	return existing, nil
+	if unchanged(before, after) {
+		return patched, errUnchanged
+	}
+	if err := checkSize(s.limits, patched); err != nil {
+		return patched, err
+	}
+	return patched, s.validate(withCandidate(withExisting(ctx, before), after), patched)
 }
 
 func (s *service[T]) apply(existing T, req *protocol.PatchRequest) (T, core.Object, error) {
@@ -145,21 +154,6 @@ func (s *service[T]) apply(existing T, req *protocol.PatchRequest) (T, core.Obje
 	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
 	after, err := stampSchemas(s.schemas, patched)
 	return patched, after, err
-}
-
-// persist skips the write when the patch changed nothing, per RFC 7644, Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
-func (s *service[T]) persist(ctx context.Context, existing, patched T, after core.Object) (T, error) {
-	before, err := core.NewObject(existing)
-	if err != nil {
-		return existing, scimerrors.ErrInternal("could not encode the resource")
-	}
-	if unchanged(before, after) {
-		return existing, nil
-	}
-	if err := checkSize(s.limits, patched); err != nil {
-		return existing, err
-	}
-	return s.Replace(withCandidate(withExisting(ctx, before), after), patched)
 }
 
 func (s *service[T]) validate(ctx context.Context, item T) error {

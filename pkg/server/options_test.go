@@ -52,6 +52,10 @@ func (r failingRepository) Replace(context.Context, *core.User) (*core.User, err
 	return nil, r.cause
 }
 
+func (r failingRepository) Update(context.Context, string, string, func(*core.User) (*core.User, error)) (*core.User, error) {
+	return nil, r.cause
+}
+
 func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T) {
 	cause := errors.New("pgx: connection pool timeout")
 	var reported error

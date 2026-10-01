@@ -255,6 +255,16 @@ func (r racingRepository) Replace(ctx context.Context, user *core.User) (*core.U
 	return r.Repository.Replace(ctx, user)
 }
 
+func (r racingRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
+	if r.races.replace() {
+		return nil, scimerrors.ErrPreconditionFailed("resource has changed on the server")
+	}
+	if r.replaceGate != nil {
+		r.replaceGate.arrive()
+	}
+	return r.Repository.Update(ctx, id, version, change)
+}
+
 func (r inspectingRepository) Create(ctx context.Context, w *widget) (*widget, error) {
 	for i := range w.Parts {
 		w.Parts[i].Inspector = "qa-bot"
@@ -272,6 +282,11 @@ func (r *projectingRepository) List(ctx context.Context, query *protocol.SearchR
 	return r.Repository.List(ctx, query)
 }
 
+func (r *projectingRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
+	r.record(ctx)
+	return r.Repository.Update(ctx, id, version, change)
+}
+
 func (r *projectingRepository) record(ctx context.Context) {
 	r.returned = append(r.returned, protocol.ProjectionFrom(ctx).Returns("emails"))
 }
@@ -281,9 +296,19 @@ func (r *countingRepository) Get(ctx context.Context, id string) (*core.User, er
 	return r.Repository.Get(ctx, id)
 }
 
+func (r *countingRepository) Update(ctx context.Context, id, version string, change func(*core.User) (*core.User, error)) (*core.User, error) {
+	r.gets++
+	return r.Repository.Update(ctx, id, version, change)
+}
+
 func (r *countingGroupRepository) Get(ctx context.Context, id string) (*core.Group, error) {
 	r.gets++
 	return r.Repository.Get(ctx, id)
+}
+
+func (r *countingGroupRepository) Update(ctx context.Context, id, version string, change func(*core.Group) (*core.Group, error)) (*core.Group, error) {
+	r.gets++
+	return r.Repository.Update(ctx, id, version, change)
 }
 
 func (r *countingGroupRepository) Gets() int { return r.gets }
@@ -291,6 +316,11 @@ func (r *countingGroupRepository) Gets() int { return r.gets }
 func (r *countingGroupDeltaRepository) Get(ctx context.Context, id string) (*core.Group, error) {
 	r.gets++
 	return r.Repository.Get(ctx, id)
+}
+
+func (r *countingGroupDeltaRepository) Update(ctx context.Context, id, version string, change func(*core.Group) (*core.Group, error)) (*core.Group, error) {
+	r.gets++
+	return r.Repository.Update(ctx, id, version, change)
 }
 
 func (r *countingGroupDeltaRepository) Gets() int { return r.gets }

@@ -4475,8 +4475,8 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, 1, races.count())
 	})
 
-	t.Run("keeps both of two concurrent versionless patches", func(t *testing.T) {
-		srv := newTestServer(t, withReplaceGate(newRaceGate(2)))
+	t.Run("keeps both of two concurrent versionless patches without a retry", func(t *testing.T) {
+		srv := newTestServer(t, withReplaceGate(newRaceGate(2)), withOption(server.MaxPatchRetries(0)))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		statuses := make([]int, 2)

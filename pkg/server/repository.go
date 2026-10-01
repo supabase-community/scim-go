@@ -22,6 +22,8 @@ type Repository[T core.Resource] interface {
 	Get(ctx context.Context, id string) (T, error)
 	Create(ctx context.Context, item T) (T, error)
 	Replace(ctx context.Context, item T) (T, error)
+	// Update locks the full stored resource, rejects a stale non-empty version (RFC 7644 Section 3.14), and saves what change returns, or nothing when change fails.
+	Update(ctx context.Context, id, version string, change func(current T) (T, error)) (T, error)
 	Delete(ctx context.Context, id, version string) error
 }
 
@@ -134,15 +136,25 @@ func (r *repository[T]) Replace(_ context.Context, item T) (T, error) {
 		if err != nil {
 			return err
 		}
-		common.Meta = bumpMeta(r.rows[i].item.Common().Meta)
-		replaced, err := r.rowOf(item)
+		return r.store(i, item)
+	})
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return item, nil
+}
+
+func (r *repository[T]) Update(_ context.Context, id, version string, change func(current T) (T, error)) (item T, err error) {
+	err = r.withLock(func() error {
+		i, err := r.locate(id, version)
 		if err != nil {
 			return err
 		}
-		r.owners.release(common.ID, r.rows[i].object)
-		r.owners.claim(common.ID, replaced.object)
-		r.rows[i] = replaced
-		return nil
+		if item, err = change(r.rows[i].item); err != nil {
+			return err
+		}
+		return r.store(i, item)
 	})
 	if err != nil {
 		var zero T
@@ -195,6 +207,20 @@ func (r *repository[T]) Delete(_ context.Context, id, version string) error {
 		}
 		return nil
 	})
+}
+
+func (r *repository[T]) store(i int, item T) error {
+	common := item.Common()
+	common.ID = r.rows[i].item.Common().ID
+	common.Meta = bumpMeta(r.rows[i].item.Common().Meta)
+	replaced, err := r.rowOf(item)
+	if err != nil {
+		return err
+	}
+	r.owners.release(common.ID, r.rows[i].object)
+	r.owners.claim(common.ID, replaced.object)
+	r.rows[i] = replaced
+	return nil
 }
 
 func (r *repository[T]) withLock(fn func() error) error {
