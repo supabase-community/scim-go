@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.4](https://github.com/supabase-community/scim-go/compare/v0.8.3...v0.8.4) (2026-10-01)
+
+
+### Performance Improvements
+
+* **server:** encode the patched resource once and reuse it for stampSchemas, the no-op diff, and characteristics ([a06d5d7](https://github.com/supabase-community/scim-go/commit/a06d5d7b30a67cf8adc99652a2689bb4d48a8e3b))
+* **server:** reuse the stampSchemas object for characteristics on POST and PUT ([af3d838](https://github.com/supabase-community/scim-go/commit/af3d838abfc0295a2eafe189960ff31d1853ec3f))
+
 ## [0.8.3](https://github.com/supabase-community/scim-go/compare/v0.8.2...v0.8.3) (2026-10-01)
 
 
