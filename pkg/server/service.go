@@ -101,7 +101,7 @@ func (s *service[T]) delta(cmd PatchCommand) (delta, bool) {
 func (s *service[T]) patchWithRetry(ctx context.Context, cmd PatchCommand) (T, error) {
 	patched, err := s.patchOnce(ctx, cmd)
 	for retry := range s.limits.PatchRetries {
-		if !lostRace(cmd, err) || !pause(ctx, retry) {
+		if !retryable(cmd, err) || !pause(ctx, retry) {
 			break
 		}
 		patched, err = s.patchOnce(ctx, cmd)
@@ -218,7 +218,7 @@ func unchanged(before, after core.Object) bool {
 	return reflect.DeepEqual(before, after)
 }
 
-func lostRace(cmd PatchCommand, err error) bool {
+func retryable(cmd PatchCommand, err error) bool {
 	return cmd.Version == "" && isPreconditionFailed(err)
 }
 
