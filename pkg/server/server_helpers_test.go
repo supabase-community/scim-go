@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -25,7 +26,6 @@ const (
 	validToken       = "s3cr3t"
 	expiredToken     = "expired"
 	unreachableToken = "unreachable"
-	racer            = "racer"
 
 	widgetSchema core.SchemaURI = "urn:test:widget"
 	kitSchema    core.SchemaURI = "urn:test:kit"
@@ -73,6 +73,10 @@ type races struct {
 	mu       sync.Mutex
 	lose     int
 	replaces int
+}
+
+func alwaysLosing() *races {
+	return &races{lose: math.MaxInt}
 }
 
 func (r *races) replace() (lost bool) {
@@ -239,7 +243,7 @@ func withRaces(r *races) testOption {
 }
 
 func (r racingRepository) Replace(ctx context.Context, user *core.User) (*core.User, error) {
-	if lost := r.races.replace(); lost || user.UserName == racer {
+	if r.races.replace() {
 		return nil, scimerrors.ErrPreconditionFailed("resource has changed on the server")
 	}
 	if r.replaceGate != nil {

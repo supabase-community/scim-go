@@ -4395,8 +4395,8 @@ func TestRFC7644VersioningResources(t *testing.T) {
 	})
 
 	t.Run("answers a patch that loses a race with 409 unless the client sent If-Match", func(t *testing.T) {
-		srv := newTestServer(t)
-		id, etag := create(t, srv, &core.User{UserName: racer})
+		srv := newTestServer(t, withRaces(alwaysLosing()))
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 		patch := func(options ...Option[*http.Request]) int {
 			return Response(t, srv, patchActive(t, srv, id, options...)).StatusCode
 		}
@@ -4406,10 +4406,9 @@ func TestRFC7644VersioningResources(t *testing.T) {
 	})
 
 	t.Run("reapplies a versionless patch that loses a race to the current version", func(t *testing.T) {
-		races := &races{}
+		races := &races{lose: 2}
 		srv := newTestServer(t, withRaces(races))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-		races.lose = 2
 
 		response := Response(t, srv, patchActive(t, srv, id))
 
@@ -4419,37 +4418,37 @@ func TestRFC7644VersioningResources(t *testing.T) {
 	})
 
 	t.Run("answers 409 once a versionless patch exhausts its retries", func(t *testing.T) {
-		races := &races{}
+		races := alwaysLosing()
 		srv := newTestServer(t, withRaces(races))
-		id, _ := create(t, srv, &core.User{UserName: racer})
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		assert.Equal(t, http.StatusConflict, Response(t, srv, patchActive(t, srv, id)).StatusCode)
 		assert.Equal(t, 3, races.count())
 	})
 
 	t.Run("does not retry a patch sent with If-Match", func(t *testing.T) {
-		races := &races{}
+		races := alwaysLosing()
 		srv := newTestServer(t, withRaces(races))
-		id, etag := create(t, srv, &core.User{UserName: racer})
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
 		assert.Equal(t, http.StatusPreconditionFailed, Response(t, srv, patchActive(t, srv, id, WithHeader("If-Match", etag))).StatusCode)
 		assert.Equal(t, 1, races.count())
 	})
 
 	t.Run("does not retry when MaxPatchRetries is zero", func(t *testing.T) {
-		races := &races{}
+		races := alwaysLosing()
 		srv := newTestServer(t, withRaces(races), withOption(server.MaxPatchRetries(0)))
-		id, _ := create(t, srv, &core.User{UserName: racer})
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		assert.Equal(t, http.StatusConflict, Response(t, srv, patchActive(t, srv, id)).StatusCode)
 		assert.Equal(t, 1, races.count())
 	})
 
 	t.Run("stops retrying a versionless patch once the request is canceled", func(t *testing.T) {
-		races := &races{}
+		races := alwaysLosing()
 		schemas := core.Schemas{core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...)}
 		repo := racingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), races: races}
-		user, err := repo.Create(context.Background(), &core.User{UserName: racer})
+		user, err := repo.Create(context.Background(), &core.User{UserName: "bjensen"})
 		require.NoError(t, err)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
