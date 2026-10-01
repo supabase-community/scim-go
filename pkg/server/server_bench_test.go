@@ -2,11 +2,13 @@ package server_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
@@ -80,6 +82,52 @@ func BenchmarkServerPutGroupMembers(b *testing.B) {
 	for b.Loop() {
 		serve(b, handler, http.MethodPut, location, body, http.StatusOK)
 	}
+}
+
+func BenchmarkServerUpdateLockedWork(b *testing.B) {
+	for _, n := range []int{100, 1000, 10000} {
+		repo := &timedGroupRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}
+		handler := newGroupHandler(b, repo)
+		group := benchGroup(n, "seed")
+		location := serve(b, handler, http.MethodPost, basePath+"/Groups", benchBody(b, group), http.StatusCreated).Header().Get("Location")
+		rename := func(name string) []byte {
+			return benchBody(b, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(strconv.Quote(name))}},
+			})
+		}
+		put := benchBody(b, group)
+		for _, c := range []struct {
+			name   string
+			method string
+			bodies [2][]byte
+		}{
+			{"PUT", http.MethodPut, [2][]byte{put, put}},
+			{"PATCH displayName", http.MethodPatch, [2][]byte{rename("engineering"), rename("platform")}},
+		} {
+			b.Run(c.name+"/"+strconv.Itoa(n), func(b *testing.B) {
+				repo.held = 0
+				b.ReportAllocs()
+				for i := 0; b.Loop(); i++ {
+					serve(b, handler, c.method, location, c.bodies[i%2], http.StatusOK)
+				}
+				b.ReportMetric(float64(repo.held.Nanoseconds())/float64(b.N), "locked-ns/op")
+			})
+		}
+	}
+}
+
+type timedGroupRepository struct {
+	server.Repository[*core.Group]
+	held time.Duration
+}
+
+func (r *timedGroupRepository) Update(ctx context.Context, id, version string, change func(*core.Group) (*core.Group, error)) (*core.Group, error) {
+	return r.Repository.Update(ctx, id, version, func(current *core.Group) (*core.Group, error) {
+		start := time.Now()
+		defer func() { r.held += time.Since(start) }()
+		return change(current)
+	})
 }
 
 func benchmarkPatchGroupMembers(b *testing.B, handler http.Handler) {
