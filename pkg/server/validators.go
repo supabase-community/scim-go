@@ -18,9 +18,13 @@ func characteristics[T core.Resource](schemas core.Schemas) Validator[T] {
 	fields := newFields(schemas)
 	constrained := slices.DeleteFunc(slices.Clone(fields), func(field field) bool { return !isConstrained(field) })
 	return func(ctx context.Context, candidate T) error {
-		after, err := core.NewObject(candidate)
-		if err != nil {
-			return err
+		after, ok := candidateFrom(ctx)
+		if !ok {
+			var err error
+			after, err = core.NewObject(candidate)
+			if err != nil {
+				return err
+			}
 		}
 		for _, field := range constrained {
 			if err := conforms(field, after); err != nil {
@@ -106,6 +110,17 @@ func withExisting(ctx context.Context, existing core.Object) context.Context {
 func existingFrom(ctx context.Context) (core.Object, bool) {
 	existing, ok := ctx.Value(existingKey{}).(core.Object)
 	return existing, ok
+}
+
+type candidateKey struct{}
+
+func withCandidate(ctx context.Context, after core.Object) context.Context {
+	return context.WithValue(ctx, candidateKey{}, after)
+}
+
+func candidateFrom(ctx context.Context) (core.Object, bool) {
+	after, ok := ctx.Value(candidateKey{}).(core.Object)
+	return after, ok
 }
 
 // immutable rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7644, Section 3.5.1.

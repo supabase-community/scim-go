@@ -168,10 +168,12 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
-	if err := c.stampSchemas(patched); err != nil {
-		return protocol.SendError(w, err)
+	after, err := core.NewObject(patched)
+	if err != nil {
+		return protocol.SendError(w, scimerrors.ErrInternal("could not encode the resource"))
 	}
-	replaced, err := c.persist(r, existing, patched)
+	c.stampSchemasWith(patched, after)
+	replaced, err := c.persist(r, existing, patched, after)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -214,7 +216,7 @@ func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
 }
 
 // persist skips the write when the patch changed nothing, per RFC 7644, Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
-func (c *controller[T]) persist(r *http.Request, existing, patched T) (T, error) {
+func (c *controller[T]) persist(r *http.Request, existing, patched T, after core.Object) (T, error) {
 	encoded, err := json.Marshal(patched)
 	if err != nil {
 		return existing, scimerrors.ErrInternal("could not encode the resource")
@@ -223,14 +225,13 @@ func (c *controller[T]) persist(r *http.Request, existing, patched T) (T, error)
 	if err != nil {
 		return existing, scimerrors.ErrInternal("could not encode the resource")
 	}
-	same, err := unchanged(before, encoded)
-	if err != nil || same {
-		return existing, err
+	if unchanged(before, after) {
+		return existing, nil
 	}
 	if err := c.checkEncodedSize(encoded); err != nil {
 		return existing, err
 	}
-	replaced, err := c.service.Replace(withExisting(r.Context(), before), patched)
+	replaced, err := c.service.Replace(withCandidate(withExisting(r.Context(), before), after), patched)
 	return replaced, c.lostRace(r, err)
 }
 
@@ -270,6 +271,11 @@ func (c *controller[T]) stampSchemas(resource T) error {
 	if err != nil {
 		return err
 	}
+	c.stampSchemasWith(resource, object)
+	return nil
+}
+
+func (c *controller[T]) stampSchemasWith(resource T, object core.Object) {
 	uris := []core.SchemaURI{c.schemas.Base().ID}
 	for _, extension := range c.schemas.Extensions() {
 		if !value.IsUnassigned(object.Get(string(extension.ID))) {
@@ -277,16 +283,20 @@ func (c *controller[T]) stampSchemas(resource T) error {
 		}
 	}
 	resource.Common().Schemas = uris
-	return nil
+	object.Set("schemas", schemaURIsToAny(uris))
 }
 
-func unchanged(before core.Object, encodedPatched []byte) (bool, error) {
-	after, err := core.DecodeObject(encodedPatched)
-	if err != nil {
-		return false, err
+func schemaURIsToAny(uris []core.SchemaURI) []any {
+	ids := make([]any, len(uris))
+	for i, uri := range uris {
+		ids[i] = string(uri)
 	}
-	before = maps.Clone(before)
+	return ids
+}
+
+func unchanged(before, after core.Object) bool {
+	before, after = maps.Clone(before), maps.Clone(after)
 	before.Remove("meta")
 	after.Remove("meta")
-	return reflect.DeepEqual(before, after), nil
+	return reflect.DeepEqual(before, after)
 }

@@ -3394,6 +3394,29 @@ func TestRFC7644AddOperation(t *testing.T) {
 		assert.Equal(t, group.Meta.Version, patched.Meta.Version)
 		assert.Equal(t, group.Meta.LastModified, patched.Meta.LastModified)
 	})
+
+	// RFC 7644 Section 3.5.2.1: a no-op patch SHALL NOT change the modify timestamp; RFC 7643 Section 3: "schemas" must keep reflecting the extension's data across that no-op.
+	t.Run("a no-op patch on a resource with extension data leaves meta.lastModified and schemas unchanged", func(t *testing.T) {
+		srv := newTestServer(t)
+		primary := true
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, &core.User{
+				UserName:       "bjensen",
+				Emails:         []core.Email{{Value: "a@example.com", Type: "work", Primary: &primary}},
+				EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "E1"},
+			}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		user := ReadBodyAs[core.User](t, created)
+
+		patched := patchUser(t, srv, user.ID, patch.Operation{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"a@example.com","type":"work","primary":true}]`)})
+
+		assert.Equal(t, user.Meta.Version, patched.Meta.Version)
+		assert.Equal(t, user.Meta.LastModified, patched.Meta.LastModified)
+		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, patched.Schemas)
+	})
 }
 
 // RFC 7644 3.5.2.2 Remove Operation

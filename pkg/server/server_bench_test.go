@@ -62,6 +62,35 @@ func BenchmarkServerPatchManyAddresses(b *testing.B) {
 	}
 }
 
+func BenchmarkServerPatchGroupMembers(b *testing.B) {
+	handler := newTestHandler(b)
+	location := serve(b, handler, http.MethodPost, basePath+"/Groups", benchBody(b, benchGroup(10000, "seed")), http.StatusCreated).Header().Get("Location")
+	add := benchBody(b, protocol.PatchRequest{
+		Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+		Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`{"value":"toggle"}`)}},
+	})
+	remove := benchBody(b, protocol.PatchRequest{
+		Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+		Operations: []patch.Operation{{Op: patch.OpRemove, Path: `members[value eq "toggle"]`}},
+	})
+	b.ReportAllocs()
+	for i := 0; b.Loop(); i++ {
+		body := add
+		if i%2 == 1 {
+			body = remove
+		}
+		serve(b, handler, http.MethodPatch, location, body, http.StatusOK)
+	}
+}
+
+func benchGroup(n int, prefix string) *core.Group {
+	members := make([]core.Member, n)
+	for i := range members {
+		members[i] = core.Member{Value: prefix + strconv.Itoa(i)}
+	}
+	return &core.Group{DisplayName: "bench", Members: members}
+}
+
 func patchAddresses(n int, prefix string) patch.Operation {
 	elements := make([]map[string]any, n)
 	for i := range elements {
