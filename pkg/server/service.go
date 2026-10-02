@@ -32,6 +32,12 @@ type service[T core.Resource] struct {
 	validators []Validator[T]
 }
 
+type revision[T core.Resource] struct {
+	existing  core.Object
+	candidate core.Object
+	resource  T
+}
+
 func NewService[T core.Resource](repo Repository[T], schemas core.Schemas, limits Limits, validators ...Validator[T]) Service[T] {
 	validators = append([]Validator[T]{characteristics[T](schemas)}, validators...)
 	return &service[T]{repo: repo, schemas: schemas, limits: limits, validators: validators}
@@ -50,7 +56,8 @@ func (s *service[T]) Create(ctx context.Context, document core.Object) (T, error
 	if err != nil {
 		return item, err
 	}
-	if err := s.admit(ctx, nil, stampSchemas(s.schemas, item, document), item); err != nil {
+	stampSchemas(s.schemas, item, document)
+	if err := s.admit(ctx, revision[T]{candidate: document, resource: item}); err != nil {
 		var zero T
 		return zero, err
 	}
@@ -58,8 +65,8 @@ func (s *service[T]) Create(ctx context.Context, document core.Object) (T, error
 }
 
 func (s *service[T]) Replace(ctx context.Context, req *protocol.ReplaceRequest) (T, error) {
-	return s.write(ctx, req.ID, req.Version, func(existing T) (T, error) {
-		return s.replaced(ctx, existing, req)
+	return s.write(ctx, req.ID, req.Version, func(_ T, before core.Object) (revision[T], error) {
+		return s.replaced(before, req)
 	})
 }
 
@@ -73,26 +80,38 @@ func (s *service[T]) Delete(ctx context.Context, req *protocol.DeleteRequest) er
 
 // Patch applies req to the current resource as one unit, per RFC 7644 Section 3.5.2.
 func (s *service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, error) {
-	return s.write(ctx, req.ID, req.Version, func(existing T) (T, error) {
-		return s.patched(ctx, existing, req)
+	return s.write(ctx, req.ID, req.Version, func(existing T, document core.Object) (revision[T], error) {
+		return s.patched(existing, document, req)
 	})
 }
 
-func (s *service[T]) write(ctx context.Context, id, version string, change func(existing T) (T, error)) (T, error) {
+func (s *service[T]) write(ctx context.Context, id, version string, change func(existing T, before core.Object) (revision[T], error)) (T, error) {
 	var zero T
 	current, err := s.current(ctx, id, version)
 	if err != nil {
 		return zero, err
 	}
-	next, err := change(current)
+	before, err := core.NewObject(current)
+	if err != nil {
+		return zero, err
+	}
+	next, err := change(current, before)
 	if errors.Is(err, errUnchanged) {
 		return current, nil
 	}
 	if err != nil {
 		return zero, err
 	}
-	next.Common().ID, next.Common().Meta = current.Common().ID, current.Common().Meta
-	saved, err := s.repo.Update(ctx, next)
+	return s.save(ctx, version, current, next)
+}
+
+func (s *service[T]) save(ctx context.Context, version string, current T, next revision[T]) (T, error) {
+	var zero T
+	if err := s.admit(ctx, next); err != nil {
+		return zero, err
+	}
+	next.resource.Common().ID, next.resource.Common().Meta = current.Common().ID, current.Common().Meta
+	saved, err := s.repo.Update(ctx, next.resource)
 	return saved, conflict(version, err)
 }
 
@@ -109,43 +128,31 @@ func (s *service[T]) current(ctx context.Context, id, version string) (T, error)
 	return current, nil
 }
 
-func (s *service[T]) patched(ctx context.Context, existing T, req *protocol.PatchRequest) (T, error) {
-	var zero T
-	document, err := core.NewObject(existing)
-	if err != nil {
-		return zero, err
-	}
+func (s *service[T]) patched(existing T, document core.Object, req *protocol.PatchRequest) (revision[T], error) {
 	patched, err := req.Patch[T](document, s.schemas, patch.MaxFilterEvaluations(s.limits.MaxFilterEvaluations), patch.MaxWriteBytes(s.limits.MaxWriteBytes))
 	if err != nil {
-		return zero, err
+		return revision[T]{}, err
 	}
 	patched.Common().Meta = existing.Common().Meta
 	stampSchemas(s.schemas, patched, document)
 	// RFC 7644 Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
-	if err := unchanged(existing, patched); err != nil {
-		return patched, err
-	}
-	return patched, s.admit(ctx, nil, document, patched)
+	return revision[T]{candidate: document, resource: patched}, unchanged(existing, patched)
 }
 
-func (s *service[T]) replaced(ctx context.Context, existing T, req *protocol.ReplaceRequest) (T, error) {
-	var zero T
-	before, err := core.NewObject(existing)
-	if err != nil {
-		return zero, err
-	}
+func (s *service[T]) replaced(before core.Object, req *protocol.ReplaceRequest) (revision[T], error) {
 	resource, err := req.Replace[T](before, s.schemas)
 	if err != nil {
-		return zero, err
+		return revision[T]{}, err
 	}
-	return resource, s.admit(ctx, before, stampSchemas(s.schemas, resource, req.Attributes), resource)
+	stampSchemas(s.schemas, resource, req.Attributes)
+	return revision[T]{existing: before, candidate: req.Attributes, resource: resource}, nil
 }
 
-func (s *service[T]) admit(ctx context.Context, before, after core.Object, resource T) error {
-	if before != nil {
-		ctx = withExisting(ctx, before)
+func (s *service[T]) admit(ctx context.Context, next revision[T]) error {
+	if next.existing != nil {
+		ctx = withExisting(ctx, next.existing)
 	}
-	return s.validate(withCandidate(ctx, after), resource)
+	return s.validate(withCandidate(ctx, next.candidate), next.resource)
 }
 
 func (s *service[T]) validate(ctx context.Context, item T) error {
@@ -158,7 +165,7 @@ func (s *service[T]) validate(ctx context.Context, item T) error {
 }
 
 // stampSchemas lists the base schema plus every extension with assigned data in object, per RFC 7643, Section 3.
-func stampSchemas[T core.Resource](schemas core.Schemas, resource T, object core.Object) core.Object {
+func stampSchemas[T core.Resource](schemas core.Schemas, resource T, object core.Object) {
 	uris := []core.SchemaURI{schemas.Base().ID}
 	for _, extension := range schemas.Extensions() {
 		if !value.IsUnassigned(object.Get(string(extension.ID))) {
@@ -167,7 +174,6 @@ func stampSchemas[T core.Resource](schemas core.Schemas, resource T, object core
 	}
 	resource.Common().Schemas = uris
 	object.Set("schemas", schemaURIsToAny(uris))
-	return object
 }
 
 func schemaURIsToAny(uris []core.SchemaURI) []any {
