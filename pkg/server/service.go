@@ -61,13 +61,13 @@ func (s *service[T]) List(ctx context.Context, query *protocol.SearchRequest) ([
 }
 
 func (s *service[T]) Create(ctx context.Context, document core.Object) (T, error) {
+	var zero T
 	item, err := protocol.ResourceFrom[T](document, nil, s.schemas)
 	if err != nil {
-		return item, err
+		return zero, err
 	}
 	stampSchemas(s.schemas, item, document)
 	if err := s.admit(ctx, revision[T]{candidate: document, resource: item}); err != nil {
-		var zero T
 		return zero, err
 	}
 	return s.repo.Create(ctx, item)
