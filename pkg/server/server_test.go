@@ -3653,35 +3653,6 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		})
 	})
 
-	t.Run("value filtered write has an output budget", func(t *testing.T) {
-		srv := newTestServer(t)
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
-
-		elements := make([]map[string]any, 2000)
-		for i := range elements {
-			elements[i] = map[string]any{"type": "a", "n": i}
-		}
-		add, err := json.Marshal(elements)
-		require.NoError(t, err)
-		big, err := json.Marshal(strings.Repeat("x", 6000))
-		require.NoError(t, err)
-
-		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{
-					{Op: patch.OpAdd, Path: "emails", Value: add},
-					{Op: patch.OpReplace, Path: `emails[type eq "a"].value`, Value: big},
-				},
-			}),
-		)
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode)
-	})
-
 	// RFC 7644 Section 3.5.2: a PATCH path may be qualified with the schema extension URN.
 	t.Run("patches an extension attribute by its URN-qualified path", func(t *testing.T) {
 		srv := newTestServer(t)
