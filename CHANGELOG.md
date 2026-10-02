@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.10.0](https://github.com/supabase-community/scim-go/compare/v0.9.0...v0.10.0) (2026-10-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **server:** encode each write once each way; Patch, Replace and ResourceFrom take encoded objects and edit them in place
+* **server:** Repository reads and writes whole items; the repository decides version conflicts
+* **server:** take protocol request DTOs in Service and a core.Object in Create
+* **server:** remove MaxResourceBytes and checkSize; the repository owns resource size limits
+* **server:** remove AttributePatcher and the Group member fast path
+* **server:** remove Repository.Replace, the PATCH retry and lostRace
+* **server:** route PUT through Repository.Update
+* **server:** add Repository.Update and route PATCH through it
+
+### Features
+
+* **server:** add Repository.Update and route PATCH through it ([7858507](https://github.com/supabase-community/scim-go/commit/7858507d3de77871cca89c01f2c5377f91e6579c))
+* **server:** Repository reads and writes whole items; the repository decides version conflicts ([631f5f9](https://github.com/supabase-community/scim-go/commit/631f5f9bcd8d1be65d115fca6c6c57541ffe620e))
+* **server:** route PUT through Repository.Update ([c160c39](https://github.com/supabase-community/scim-go/commit/c160c398f2b7093a5f0231c03d3aecb8d04b5424))
+
+
+### Performance Improvements
+
+* **server:** encode each write once each way; Patch, Replace and ResourceFrom take encoded objects and edit them in place ([8df3a04](https://github.com/supabase-community/scim-go/commit/8df3a047445d8aed55d1f1e5c335b2a3635588b3))
+* **server:** index immutable elements in one flat set ([eee3ec9](https://github.com/supabase-community/scim-go/commit/eee3ec97f865f843525d5b2d34e70a5fb0410f63))
+* **server:** key and sign multi-valued elements without json.Marshal or fmt.Sprint for strings ([bf2088e](https://github.com/supabase-community/scim-go/commit/bf2088e0baf27c22c20deb22556014c67549124c))
+
+
+### Code Refactoring
+
+* **server:** remove AttributePatcher and the Group member fast path ([11a592b](https://github.com/supabase-community/scim-go/commit/11a592bb1e2df56a91e20d093a38fe2737ba7899))
+* **server:** remove MaxResourceBytes and checkSize; the repository owns resource size limits ([0e69ce2](https://github.com/supabase-community/scim-go/commit/0e69ce23d66180d1326dc5df7b1fe0766dc09fb2))
+* **server:** remove Repository.Replace, the PATCH retry and lostRace ([77c5143](https://github.com/supabase-community/scim-go/commit/77c5143960b16c1a7445c0d7675d2f105f21829a))
+* **server:** take protocol request DTOs in Service and a core.Object in Create ([f30b1fa](https://github.com/supabase-community/scim-go/commit/f30b1fa94f9380ea2974d02d438948901513b20e))
+
 ## [0.9.0](https://github.com/supabase-community/scim-go/compare/v0.8.4...v0.9.0) (2026-10-01)
 
 
