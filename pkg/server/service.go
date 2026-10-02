@@ -111,22 +111,21 @@ func (s *service[T]) current(ctx context.Context, id, version string) (T, error)
 
 func (s *service[T]) patched(ctx context.Context, existing T, req *protocol.PatchRequest) (T, error) {
 	var zero T
-	stored, before, err := encode(existing)
+	stored, document, err := encode(existing)
 	if err != nil {
 		return zero, err
 	}
-	after, _ := value.Clone(map[string]any(before)).(map[string]any)
-	patched, err := req.Patch[T](after, s.schemas, patch.MaxFilterEvaluations(s.limits.MaxFilterEvaluations), patch.MaxWriteBytes(s.limits.MaxWriteBytes))
+	patched, err := req.Patch[T](document, s.schemas, patch.MaxFilterEvaluations(s.limits.MaxFilterEvaluations), patch.MaxWriteBytes(s.limits.MaxWriteBytes))
 	if err != nil {
 		return zero, err
 	}
 	patched.Common().Meta = existing.Common().Meta
-	stampSchemas(s.schemas, patched, after)
+	stampSchemas(s.schemas, patched, document)
 	// RFC 7644 Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
 	if err := unchanged(stored, patched); err != nil {
 		return patched, err
 	}
-	return patched, s.admit(ctx, before, after, patched)
+	return patched, s.admit(ctx, nil, document, patched)
 }
 
 func (s *service[T]) replaced(ctx context.Context, existing T, req *protocol.ReplaceRequest) (T, error) {
