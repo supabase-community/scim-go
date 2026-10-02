@@ -2916,6 +2916,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 // RFC 7644 3.5.2 Modifying with PATCH
 func TestRFC7644ModifyingWithPATCH(t *testing.T) {
+	// RFC 7644 Section 3.5.2: on successful completion, the server MUST return 200 OK and the entire resource, or MAY return 204.
 	t.Run("patches a resource and returns the updated field with an ETag", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -3193,6 +3194,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.12: invalidSyntax when the request body message structure was invalid.
 	t.Run("rejects a patch with a malformed JSON body", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -3208,6 +3210,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.12: invalidSyntax when the request body message structure was invalid.
 	t.Run("rejects a malformed JSON body before looking up the resource", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -3222,6 +3225,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.12: invalidPath when the "path" attribute was invalid or malformed.
 	t.Run("rejects a patch that targets an unknown attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -3265,6 +3269,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidPath, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.12: mutability when the modification is not compatible with the target attribute's mutability.
 	t.Run("rejects a patch that changes an immutable attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
@@ -3289,6 +3294,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.12: uniqueness when one or more of the attribute values are already in use.
 	t.Run("rejects a patch that collides with another resource's unique value", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -3320,6 +3326,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
 	})
 
+	// RFC 7644 Section 3.12: 404 when the specified resource does not exist.
 	t.Run("patching an unknown id returns 404", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -3342,6 +3349,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: invalidSyntax when the request body message structure was invalid.
 	t.Run("a malformed body on an unknown id is a 400, not a 404", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -3356,6 +3364,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.12: 412 when the update failed because the resource has changed on the server.
 	t.Run("rejects a patch with a stale If-Match", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -3380,6 +3389,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 	})
 
+	// RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
 	t.Run("rejects changing an immutable value but allows adding and removing members", func(t *testing.T) {
 		extension := string(core.SchemaEnterpriseUser)
 		active := true
@@ -3427,6 +3437,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.5.2.1: if the user was already a member of this group, no changes should be made to the resource.
 	t.Run("adding a group member that repeats a value with another type is a no-op", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups", WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})))
@@ -3448,6 +3459,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, core.ResourceTypeName("User"), patched.Members[0].Type)
 	})
 
+	// RFC 7644 Section 3.5.2: setting a value's "primary" to "true" SHALL cause the server to set "primary" to "false" for any other values.
 	t.Run("sets primary to false on the other values when a value becomes primary", func(t *testing.T) {
 		srv := newTestServer(t)
 		primary := true
@@ -3526,6 +3538,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
 	t.Run("group member patch", func(t *testing.T) {
 		newGroupServer := func(t *testing.T) *httptest.Server {
 			t.Helper()
