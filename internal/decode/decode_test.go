@@ -3,6 +3,8 @@ package decode_test
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -20,12 +22,18 @@ var documents = map[string]string{
 	"lone surrogate":  `{"bad":"\ud800"}`,
 	"null":            `{"x":null}`,
 	"empty":           `{"a":[],"o":{}}`,
-	"duplicate keys":  `{"a":1,"a":2}`,
 	"invalid utf8":    "{\"a\":\"b\xffc\"}",
 	"escaped html":    `{"displayName":"R\u0026D \u003cops\u003e"}`,
 	"booleans":        `[true,false]`,
 	"top level null":  `null`,
 	"top level value": ` "s" `,
+}
+
+var duplicates = map[string]string{
+	"top level": `{"a":1,"a":2}`,
+	"nested":    `{"o":{"a":1,"a":2}}`,
+	"in array":  `[{"a":1,"a":2}]`,
+	"escaped":   `{"a":1,"\u0061":2}`,
 }
 
 var malformed = map[string]string{
@@ -61,6 +69,15 @@ func TestValue(t *testing.T) {
 
 				_, err = decode.Value([]byte(raw))
 				assert.Error(t, err)
+			})
+		}
+	})
+
+	t.Run("rejects duplicate names", func(t *testing.T) {
+		for name, raw := range duplicates {
+			t.Run(name, func(t *testing.T) {
+				_, err := decode.Value([]byte(raw))
+				assert.ErrorIs(t, err, jsontext.ErrDuplicateName)
 			})
 		}
 	})
@@ -107,6 +124,9 @@ func FuzzValue(f *testing.F) {
 	for _, raw := range documents {
 		f.Add([]byte(raw))
 	}
+	for _, raw := range duplicates {
+		f.Add([]byte(raw))
+	}
 	for _, raw := range malformed {
 		f.Add([]byte(raw))
 	}
@@ -141,6 +161,9 @@ func assertParity(t *testing.T, raw []byte) {
 	want, wantErr := decode.JSON[any](raw)
 	got, err := decode.Value(raw)
 	assert.Equal(t, original, raw)
+	if errors.Is(err, jsontext.ErrDuplicateName) {
+		return
+	}
 	if wantErr != nil {
 		assert.Error(t, err)
 		return
