@@ -3771,6 +3771,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 
 // RFC 7644 3.5.2.1 Add Operation
 func TestRFC7644AddOperation(t *testing.T) {
+	// RFC 7644 Section 3.5.2.1: the operation MUST contain a "value" member whose content specifies the value to be added.
 	t.Run("adds a value with an add operation", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -3796,6 +3797,7 @@ func TestRFC7644AddOperation(t *testing.T) {
 		assert.Equal(t, "Barbara", patched.Name.GivenName)
 	})
 
+	// RFC 7644 Section 3.5.2.1: if "path" is omitted, the target location is assumed to be the resource itself.
 	t.Run("adds the attributes of the value when the path is omitted", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -3913,6 +3915,7 @@ func TestRFC7644AddOperation(t *testing.T) {
 
 // RFC 7644 3.5.2.2 Remove Operation
 func TestRFC7644RemoveOperation(t *testing.T) {
+	// RFC 7644 Section 3.5.2.2: the attribute at the target location and its associated value is removed.
 	t.Run("removes a value with a remove operation", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
@@ -3938,6 +3941,7 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 		assert.Nil(t, patched.Active)
 	})
 
+	// RFC 7644 Section 3.5.2.2: "remove" selects its target by "path" alone and defines no "value".
 	t.Run("rejects a remove that carries a value", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com"}, {Value: "b@example.com"}}})
@@ -4025,6 +4029,7 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 		assert.Len(t, ReadBodyAs[kit](t, stored).Parts, 1)
 	})
 
+	// RFC 7644 Section 3.5.2.2: if "path" is unspecified, the operation fails with 400 and scimType "noTarget".
 	t.Run("rejects a remove without a path with noTarget", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4052,6 +4057,7 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		assert.Equal(t, core.Name{GivenName: "Babs", FamilyName: "Jensen"}, patched.Name)
 	})
 
+	// RFC 7644 Section 3.5.2.3: if no record match was made, the service provider SHALL indicate failure with "noTarget".
 	t.Run("rejects a value path that matches nothing with noTarget", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com", Type: "work"}}})
@@ -4159,6 +4165,7 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 
 // RFC 7644 3.6 Deleting Resources
 func TestRFC7644DeletingResources(t *testing.T) {
+	// RFC 7644 Section 3.6: the server MUST return 404 for all operations associated with the previously deleted resource.
 	t.Run("keeps later resources addressable after deleting an earlier one", func(t *testing.T) {
 		srv := newTestServer(t)
 		first, _ := create(t, srv, &core.User{UserName: "alice"})
@@ -4180,6 +4187,7 @@ func TestRFC7644DeletingResources(t *testing.T) {
 		assert.Equal(t, last, ReadBodyAs[core.User](t, response).ID)
 	})
 
+	// RFC 7644 Section 3.6: a successful DELETE SHALL return 204, and operations on the deleted resource MUST return 404.
 	t.Run("deletes a resource and it is subsequently gone", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4201,6 +4209,7 @@ func TestRFC7644DeletingResources(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
 	})
 
+	// RFC 7644 Section 3.14: the client MAY supply an If-Match header so the operation succeeds only if the ETag matches.
 	t.Run("deletes a resource when If-Match matches", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4220,6 +4229,7 @@ func TestRFC7644DeletingResources(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: 412 when the update failed because the resource has changed on the server.
 	t.Run("rejects a delete with a stale If-Match and leaves the resource intact", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4240,6 +4250,7 @@ func TestRFC7644DeletingResources(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: 404 when the specified resource does not exist.
 	t.Run("deleting an unknown id returns 404", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4264,6 +4275,7 @@ func TestRFC7644BulkOperations(t *testing.T) {
 
 // RFC 7644 3.8 Data Input/Output Formats
 func TestRFC7644DataInputOutputFormats(t *testing.T) {
+	// RFC 7644 Section 3.8: service providers SHOULD support the header "Accept: application/json".
 	t.Run("accepts application/json and answers with application/scim+json", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4283,6 +4295,7 @@ func TestRFC7644DataInputOutputFormats(t *testing.T) {
 func TestRFC7644MeAuthenticatedSubjectAlias(t *testing.T) {
 	srv := newTestServer(t)
 
+	// RFC 7644 Section 3.11: a service provider that does NOT support "/Me" SHOULD respond with 501.
 	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
 		response := Response(t, srv, Request(t, srv, method, basePath+"/Me", WithBearerToken(validToken)))
 
