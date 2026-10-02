@@ -153,7 +153,7 @@ func immutableSubs(subs []*core.Attribute) []*core.Attribute {
 }
 
 type elementIndex struct {
-	signatures map[string]map[string]struct{}
+	signatures map[[2]string]struct{}
 	sample     map[string]core.Object
 }
 
@@ -168,18 +168,18 @@ func immutableElements(field field, subs []*core.Attribute, before, after core.O
 }
 
 func newElementIndex(field field, subs []*core.Attribute, after core.Object) elementIndex {
-	index := elementIndex{signatures: map[string]map[string]struct{}{}, sample: map[string]core.Object{}}
-	for _, element := range field.elements(after) {
+	elements := field.elements(after)
+	index := elementIndex{signatures: make(map[[2]string]struct{}, len(elements)), sample: make(map[string]core.Object, len(elements))}
+	for _, element := range elements {
 		candidate := asObject(element)
 		key := value.Identity(field.Attribute, candidate)
 		if key == "" {
 			continue
 		}
-		if index.signatures[key] == nil {
-			index.signatures[key] = map[string]struct{}{}
+		if _, ok := index.sample[key]; !ok {
 			index.sample[key] = candidate
 		}
-		index.signatures[key][signature(subs, candidate)] = struct{}{}
+		index.signatures[[2]string{key, signature(subs, candidate)}] = struct{}{}
 	}
 	return index
 }
@@ -191,10 +191,11 @@ func changedElement(field field, subs []*core.Attribute, before core.Object, ind
 		if key == "" {
 			continue
 		}
-		if _, matched := index.signatures[key][signature(subs, stored)]; matched || index.signatures[key] == nil {
+		sample, ok := index.sample[key]
+		if _, matched := index.signatures[[2]string{key, signature(subs, stored)}]; matched || !ok {
 			continue
 		}
-		if sub := changed(subs, stored, index.sample[key]); sub != nil {
+		if sub := changed(subs, stored, sample); sub != nil {
 			return sub
 		}
 	}
