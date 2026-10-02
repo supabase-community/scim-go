@@ -4,6 +4,7 @@ COVERAGE := coverage.out
 COVER_MIN := 95
 COVER_EXCLUDE := /pkg/scimtest/|/internal/|/cmd/server/
 BENCHCOUNT ?= 1
+FUZZTIME ?= 30s
 
 .PHONY: clean
 clean:
@@ -24,6 +25,12 @@ test:
 .PHONY: bench
 bench:
 	go test -run '^$$' -bench=. -benchmem -count $(BENCHCOUNT) ./...
+
+.PHONY: fuzz
+fuzz:
+	grep -rHo --include='*_test.go' '^func Fuzz[A-Za-z0-9_]*' . \
+	  | sed -E 's#^(\./)?(.*)/[^/]*:func (Fuzz.*)#go test -run "^$$" -fuzz "^\3$$" -fuzztime $(FUZZTIME) ./\2#' \
+	  | sh -e
 
 .PHONY: cover
 cover:
