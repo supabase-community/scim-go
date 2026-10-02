@@ -1,11 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
-	"maps"
 	"net/http"
-	"reflect"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -50,11 +50,7 @@ func (s *service[T]) Create(ctx context.Context, document core.Object) (T, error
 	if err != nil {
 		return item, err
 	}
-	after, err := stampSchemas(s.schemas, item)
-	if err != nil {
-		return item, err
-	}
-	if err := s.admit(ctx, nil, after, item); err != nil {
+	if err := s.admit(ctx, nil, stampSchemas(s.schemas, item, document), item); err != nil {
 		var zero T
 		return zero, err
 	}
@@ -114,42 +110,36 @@ func (s *service[T]) current(ctx context.Context, id, version string) (T, error)
 }
 
 func (s *service[T]) patched(ctx context.Context, existing T, req *protocol.PatchRequest) (T, error) {
-	patched, err := req.Patch(existing, s.schemas, patch.MaxFilterEvaluations(s.limits.MaxFilterEvaluations), patch.MaxWriteBytes(s.limits.MaxWriteBytes))
+	var zero T
+	stored, before, err := encode(existing)
 	if err != nil {
-		return patched, err
+		return zero, err
 	}
-	patched.Common().Meta = core.Meta{Version: existing.Common().Meta.Version}
-	before, after, err := s.compare(existing, patched)
+	after, _ := value.Clone(map[string]any(before)).(map[string]any)
+	patched, err := req.Patch[T](after, s.schemas, patch.MaxFilterEvaluations(s.limits.MaxFilterEvaluations), patch.MaxWriteBytes(s.limits.MaxWriteBytes))
 	if err != nil {
-		return patched, err
+		return zero, err
 	}
+	patched.Common().Meta = existing.Common().Meta
+	stampSchemas(s.schemas, patched, after)
 	// RFC 7644 Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
-	if unchanged(before, after) {
-		return patched, errUnchanged
+	if err := unchanged(stored, patched); err != nil {
+		return patched, err
 	}
 	return patched, s.admit(ctx, before, after, patched)
 }
 
 func (s *service[T]) replaced(ctx context.Context, existing T, req *protocol.ReplaceRequest) (T, error) {
-	resource, err := req.Replace(existing, s.schemas)
+	var zero T
+	_, before, err := encode(existing)
 	if err != nil {
-		return resource, err
+		return zero, err
 	}
-	before, after, err := s.compare(existing, resource)
+	resource, err := req.Replace[T](before, s.schemas)
 	if err != nil {
-		return resource, err
+		return zero, err
 	}
-	return resource, s.admit(ctx, before, after, resource)
-}
-
-func (s *service[T]) compare(existing, candidate T) (before, after core.Object, err error) {
-	if after, err = stampSchemas(s.schemas, candidate); err != nil {
-		return nil, nil, err
-	}
-	if before, err = core.NewObject(existing); err != nil {
-		return nil, nil, scimerrors.ErrInternal("could not encode the resource")
-	}
-	return before, after, nil
+	return resource, s.admit(ctx, before, stampSchemas(s.schemas, resource, req.Attributes), resource)
 }
 
 func (s *service[T]) admit(ctx context.Context, before, after core.Object, resource T) error {
@@ -168,12 +158,8 @@ func (s *service[T]) validate(ctx context.Context, item T) error {
 	return nil
 }
 
-// stampSchemas lists the base schema plus every extension with assigned data, per RFC 7643, Section 3.
-func stampSchemas[T core.Resource](schemas core.Schemas, resource T) (core.Object, error) {
-	object, err := core.NewObject(resource)
-	if err != nil {
-		return nil, err
-	}
+// stampSchemas lists the base schema plus every extension with assigned data in object, per RFC 7643, Section 3.
+func stampSchemas[T core.Resource](schemas core.Schemas, resource T, object core.Object) core.Object {
 	uris := []core.SchemaURI{schemas.Base().ID}
 	for _, extension := range schemas.Extensions() {
 		if !value.IsUnassigned(object.Get(string(extension.ID))) {
@@ -182,7 +168,7 @@ func stampSchemas[T core.Resource](schemas core.Schemas, resource T) (core.Objec
 	}
 	resource.Common().Schemas = uris
 	object.Set("schemas", schemaURIsToAny(uris))
-	return object, nil
+	return object
 }
 
 func schemaURIsToAny(uris []core.SchemaURI) []any {
@@ -193,6 +179,15 @@ func schemaURIsToAny(uris []core.SchemaURI) []any {
 	return ids
 }
 
+func encode[T core.Resource](resource T) ([]byte, core.Object, error) {
+	raw, err := json.Marshal(resource)
+	if err != nil {
+		return nil, nil, scimerrors.ErrInternal("could not encode the resource")
+	}
+	object, err := core.DecodeObject(raw)
+	return raw, object, err
+}
+
 func conflict(version string, err error) error {
 	if version == "" && errors.Is(err, scimerrors.ErrPreconditionFailed("")) {
 		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
@@ -200,9 +195,13 @@ func conflict(version string, err error) error {
 	return err
 }
 
-func unchanged(before, after core.Object) bool {
-	before, after = maps.Clone(before), maps.Clone(after)
-	before.Remove("meta")
-	after.Remove("meta")
-	return reflect.DeepEqual(before, after)
+func unchanged[T core.Resource](stored []byte, patched T) error {
+	candidate, err := json.Marshal(patched)
+	if err != nil {
+		return scimerrors.ErrInternal("could not encode the resource")
+	}
+	if bytes.Equal(stored, candidate) {
+		return errUnchanged
+	}
+	return nil
 }

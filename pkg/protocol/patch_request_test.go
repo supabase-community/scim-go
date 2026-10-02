@@ -24,7 +24,7 @@ func TestPatchRequestPatchReturnsProtocolError(t *testing.T) {
 	}
 
 	var err *scimerrors.Error
-	_, patchErr := request.Patch(map[string]any{}, nil)
+	_, patchErr := request.Patch[map[string]any](core.Object{}, nil)
 	require.ErrorAs(t, patchErr, &err)
 
 	assert.Equal(t, scimerrors.InvalidValue, err.ScimType)
@@ -131,21 +131,22 @@ func TestPatchRequestPatch(t *testing.T) {
 			{Op: patch.OpReplace, Path: "userType", Value: json.RawMessage(`"employee"`)},
 		},
 	}
-	resource := &core.User{UserName: "bjensen", Password: "t1meMa$heen"}
+	document := core.Object{"userName": "bjensen", "password": "t1meMa$heen"}
 
-	patched, err := request.Patch(resource, schemas)
+	patched, err := request.Patch[*core.User](document, schemas)
 
 	require.NoError(t, err)
 	assert.Equal(t, "employee", patched.UserType)
 	assert.Equal(t, "t1meMa$heen", patched.Password)
-	assert.NotSame(t, resource, patched)
-	assert.Empty(t, resource.UserType)
+	assert.Equal(t, core.Object{"userName": "bjensen", "password": "t1meMa$heen", "userType": "employee"}, document)
 }
 
 func TestPatchRequestPatchTypedUser(t *testing.T) {
 	apply := func(t *testing.T, user *core.User, operation patch.Operation) *core.User {
 		t.Helper()
-		patched, err := (&protocol.PatchRequest{Operations: []patch.Operation{operation}}).Patch(user, nil)
+		document, err := core.NewObject(user)
+		require.NoError(t, err)
+		patched, err := (&protocol.PatchRequest{Operations: []patch.Operation{operation}}).Patch[*core.User](document, nil)
 		require.NoError(t, err)
 		return patched
 	}
@@ -184,7 +185,7 @@ func TestPatchRequestPatchReadOnly(t *testing.T) {
 	}
 	patched := func(t *testing.T, resource map[string]any, operation patch.Operation) map[string]any {
 		t.Helper()
-		out, err := (&protocol.PatchRequest{Operations: []patch.Operation{operation}}).Patch(resource, schemas)
+		out, err := (&protocol.PatchRequest{Operations: []patch.Operation{operation}}).Patch[map[string]any](resource, schemas)
 		require.NoError(t, err)
 		return out
 	}

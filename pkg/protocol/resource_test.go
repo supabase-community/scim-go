@@ -238,11 +238,6 @@ func TestDecodeResource(t *testing.T) {
 		assert.Equal(t, body(), out)
 	})
 
-	t.Run("reports an existing resource that cannot be encoded", func(t *testing.T) {
-		_, err := decodeResource(requestBody(body()), map[string]any{"id": make(chan int)}, schemas)
-		require.ErrorAs(t, err, new(*json.UnsupportedTypeError))
-	})
-
 	t.Run("rejects a body that is not a JSON object", func(t *testing.T) {
 		_, err := decodeResource(bytes.NewReader([]byte("null")), nil, schemas)
 		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
@@ -258,7 +253,7 @@ func TestDecodeResource(t *testing.T) {
 	})
 }
 
-func decodeResource(body io.Reader, existing any, schemas core.Schemas) (map[string]any, error) {
+func decodeResource(body io.Reader, existing core.Object, schemas core.Schemas) (map[string]any, error) {
 	document, err := protocol.DecodeDocument(body)
 	if err != nil {
 		return nil, err

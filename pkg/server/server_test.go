@@ -3671,6 +3671,39 @@ func TestRFC7644AddOperation(t *testing.T) {
 		assert.Equal(t, group.Meta.LastModified, patched.Meta.LastModified)
 	})
 
+	// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, the modify timestamp SHALL NOT change.
+	for _, tc := range []struct {
+		name string
+		op   patch.Op
+		body string
+	}{
+		{"adding a member in another case", patch.OpAdd, `[{"Value":"u-1","Type":"User"}]`},
+		{"adding a member with a sub-attribute the resource does not store", patch.OpAdd, `[{"value":"u-1","type":"User","display":"alice"}]`},
+		{"replacing the members with the same member in another case", patch.OpReplace, `[{"Value":"u-1","Type":"User"}]`},
+		{"replacing the members with the same member and a sub-attribute the resource does not store", patch.OpReplace, `[{"value":"u-1","type":"User","display":"alice"}]`},
+	} {
+		t.Run("leaves meta.version unchanged when "+tc.name, func(t *testing.T) {
+			srv := newTestServer(t)
+			group := ReadBodyAs[core.Group](t, Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+			)))
+
+			Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{{Op: tc.op, Path: "members", Value: json.RawMessage(tc.body)}},
+				}),
+			))
+
+			fetched := ReadBodyAs[core.Group](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Groups/"+group.ID, WithBearerToken(validToken))))
+			assert.Equal(t, group.Meta.Version, fetched.Meta.Version)
+		})
+	}
+
 	// RFC 7644 Section 3.5.2.1: a no-op patch SHALL NOT change the modify timestamp; RFC 7643 Section 3: "schemas" must keep reflecting the extension's data across that no-op.
 	t.Run("a no-op patch on a resource with extension data leaves meta.lastModified and schemas unchanged", func(t *testing.T) {
 		srv := newTestServer(t)

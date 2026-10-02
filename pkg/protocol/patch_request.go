@@ -50,17 +50,13 @@ func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	return req, nil
 }
 
-// Patch returns a new resource; RFC 7644 Section 3.5.2: a PATCH request SHALL be treated as atomic.
-func (r *PatchRequest) Patch[T any](resource T, schemas core.Schemas, opts ...patch.Option) (T, error) {
-	var zero T
-	existing, err := core.NewObject(resource)
-	if err != nil {
+// Patch applies the operations to document in place and returns the resource it describes; RFC 7644 Section 3.5.2: a PATCH request SHALL be treated as atomic.
+func (r *PatchRequest) Patch[T any](document core.Object, schemas core.Schemas, opts ...patch.Option) (T, error) {
+	if err := patch.Apply(document, r.Operations, schemas, opts...); err != nil {
+		var zero T
 		return zero, err
 	}
-	if err := patch.Apply(existing, r.Operations, schemas, opts...); err != nil {
-		return zero, err
-	}
-	return fromDocument[T](existing)
+	return fromDocument[T](document)
 }
 
 func isPatchOp(uri core.SchemaURI) bool {

@@ -3,7 +3,6 @@ package protocol
 import (
 	"io"
 
-	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
@@ -23,8 +22,7 @@ func DecodeReplaceRequest(body io.Reader) (*ReplaceRequest, error) {
 	return &ReplaceRequest{Attributes: document}, nil
 }
 
-// Replace returns the replacement for existing; RFC 7644 Section 3.5.1: readOnly values SHALL be ignored.
-func (r *ReplaceRequest) Replace[T any](existing T, schemas core.Schemas) (T, error) {
-	attributes, _ := value.Clone(map[string]any(r.Attributes)).(map[string]any)
-	return ResourceFrom[T](attributes, existing, schemas)
+// Replace builds the replacement for existing from Attributes in place; RFC 7644 Section 3.5.1: readOnly values SHALL be ignored.
+func (r *ReplaceRequest) Replace[T any](existing core.Object, schemas core.Schemas) (T, error) {
+	return ResourceFrom[T](r.Attributes, existing, schemas)
 }

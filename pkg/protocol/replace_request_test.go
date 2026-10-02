@@ -28,28 +28,15 @@ func TestDecodeReplaceRequest(t *testing.T) {
 
 func TestReplaceRequestReplace(t *testing.T) {
 	schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
-	existing := &core.User{ID: "u-1", UserName: "bjensen"}
+	existing := core.Object{"id": "u-1", "userName": "bjensen"}
 	req, err := protocol.DecodeReplaceRequest(strings.NewReader(`{"id":"forged","userName":"babs"}`))
 	require.NoError(t, err)
 
 	// RFC 7644 Section 3.5.1: readOnly values SHALL be ignored.
-	t.Run("keeps readOnly values of the existing resource", func(t *testing.T) {
-		replaced, err := req.Replace(existing, schemas)
+	replaced, err := req.Replace[*core.User](existing, schemas)
 
-		require.NoError(t, err)
-		assert.Equal(t, "u-1", replaced.ID)
-		assert.Equal(t, "babs", replaced.UserName)
-	})
-
-	t.Run("applies to each existing resource it is given", func(t *testing.T) {
-		first, err := req.Replace(existing, schemas)
-		require.NoError(t, err)
-		second, err := req.Replace(&core.User{ID: "u-2", UserName: "bjensen"}, schemas)
-		require.NoError(t, err)
-
-		assert.Equal(t, "u-1", first.ID)
-		assert.Equal(t, "u-2", second.ID)
-		assert.Equal(t, first.UserName, second.UserName)
-		assert.Equal(t, core.Object{"id": "forged", "userName": "babs"}, req.Attributes)
-	})
+	require.NoError(t, err)
+	assert.Equal(t, "u-1", replaced.ID)
+	assert.Equal(t, "babs", replaced.UserName)
+	assert.Equal(t, core.Object{"id": "u-1", "userName": "babs"}, req.Attributes)
 }
