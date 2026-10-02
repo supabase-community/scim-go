@@ -383,6 +383,7 @@ func TestRFC7643UnassignedAndNullValues(t *testing.T) {
 
 // RFC 7643 3.1 Common Attributes
 func TestRFC7643CommonAttributes(t *testing.T) {
+	// RFC 7643 Section 3.1: if a resource has never been modified, lastModified MUST be the same as created.
 	t.Run("sets lastModified to created on create and keeps externalId", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -398,6 +399,7 @@ func TestRFC7643CommonAttributes(t *testing.T) {
 		assert.Equal(t, "hr-42", created.ExternalID)
 	})
 
+	// RFC 7643 Section 3.1: meta.location MUST be the same as the "Content-Location" HTTP response header.
 	t.Run("sets the Content-Location header to meta.location", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
@@ -449,6 +451,7 @@ func TestRFC7643CommonAttributes(t *testing.T) {
 		assert.Equal(t, 0, matches(`meta.resourceType eq "user"`))
 	})
 
+	// RFC 7643 Section 3.1: meta.location MUST be the same as the "Content-Location" HTTP response header.
 	t.Run("sets the Content-Location header on discovery documents", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -459,6 +462,7 @@ func TestRFC7643CommonAttributes(t *testing.T) {
 		}
 	})
 
+	// RFC 7643 Section 3.1: meta.location is the URI of the resource being returned.
 	t.Run("builds meta.location from the base URL while routing under the base path", func(t *testing.T) {
 		baseURL := "https://example.com/auth/v1" + basePath
 		srv := newTestServer(t, withOption(server.WithBaseURL(baseURL)))
@@ -488,6 +492,7 @@ func TestRFC7643CommonAttributes(t *testing.T) {
 
 // RFC 7643 4.2 "Group" Resource Schema
 func TestRFC7643GroupResourceSchema(t *testing.T) {
+	// RFC 7643 Section 4.2: displayName is a human-readable name for the Group and is REQUIRED.
 	t.Run("creates, fetches, and requires displayName for a group", func(t *testing.T) {
 		srv := newTestServer(t)
 		post := func(group core.Group) *http.Response {
@@ -534,6 +539,7 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 
 	// RFC 7643 Section 3.3: the "schemas" attribute MAY contain additional values indicating extended schemas that are in use.
 
+	// RFC 7643 Section 3.3: the "schemas" attribute MAY contain additional values indicating extended schemas that are in use.
 	t.Run("lists the extension in the resource's own schemas array", func(t *testing.T) {
 		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, user.Schemas)
 	})
@@ -596,6 +602,7 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 		assert.Equal(t, []core.SchemaExtension{{Schema: core.SchemaEnterpriseUser}}, resourceType.SchemaExtensions)
 	})
 
+	// RFC 7644 Section 4: an HTTP GET to "/Schemas" SHALL return all supported schemas.
 	t.Run("publishes the extension schema", func(t *testing.T) {
 		request := Request(t, srv, http.MethodGet, basePath+"/Schemas/"+string(core.SchemaEnterpriseUser), WithBearerToken(validToken))
 		response := Response(t, srv, request)
@@ -609,6 +616,7 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 
 // RFC 7643 5 Service Provider Configuration Schema
 func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
+	// RFC 7643 Section 5: make the authenticationSchemes attribute publicly accessible without prior authentication.
 	t.Run("authenticationSchemes is accessible without prior authentication", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -619,6 +627,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Schemas")).StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: 501 when the service provider does not support the requested operation, e.g., PATCH.
 	t.Run("PATCH is declined when Patch.Supported is false", func(t *testing.T) {
 		config := core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Versioning()
 		srv := newTestServer(t, withConfig(config))
@@ -637,6 +646,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: 501 when the service provider does not support the requested operation.
 	t.Run("filter is declined when Filter.Supported is false", func(t *testing.T) {
 		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
 
@@ -647,6 +657,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
 	})
 
+	// RFC 7643 Section 5: filter.supported specifies whether or not the filter operation is supported.
 	t.Run("plain listing still works when Filter.Supported is false", func(t *testing.T) {
 		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
 
@@ -656,6 +667,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: 501 when the service provider does not support the requested operation.
 	t.Run("sortBy is declined when Sort.Supported is false", func(t *testing.T) {
 		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
 
@@ -666,6 +678,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.14: when supported, SCIM ETags MUST be specified as an HTTP header.
 	t.Run("no ETag header when ETag.Supported is false, and a stale If-Match is ignored", func(t *testing.T) {
 		config := core.NewServiceProviderConfig().Patching()
 		srv := newTestServer(t, withConfig(config))
@@ -694,6 +707,7 @@ func TestRFC7643ServiceProviderConfigurationSchema(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, del.StatusCode)
 	})
 
+	// RFC 7643 Section 5: the configuration lets clients discover the SCIM specification features a service provider supports.
 	t.Run("runs a minimal server with only CRUD end to end", func(t *testing.T) {
 		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -1044,6 +1058,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 
 // RFC 7644 3.4.1 Retrieving a Known Resource
 func TestRFC7644RetrievingAKnownResource(t *testing.T) {
+	// RFC 7644 Section 3.4.1: if the resource exists, the server responds with 200 and includes the result in the body.
 	t.Run("gets a created resource by id", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -1059,6 +1074,7 @@ func TestRFC7644RetrievingAKnownResource(t *testing.T) {
 		assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
 	})
 
+	// RFC 7644 Section 3.12: 404 when the specified resource does not exist.
 	t.Run("returns 404 for an unknown id", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1081,6 +1097,7 @@ func TestRFC7644RetrievingAKnownResource(t *testing.T) {
 
 // RFC 7644 3.4.2 Query Resources
 func TestRFC7644QueryResources(t *testing.T) {
+	// RFC 7644 Section 3.4.2: totalResults is the total number of results returned by the list or query operation.
 	t.Run("lists all created resources", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -1104,6 +1121,7 @@ func TestRFC7644QueryResources(t *testing.T) {
 		assert.Equal(t, "carol", list.Resources[2].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2: a query returns zero or more resources, and Resources is REQUIRED only if totalResults is non-zero.
 	t.Run("returns an empty list when there are no resources", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1119,6 +1137,7 @@ func TestRFC7644QueryResources(t *testing.T) {
 		assert.Empty(t, list.Resources)
 	})
 
+	// RFC 7644 Section 3.4.2: responses MUST use the ListResponse URI, and unrecognized query parameters SHOULD be ignored.
 	t.Run("identifies the response with the ListResponse schema and ignores unknown parameters", func(t *testing.T) {
 		srv := newTestServer(t)
 
