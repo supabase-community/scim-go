@@ -2394,6 +2394,26 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, "Jensen", ReadBodyAs[core.User](t, response).Name.FamilyName)
 	})
 
+	t.Run("allows assigning an immutable sub-attribute of a group member for the first time", func(t *testing.T) {
+		srv := newTestServer(t)
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1"}}}),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+		))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []core.Member{{Value: "u-1", Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
+	})
+
 	// RFC 7644 Section 3.5.1: values provided for readOnly attributes SHALL be ignored.
 	t.Run("keeps the stored readOnly meta.created value", func(t *testing.T) {
 		srv := newTestServer(t)
