@@ -17,21 +17,15 @@ import (
 func characteristics[T core.Resource](schemas core.Schemas) Validator[T] {
 	fields := newFields(schemas)
 	constrained := slices.DeleteFunc(slices.Clone(fields), func(field field) bool { return !isConstrained(field) })
-	return func(ctx context.Context, candidate T) error {
-		after, ok := candidateFrom(ctx)
-		if !ok {
-			var err error
-			after, err = core.NewObject(candidate)
-			if err != nil {
-				return err
-			}
-		}
+	return func(ctx context.Context, _ T) error {
+		after, _ := candidateFrom(ctx)
+		before, _ := existingFrom(ctx)
 		for _, field := range constrained {
 			if err := conforms(field, after); err != nil {
 				return err
 			}
 		}
-		return immutable(fields, previous(ctx, candidate), after)
+		return immutable(fields, before, after)
 	}
 }
 
@@ -91,14 +85,6 @@ func count(values []any, target any) int {
 		}
 	}
 	return n
-}
-
-func previous[T core.Resource](ctx context.Context, candidate T) core.Object {
-	if candidate.Common().ID == "" {
-		return core.Object{}
-	}
-	before, _ := existingFrom(ctx)
-	return before
 }
 
 type existingKey struct{}
