@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"io"
 	"strings"
@@ -11,6 +12,8 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
+
+const badName = "request body has an attribute name that is not US-ASCII or repeats"
 
 // DecodeDocument reads a resource body; RFC 7644 Section 3.1: a SCIM resource is a JSON object.
 func DecodeDocument(body io.Reader) (core.Object, error) {
@@ -38,6 +41,9 @@ func objectOf(raw []byte) (map[string]any, error) {
 	if errors.Is(err, decode.ErrNotObject) {
 		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
 	}
+	if errors.Is(err, jsontext.ErrDuplicateName) {
+		return nil, scimerrors.ErrInvalidSyntax(badName)
+	}
 	if err != nil {
 		return nil, scimerrors.ErrInvalidSyntax(notJSON)
 	}
@@ -47,7 +53,7 @@ func objectOf(raw []byte) (map[string]any, error) {
 // RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.
 func checkNames(document any) error {
 	if !wellFormedNames(document) {
-		return scimerrors.ErrInvalidSyntax("request body has an attribute name that is not US-ASCII or repeats in another case")
+		return scimerrors.ErrInvalidSyntax(badName)
 	}
 	return nil
 }

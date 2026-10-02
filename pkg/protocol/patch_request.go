@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"encoding/json"
+	"errors"
 	"io"
 	"slices"
 	"strconv"
@@ -26,16 +28,16 @@ func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	document, err := decode.Value(raw)
+	document, err := objectOf(raw)
 	if err != nil {
-		return nil, scimerrors.ErrInvalidSyntax(notJSON)
+		return nil, err
 	}
 	if err := checkNames(document); err != nil {
 		return nil, err
 	}
 	req, err := decode.JSON[*PatchRequest](raw)
-	if err != nil || req == nil {
-		return nil, scimerrors.ErrInvalidSyntax(notJSON)
+	if err != nil {
+		return nil, mistyped(err)
 	}
 	if !slices.ContainsFunc(req.Schemas, isPatchOp) {
 		return nil, scimerrors.ErrInvalidSyntax(`"schemas" must contain ` + strconv.Quote(string(SchemaPatchOp)))
@@ -53,6 +55,13 @@ func (r *PatchRequest) Patch[T any](document core.Object, schemas core.Schemas, 
 		return zero, err
 	}
 	return fromDocument[T](document)
+}
+
+func mistyped(err error) error {
+	if typeErr, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
+		return scimerrors.ErrInvalidSyntax(strconv.Quote(typeErr.Field) + " has the wrong type: " + typeErr.Value)
+	}
+	return scimerrors.ErrInvalidSyntax(notJSON)
 }
 
 func isPatchOp(uri core.SchemaURI) bool {

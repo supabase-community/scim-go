@@ -77,10 +77,30 @@ func TestDecodePatchRequest(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a null body", func(t *testing.T) {
-		_, err := protocol.DecodePatchRequest(strings.NewReader("null"))
+	t.Run("rejects a repeated name", func(t *testing.T) {
+		_, err := protocol.DecodePatchRequest(strings.NewReader(`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"add","op":"remove","path":"nickName"}]}`))
 
-		assert.Equal(t, scimerrors.ErrInvalidSyntax("request body is not valid JSON"), err)
+		assert.Equal(t, scimerrors.ErrInvalidSyntax("request body has an attribute name that is not US-ASCII or repeats"), err)
+	})
+
+	t.Run("names the field with the wrong type", func(t *testing.T) {
+		for body, detail := range map[string]string{
+			`{"schemas":1,"Operations":[]}`: `"schemas" has the wrong type: number`,
+			`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":{}}`:                         `"Operations" has the wrong type: object`,
+			`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"remove","path":1}]}`: `"Operations.0.path" has the wrong type: number`,
+		} {
+			_, err := protocol.DecodePatchRequest(strings.NewReader(body))
+
+			assert.Equal(t, scimerrors.ErrInvalidSyntax(detail), err, body)
+		}
+	})
+
+	t.Run("rejects a body that is not a JSON object", func(t *testing.T) {
+		for _, body := range []string{"null", "[]", `"s"`} {
+			_, err := protocol.DecodePatchRequest(strings.NewReader(body))
+
+			assert.Equal(t, scimerrors.ErrInvalidSyntax("request body is not a JSON object"), err, body)
+		}
 	})
 
 	t.Run("rejects a body that is not valid JSON", func(t *testing.T) {
