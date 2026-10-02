@@ -119,6 +119,17 @@ func TestApplyMissingValueRejected(t *testing.T) {
 	assert.Equal(t, scimerrors.InvalidValue, err.ScimType)
 }
 
+func TestApplyDuplicateNameRejected(t *testing.T) {
+	for _, op := range []patch.Operation{
+		{Op: patch.OpReplace, Value: json.RawMessage(`{"displayName":"a","displayName":"b"}`)},
+		{Op: patch.OpReplace, Path: "name", Value: json.RawMessage(`{"givenName":"a","givenName":"b"}`)},
+	} {
+		err := apply(map[string]any{}, nil, op)
+
+		assert.Equal(t, scimerrors.ErrInvalidValue(`"value" has a repeated attribute name`), err, op.Path)
+	}
+}
+
 func TestApplySubAttribute(t *testing.T) {
 	item := map[string]any{"name": map[string]any{"familyName": "Old"}}
 

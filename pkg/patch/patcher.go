@@ -1,6 +1,8 @@
 package patch
 
 import (
+	"encoding/json/jsontext"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -44,7 +46,7 @@ func (p *patcher) write(root core.Object, kind Op, op Operation) error {
 	if op.Path == "" {
 		values, err := decode.Object(op.Value)
 		if err != nil {
-			return scimerrors.ErrInvalidValue(`"value" must be an object when "path" is omitted`)
+			return invalidValue(err, `"value" must be an object when "path" is omitted`)
 		}
 		return p.mergeRoot(root, values, kind)
 	}
@@ -57,7 +59,7 @@ func (p *patcher) write(root core.Object, kind Op, op Operation) error {
 	}
 	value, err := decode.Value(op.Value)
 	if err != nil {
-		return scimerrors.ErrInvalidValue(`"value" is not valid JSON`)
+		return invalidValue(err, `"value" is not valid JSON`)
 	}
 	return p.writeAt(root, path, kind, value)
 }
@@ -189,4 +191,11 @@ func gate(attr *core.Attribute) error {
 		return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is readOnly")
 	}
 	return nil
+}
+
+func invalidValue(err error, detail string) error {
+	if errors.Is(err, jsontext.ErrDuplicateName) {
+		return scimerrors.ErrInvalidValue(`"value" has a repeated attribute name`)
+	}
+	return scimerrors.ErrInvalidValue(detail)
 }
