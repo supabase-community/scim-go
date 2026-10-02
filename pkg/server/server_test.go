@@ -2115,6 +2115,7 @@ func TestRFC7644Sorting(t *testing.T) {
 
 // RFC 7644 3.4.2.4 Pagination
 func TestRFC7644Pagination(t *testing.T) {
+	// RFC 7644 Section 3.4.2.4: startIndex is the 1-based index of the first query result and count is the maximum per page.
 	t.Run("paginates with startIndex and count", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -2136,6 +2137,7 @@ func TestRFC7644Pagination(t *testing.T) {
 		assert.Equal(t, "bob", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.4: if count is unspecified, the maximum number of results is set by the service provider.
 	t.Run("pages with a custom default count", func(t *testing.T) {
 		srv := newTestServer(t, withOption(server.DefaultCount(1)))
 		create(t, srv, &core.User{UserName: "alice"})
@@ -2148,6 +2150,7 @@ func TestRFC7644Pagination(t *testing.T) {
 		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[*core.User]](t, response).ItemsPerPage)
 	})
 
+	// RFC 7644 Section 3.4.2.4: the service provider MUST NOT return more results than specified, although it MAY return fewer.
 	t.Run("caps the count at a custom maximum", func(t *testing.T) {
 		config := core.NewServiceProviderConfig().Sorting().Filtering(2).Patching().Versioning()
 		srv := newTestServer(t, withConfig(config))
@@ -2163,6 +2166,7 @@ func TestRFC7644Pagination(t *testing.T) {
 		assert.Equal(t, 2, ReadBodyAs[protocol.ListResponse[*core.User]](t, response).ItemsPerPage)
 	})
 
+	// RFC 7644 Section 3.12: invalidValue when the value specified was not compatible with the operation or attribute type.
 	t.Run("rejects a query with a non-integer startIndex", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -2174,6 +2178,7 @@ func TestRFC7644Pagination(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.4.2.4: a startIndex less than 1 SHALL be interpreted as 1 and a negative count as "0".
 	t.Run("reads a startIndex below 1 as 1 and a negative count as 0", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "bjensen"})
@@ -2206,6 +2211,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		return response.StatusCode, ReadBodyAs[map[string]any](t, response)
 	}
 
+	// RFC 7644 Section 3.9: each resource MUST contain the minimum set and any attributes explicitly requested by "attributes".
 	t.Run("lists only the minimum set and the requested attributes", func(t *testing.T) {
 		status, body := get(t, "/Users?attributes=userName")
 		require.Equal(t, http.StatusOK, status)
@@ -2214,6 +2220,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(resources[0].(map[string]any)))
 	})
 
+	// RFC 7644 Section 3.9: each resource MUST contain the minimum set and any attributes explicitly requested by "attributes".
 	t.Run("ignores requested attributes the schema does not declare", func(t *testing.T) {
 		_, body := get(t, "/Users/"+id+"?attributes=bogus")
 		assert.ElementsMatch(t, []string{"schemas", "id"}, keysOf(body))
@@ -2225,6 +2232,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.Equal(t, "bjensen", body["userName"])
 	})
 
+	// RFC 7644 Section 3.9: excludedAttributes returns the minimum set plus the default set minus the excluded attributes.
 	t.Run("fetches a resource without the excluded attributes", func(t *testing.T) {
 		status, body := get(t, "/Users/"+id+"?excludedAttributes=emails,meta")
 		require.Equal(t, http.StatusOK, status)
@@ -2233,6 +2241,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.NotContains(t, body, "meta")
 	})
 
+	// RFC 7644 Section 3.9: the attributes returned are the minimum attribute set plus the default attribute set.
 	t.Run("omits attributes the schema does not declare", func(t *testing.T) {
 		_, body := get(t, "/Users/"+id)
 		enterprise := body[string(core.SchemaEnterpriseUser)].(map[string]any)
@@ -2240,11 +2249,13 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.NotContains(t, enterprise, "costCenter")
 	})
 
+	// RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.
 	t.Run("rejects attributes together with excludedAttributes", func(t *testing.T) {
 		status, _ := get(t, "/Users/"+id+"?attributes=userName&excludedAttributes=emails")
 		assert.Equal(t, http.StatusBadRequest, status)
 	})
 
+	// RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.
 	t.Run("rejects both parameters on a write before changing anything", func(t *testing.T) {
 		query := "?attributes=userName&excludedAttributes=emails"
 		for method, path := range map[string]string{
@@ -2263,6 +2274,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.InDelta(t, 0, body["totalResults"], 0)
 	})
 
+	// RFC 7644 Section 3.9: clients MAY request a partial representation on any operation that returns a resource.
 	t.Run("shapes the resource returned by a create", func(t *testing.T) {
 		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users?attributes=userName",
 			WithBearerToken(validToken),
@@ -2273,6 +2285,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(ReadBodyAs[map[string]any](t, response)))
 	})
 
+	// RFC 7644 Section 3.9: clients MAY request a partial representation on any operation that returns a resource.
 	t.Run("shapes the resource returned by a patch", func(t *testing.T) {
 		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id+"?excludedAttributes=emails",
 			WithBearerToken(validToken),
@@ -2288,6 +2301,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.NotContains(t, body, "emails")
 	})
 
+	// RFC 7644 Section 3.9: with excludedAttributes, each resource returned MUST contain the minimum set of attributes.
 	t.Run("never excludes an attribute that is always returned", func(t *testing.T) {
 		status, body := get(t, "/Users/"+id+"?excludedAttributes=id")
 
@@ -2295,6 +2309,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.Equal(t, id, body["id"])
 	})
 
+	// RFC 7644 Section 3.9: clients MAY request a partial representation on any operation that returns a resource.
 	t.Run("shapes the resource returned by a replace", func(t *testing.T) {
 		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id+"?attributes=userName",
 			WithBearerToken(validToken),
@@ -2305,6 +2320,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(ReadBodyAs[map[string]any](t, response)))
 	})
 
+	// RFC 7644 Section 3.9: attributes and excludedAttributes shape the resource representation that is returned.
 	t.Run("hands the repository the projection of a read but never of a write", func(t *testing.T) {
 		schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
 		repository := &projectingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas)}
@@ -2335,6 +2351,7 @@ func TestRFC7644Attributes(t *testing.T) {
 func TestRFC7644QueryingResourcesUsingHTTPPOST(t *testing.T) {
 	srv := newTestServer(t)
 
+	// RFC 7644 Section 3.12: 501 when the service provider does not support the requested operation.
 	for _, path := range []string{basePath + "/.search", basePath + "/Users/.search"} {
 		response := Response(t, srv, Request(t, srv, http.MethodPost, path, WithBearerToken(validToken)))
 
