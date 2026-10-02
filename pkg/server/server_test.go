@@ -23,6 +23,7 @@ import (
 
 // RFC 6750 2.1 Authorization Request Header Field
 func TestRFC6750AuthorizationRequestHeaderField(t *testing.T) {
+	// RFC 6750 Section 2.1: resource servers MUST support a bearer token in the "Authorization" header with the "Bearer" scheme.
 	t.Run("accepts a valid bearer token", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -35,6 +36,7 @@ func TestRFC6750AuthorizationRequestHeaderField(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 	})
 
+	// RFC 7235 Section 2.1: a case-insensitive token identifies the authentication scheme.
 	t.Run("matches the Bearer scheme case-insensitively", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -56,6 +58,7 @@ func TestRFC6750URIQueryParameter(t *testing.T) {
 
 // RFC 6750 3 The WWW-Authenticate Response Header Field
 func TestRFC6750TheWWWAuthenticateResponseHeaderField(t *testing.T) {
+	// RFC 6750 Section 3.1: if the request lacks any authentication information, the server SHOULD NOT include an error code.
 	t.Run("omits error info when no Authorization header is present", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -66,6 +69,7 @@ func TestRFC6750TheWWWAuthenticateResponseHeaderField(t *testing.T) {
 		assert.Equal(t, `Bearer realm="scim"`, response.Header.Get("WWW-Authenticate"))
 	})
 
+	// RFC 6750 Section 3.1: a request using an unsupported authentication method SHOULD NOT get an error code.
 	t.Run("omits error info for a non-Bearer scheme", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -82,6 +86,7 @@ func TestRFC6750TheWWWAuthenticateResponseHeaderField(t *testing.T) {
 
 // RFC 6750 3.1 Error Codes
 func TestRFC6750ErrorCodes(t *testing.T) {
+	// RFC 6750 Section 3.1: invalid_token when the access token is expired, revoked, malformed, or invalid, with 401.
 	t.Run("rejects an invalid token with invalid_token", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -95,6 +100,7 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_token"`)
 	})
 
+	// RFC 6750 Section 3.1: invalid_request when the request is missing a required parameter or is malformed, with 400.
 	t.Run("rejects a Bearer scheme without a token with invalid_request", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -104,6 +110,7 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 		assert.Contains(t, response.Header.Get("WWW-Authenticate"), `error="invalid_request"`)
 	})
 
+	// RFC 6750 Section 3: the server MAY include an "error_description" that is not meant to be displayed to end-users.
 	t.Run("hides why the token is invalid behind a fixed description", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -114,6 +121,7 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 		assert.NotContains(t, ReadBodyAs[scimerrors.Error](t, response).Detail, "noon")
 	})
 
+	// RFC 7644 Section 3.12: 500 for an internal error.
 	t.Run("answers a validator failure with 500, no challenge and no internal detail", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -124,6 +132,7 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 		assert.NotContains(t, ReadBodyAs[scimerrors.Error](t, response).Detail, "10.0.0.1")
 	})
 
+	// RFC 6750 Section 3.1: insufficient_scope when the request requires higher privileges than the token provides, with 403.
 	t.Run("rejects a token without the required scope with insufficient_scope", func(t *testing.T) {
 		t.Skip("SHOULD: there is no scope model, so insufficient_scope (403) is never issued")
 	})
@@ -131,6 +140,7 @@ func TestRFC6750ErrorCodes(t *testing.T) {
 
 // RFC 7643 2.1 Attributes
 func TestRFC7643Attributes(t *testing.T) {
+	// RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.
 	t.Run("reads attribute names in a request body case-insensitively", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -152,6 +162,7 @@ func TestRFC7643Attributes(t *testing.T) {
 
 // RFC 7643 2.2 Attribute Characteristics
 func TestRFC7643AttributeCharacteristics(t *testing.T) {
+	// RFC 7643 Section 7: "required" specifies whether or not the attribute is required.
 	t.Run("rejects a resource missing a required attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -166,6 +177,7 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 7: "required" specifies whether or not the attribute is required.
 	t.Run("rejects an element missing a required sub-attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -180,6 +192,7 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 7: "required" specifies whether or not the attribute is required.
 	t.Run("reports the first missing required attribute in schema order", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -196,6 +209,7 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 		}
 	})
 
+	// RFC 7643 Section 7: "required" specifies whether or not the attribute is required.
 	t.Run("rejects a resource missing a required multi-valued attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -210,6 +224,7 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 7: "canonicalValues" is a collection of suggested canonical values that MAY be used.
 	t.Run("rejects a value outside the declared canonical values", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -224,6 +239,7 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 7: "canonicalValues" is a collection of suggested canonical values that MAY be used.
 	t.Run("rejects an element value outside the declared canonical values", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -241,12 +257,14 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 2.5: unassigned attributes and the null value SHALL be considered equivalent.
 	t.Run("skips a candidate whose optional unique attribute is unset", func(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "a"})
 		createWidget(t, srv, &widget{Name: "b"})
 	})
 
+	// RFC 7643 Section 7: "caseExact" specifies whether or not a string attribute is case sensitive.
 	t.Run("a case-exact unique attribute treats different casing as distinct", func(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "a", Nick: "Al"})
@@ -266,6 +284,7 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 
 // RFC 7643 2.3.6 Binary
 func TestRFC7643Binary(t *testing.T) {
+	// RFC 7643 Section 2.3.6: a binary value MUST be base64 encoded as specified in Section 4 of RFC 4648.
 	t.Run("rejects a value that is not base64 on create, replace, and patch", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -294,6 +313,7 @@ func TestRFC7643Binary(t *testing.T) {
 		}
 	})
 
+	// RFC 7643 Section 2.3.6: trailing padding characters MAY be omitted ("=").
 	t.Run("accepts a value with its trailing padding omitted", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -303,6 +323,7 @@ func TestRFC7643Binary(t *testing.T) {
 
 // RFC 7643 2.4 Multi-Valued Attributes
 func TestRFC7643MultiValuedAttributes(t *testing.T) {
+	// RFC 7643 Section 2.4: the primary attribute value "true" MUST appear no more than once.
 	t.Run("rejects more than one primary value on create and replace", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -323,6 +344,7 @@ func TestRFC7643MultiValuedAttributes(t *testing.T) {
 
 // RFC 7643 2.5 Unassigned and Null Values
 func TestRFC7643UnassignedAndNullValues(t *testing.T) {
+	// RFC 7643 Section 2.5: unassigned attributes, the null value, or an empty array SHALL be considered equivalent in "state".
 	t.Run("treats false as a value and an empty complex or multi-valued attribute as missing", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -343,6 +365,7 @@ func TestRFC7643UnassignedAndNullValues(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.5.1: the service provider MAY assume that existing values of omitted readWrite attributes are to be cleared.
 	t.Run("clears an attribute a replace leaves out", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen", UserType: "employee"})
