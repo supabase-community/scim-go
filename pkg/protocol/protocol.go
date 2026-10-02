@@ -16,7 +16,11 @@ import (
 const MediaType = "application/scim+json"
 
 func Decode[T any](body io.Reader) (T, error) {
-	req, err := decode.JSON[T](body)
+	var req T
+	raw, err := io.ReadAll(body)
+	if err == nil {
+		req, err = decode.JSON[T](raw)
+	}
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			return req, scimerrors.ErrTooLarge("request body is too large")

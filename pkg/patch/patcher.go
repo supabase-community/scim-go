@@ -1,7 +1,6 @@
 package patch
 
 import (
-	"bytes"
 	"strconv"
 	"strings"
 
@@ -43,8 +42,8 @@ func (p *patcher) apply(root core.Object, op Operation) error {
 
 func (p *patcher) write(root core.Object, kind Op, op Operation) error {
 	if op.Path == "" {
-		values, err := decode.JSON[map[string]any](bytes.NewReader(op.Value))
-		if err != nil || values == nil {
+		values, err := decode.Object(op.Value)
+		if err != nil {
 			return scimerrors.ErrInvalidValue(`"value" must be an object when "path" is omitted`)
 		}
 		return p.mergeRoot(root, values, kind)
@@ -56,7 +55,7 @@ func (p *patcher) write(root core.Object, kind Op, op Operation) error {
 	if len(op.Value) == 0 {
 		return scimerrors.ErrInvalidValue(`"value" is required for "add" and "replace"`)
 	}
-	value, err := decode.JSON[any](bytes.NewReader(op.Value))
+	value, err := decode.Value(op.Value)
 	if err != nil {
 		return scimerrors.ErrInvalidValue(`"value" is not valid JSON`)
 	}

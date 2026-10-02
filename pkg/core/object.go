@@ -1,7 +1,6 @@
 package core
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -16,7 +15,7 @@ func NewObject(v any) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return decode.JSON[Object](bytes.NewReader(raw))
+	return decode.Object(raw)
 }
 
 func (o Object) Get(name string) any {
