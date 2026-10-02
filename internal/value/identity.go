@@ -19,8 +19,7 @@ func Identity(attribute *core.Attribute, element core.Object) string {
 	folded := Fold(sub, key)
 	kind := attribute.SubAttribute("type")
 	if kind == nil || kind.Mutability != core.MutabilityReadWrite {
-		raw, _ := json.Marshal(folded)
-		return string(raw)
+		return folded.(string)
 	}
 	typ := Fold(kind, element.Get(kind.Name))
 	if IsUnassigned(typ) {

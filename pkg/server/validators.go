@@ -211,11 +211,14 @@ func signature(subs []*core.Attribute, element core.Object) string {
 }
 
 func foldedString(sub *core.Attribute, v any) string {
-	folded := value.Fold(sub, v)
-	if t, ok := folded.(time.Time); ok {
-		return t.UTC().Format(time.RFC3339Nano)
+	switch folded := value.Fold(sub, v).(type) {
+	case string:
+		return folded
+	case time.Time:
+		return folded.UTC().Format(time.RFC3339Nano)
+	default:
+		return fmt.Sprint(folded)
 	}
-	return fmt.Sprint(folded)
 }
 
 func changed(subs []*core.Attribute, stored, candidate core.Object) *core.Attribute {
