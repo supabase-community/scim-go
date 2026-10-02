@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -37,6 +38,16 @@ func TestApplyNoPathMerge(t *testing.T) {
 
 	assert.Equal(t, "Babs", item["nickName"])
 	assert.Equal(t, "Eng", item["title"])
+}
+
+// RFC 7644 Section 3.5.2.3: if "path" is omitted, the target is assumed to be the resource itself.
+func TestApplyNoPathMergeRejectsANonObjectExtension(t *testing.T) {
+	err := apply(map[string]any{}, enterpriseSchemas(), patch.Operation{
+		Op:    patch.OpReplace,
+		Value: json.RawMessage(`{"` + string(core.SchemaEnterpriseUser) + `":"sales"}`),
+	})
+
+	assert.Equal(t, scimerrors.ErrInvalidValue(strconv.Quote(string(core.SchemaEnterpriseUser))+" must be an object"), err)
 }
 
 func TestApplyAddAppendsAndIsCaseInsensitive(t *testing.T) {
@@ -183,6 +194,15 @@ func TestApplyValuePathReplaceSub(t *testing.T) {
 	emails := item["emails"].([]any)
 	assert.Equal(t, "new@x", emails[0].(map[string]any)["value"])
 	assert.Equal(t, "h@x", emails[1].(map[string]any)["value"])
+}
+
+// RFC 7644 Section 3.5.2.3: all matching record values SHALL be replaced.
+func TestApplyValuePathReplaceRejectsANonObjectValue(t *testing.T) {
+	item := map[string]any{"emails": []any{map[string]any{"type": "work", "value": "old@x"}}}
+
+	err := apply(item, nil, operation(patch.OpReplace, `emails[type eq "work"]`, `"new@x"`))
+
+	assert.Equal(t, scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`), err)
 }
 
 func TestApplyPrimaryDemotesTheOtherValues(t *testing.T) {
