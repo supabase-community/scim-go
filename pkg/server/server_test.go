@@ -4548,6 +4548,18 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 		assert.Equal(t, core.SchemaUser, resourceType.Schema)
 	})
 
+	// RFC 7643 Section 6: "description" is the resource type's human-readable description.
+	t.Run("describes a resource type", func(t *testing.T) {
+		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithDescription("User Account")),
+		))
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User"))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, "User Account", ReadBodyAs[core.ResourceType](t, response).Description)
+	})
+
 	t.Run("returns 404 for an unknown resource type id", func(t *testing.T) {
 		srv := newTestServer(t)
 

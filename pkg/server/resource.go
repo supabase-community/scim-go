@@ -47,11 +47,12 @@ func (c *Resource[T]) schema(base string) *core.Schema {
 
 func (c *Resource[T]) resourceType() *core.ResourceType {
 	resourceType := &core.ResourceType{
-		Schemas:  []core.SchemaURI{core.SchemaResourceType},
-		ID:       core.ResourceTypeName(c.name),
-		Name:     core.ResourceTypeName(c.name),
-		Endpoint: c.endpoint,
-		Schema:   c.id,
+		Schemas:     []core.SchemaURI{core.SchemaResourceType},
+		ID:          core.ResourceTypeName(c.name),
+		Name:        core.ResourceTypeName(c.name),
+		Description: c.description,
+		Endpoint:    c.endpoint,
+		Schema:      c.id,
 	}
 	for _, extension := range c.extensions {
 		resourceType.Extend(core.SchemaExtension{Schema: extension.id})
