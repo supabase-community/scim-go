@@ -4306,6 +4306,7 @@ func TestRFC7644MeAuthenticatedSubjectAlias(t *testing.T) {
 
 // RFC 7644 3.12 HTTP Status and Error Response Handling
 func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
+	// RFC 7644 Section 3.12: errors MUST be returned in a JSON body identified by "urn:ietf:params:scim:api:messages:2.0:Error".
 	t.Run("returns a SCIM error for an unknown resource id", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4325,6 +4326,7 @@ func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
 		assert.NotEmpty(t, scimErr.Detail)
 	})
 
+	// RFC 7644 Section 3.12: "detail" is an OPTIONAL human-readable message, and "scimType" is a Table 9 keyword.
 	t.Run("describes an error with RFC 7644 Table 9 instead of echoing the request", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4387,6 +4389,7 @@ func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.12: 404 when the specified resource or endpoint does not exist.
 	t.Run("returns a SCIM error for an unknown endpoint", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4397,6 +4400,7 @@ func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
 		assert.Equal(t, "404", ReadBodyAs[scimerrors.Error](t, response).Status)
 	})
 
+	// RFC 7231 Section 6.5.5: a 405 response MUST include an Allow header listing the target resource's supported methods.
 	t.Run("returns a SCIM error and the allowed methods for an unsupported method", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4411,6 +4415,7 @@ func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
 
 // RFC 7644 3.14 Versioning Resources
 func TestRFC7644VersioningResources(t *testing.T) {
+	// RFC 7644 Section 3.14: service providers MAY support weak ETags as the preferred mechanism.
 	t.Run("issues a weak ETag", func(t *testing.T) {
 		srv := newTestServer(t)
 		_, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4418,6 +4423,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.True(t, strings.HasPrefix(etag, `W/"`))
 	})
 
+	// RFC 7644 Section 3.14: ETags MUST be an HTTP header and SHOULD be specified within the 'version' attribute of 'meta'.
 	t.Run("meta.version matches the ETag header on create", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4433,6 +4439,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, response.Header.Get("ETag"), created.Meta.Version)
 	})
 
+	// RFC 7644 Section 3.14: ETags MUST be an HTTP header and SHOULD be specified within the 'version' attribute of 'meta'.
 	t.Run("meta.version matches the ETag header on replace", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4450,6 +4457,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, response.Header.Get("ETag"), replaced.Meta.Version)
 	})
 
+	// RFC 7232 Section 3.1: If-Match "*" matches any current representation of the target resource.
 	t.Run("If-Match * matches any version", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4463,6 +4471,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: 409 when the specified version number does not match the resource's latest version number.
 	t.Run("serves concurrent reads and writes without losing a resource", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4495,6 +4504,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, 9, list.TotalResults)
 	})
 
+	// RFC 7644 Section 3.12: 409 when the specified version number does not match the resource's latest version number.
 	t.Run("answers 409 to the loser of two concurrent versionless patches and keeps the winner", func(t *testing.T) {
 		srv := newTestServer(t, withUpdateGate(newRaceGate(2)))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -4528,6 +4538,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.ElementsMatch(t, []int{http.StatusOK, http.StatusPreconditionFailed}, statuses)
 	})
 
+	// RFC 7644 Section 3.14: with If-None-Match, an unchanged resource returns an empty body with 304.
 	t.Run("retrieves a resource only if it changed with If-None-Match", func(t *testing.T) {
 		t.Skip("MAY: conditional retrieval with If-None-Match is not supported")
 	})
@@ -4535,6 +4546,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 
 // RFC 7644 4 Service Provider Configuration Endpoints (/ServiceProviderConfig)
 func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
+	// RFC 7644 Section 4: "/ServiceProviderConfig" describes the SCIM specification features available on a service provider.
 	t.Run("advertises capabilities and authentication schemes", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4558,6 +4570,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.True(t, config.AuthenticationSchemes[0].Primary)
 	})
 
+	// RFC 7643 Section 3.1: meta.location is the URI of the resource being returned.
 	t.Run("advertises its own location", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4567,6 +4580,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.Equal(t, basePath+"/ServiceProviderConfig", config.Meta.Location)
 	})
 
+	// RFC 7643 Section 3.1: meta.location MUST be the same as the "Content-Location" HTTP response header.
 	t.Run("keeps a location set by the caller", func(t *testing.T) {
 		location := "https://example.com" + basePath + "/ServiceProviderConfig"
 		config := fullServiceProviderConfig()
@@ -4579,6 +4593,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.Equal(t, location, response.Header.Get("Content-Location"))
 	})
 
+	// RFC 7643 Section 5: filter.maxResults is the maximum number of resources returned in a response.
 	t.Run("advertises the custom max results configured via Filtering", func(t *testing.T) {
 		config := core.NewServiceProviderConfig().Sorting().Filtering(2).Patching().Versioning()
 		srv := newTestServer(t, withConfig(config))
@@ -4590,6 +4605,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.Equal(t, 2, ReadBodyAs[core.ServiceProviderConfig](t, response).Filter.MaxResults)
 	})
 
+	// RFC 7644 Section 4: "/ServiceProviderConfig" describes the SCIM specification features available on a service provider.
 	t.Run("advertises a mutated config directly", func(t *testing.T) {
 		config := core.NewServiceProviderConfig().Patching().Filtering(protocol.DefaultLimits.MaxCount)
 		config.DocumentationURI = "https://example.com/help/scim.html"
@@ -4603,6 +4619,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 		assert.True(t, advertised.Patch.Supported)
 	})
 
+	// RFC 7643 Section 5: etag is a complex type that specifies ETag configuration options and is REQUIRED.
 	t.Run("advertises etag support in ServiceProviderConfig", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4620,6 +4637,7 @@ func TestRFC7644ServiceProviderConfiguration(t *testing.T) {
 
 // RFC 7644 4 Service Provider Configuration Endpoints (/Schemas)
 func TestRFC7644Schemas(t *testing.T) {
+	// RFC 7644 Section 4: an HTTP GET to "/Schemas" SHALL return all supported schemas in ListResponse format.
 	t.Run("lists the registered schemas", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4653,6 +4671,7 @@ func TestRFC7644Schemas(t *testing.T) {
 		assert.True(t, emails.MultiValued)
 	})
 
+	// RFC 7644 Section 4: individual schema definitions can be returned by appending the schema URI to "/Schemas".
 	t.Run("fetches a schema by id", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4667,6 +4686,7 @@ func TestRFC7644Schemas(t *testing.T) {
 		assert.Equal(t, core.SchemaUser, schema.ID)
 	})
 
+	// RFC 7644 Section 3.12: 404 when the specified resource or endpoint does not exist.
 	t.Run("returns 404 for an unknown schema id", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4722,6 +4742,7 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 		assert.Equal(t, gadgetSchema, list.Resources[4].Schema)
 	})
 
+	// RFC 7644 Section 4: a specific "ResourceType" is returned in the same way that a single User or Group is retrieved.
 	t.Run("fetches a resource type by id", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -4750,6 +4771,7 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 		assert.Equal(t, "User Account", ReadBodyAs[core.ResourceType](t, response).Description)
 	})
 
+	// RFC 7644 Section 3.12: 404 when the specified resource or endpoint does not exist.
 	t.Run("returns 404 for an unknown resource type id", func(t *testing.T) {
 		srv := newTestServer(t)
 
