@@ -28,11 +28,7 @@ func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	document, err := objectOf(raw)
-	if err != nil {
-		return nil, err
-	}
-	if err := checkNames(document); err != nil {
+	if _, err := objectOf(raw); err != nil {
 		return nil, err
 	}
 	req, err := decode.JSON[*PatchRequest](raw)

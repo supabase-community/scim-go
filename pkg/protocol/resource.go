@@ -21,14 +21,7 @@ func DecodeDocument(body io.Reader) (core.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	document, err := objectOf(raw)
-	if err != nil {
-		return nil, err
-	}
-	if err := checkNames(document); err != nil {
-		return nil, err
-	}
-	return document, nil
+	return objectOf(raw)
 }
 
 // ResourceFrom drops readOnly values from document in place and builds a resource from it; RFC 7644 Sections 3.3 and 3.5.1: readOnly attribute values SHALL be ignored.
@@ -47,17 +40,13 @@ func objectOf(raw []byte) (map[string]any, error) {
 	if err != nil {
 		return nil, scimerrors.ErrInvalidSyntax(notJSON)
 	}
+	if !wellFormedNames(document) {
+		return nil, scimerrors.ErrInvalidSyntax(badName)
+	}
 	return document, nil
 }
 
 // RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.
-func checkNames(document any) error {
-	if !wellFormedNames(document) {
-		return scimerrors.ErrInvalidSyntax(badName)
-	}
-	return nil
-}
-
 func wellFormedNames(value any) bool {
 	switch v := value.(type) {
 	case map[string]any:
