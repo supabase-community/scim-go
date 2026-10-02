@@ -113,6 +113,7 @@ func (r *timedGroupRepository) Update(ctx context.Context, group *core.Group) (*
 }
 
 func patchBody(b *testing.B, op patch.Op, path, value string) []byte {
+	b.Helper()
 	operation := patch.Operation{Op: op, Path: path}
 	if value != "" {
 		operation.Value = json.RawMessage(value)
@@ -139,6 +140,7 @@ func patchAddresses(n int, prefix string) patch.Operation {
 }
 
 func createEach(b *testing.B, handler http.Handler, created *int, remove bool) {
+	b.Helper()
 	head, tail, _ := bytes.Cut(benchBody(b, benchUser("USERNAME")), []byte("USERNAME"))
 	body := []byte{}
 	b.ReportAllocs()
@@ -153,6 +155,7 @@ func createEach(b *testing.B, handler http.Handler, created *int, remove bool) {
 }
 
 func serveEach(b *testing.B, handler http.Handler, method, target string, body []byte, status int) {
+	b.Helper()
 	b.ReportAllocs()
 	for b.Loop() {
 		serve(b, handler, method, target, body, status)
@@ -160,6 +163,7 @@ func serveEach(b *testing.B, handler http.Handler, method, target string, body [
 }
 
 func serve(b *testing.B, handler http.Handler, method, target string, body []byte, status int) *httptest.ResponseRecorder {
+	b.Helper()
 	r := httptest.NewRequest(method, target, bytes.NewReader(body))
 	r.Header.Set("Authorization", "Bearer "+validToken)
 	r.Header.Set("Content-Type", protocol.MediaType)
@@ -172,6 +176,7 @@ func serve(b *testing.B, handler http.Handler, method, target string, body []byt
 }
 
 func benchBody(b *testing.B, value any) []byte {
+	b.Helper()
 	body, err := json.Marshal(value)
 	if err != nil {
 		b.Fatal(err)

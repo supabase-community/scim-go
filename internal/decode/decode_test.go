@@ -157,6 +157,7 @@ func BenchmarkValue(b *testing.B) {
 }
 
 func assertParity(t *testing.T, raw []byte) {
+	t.Helper()
 	original := bytes.Clone(raw)
 	want, wantErr := decode.JSON[any](raw)
 	got, err := decode.Value(raw)

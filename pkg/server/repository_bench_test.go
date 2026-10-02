@@ -17,6 +17,7 @@ func BenchmarkRepository(b *testing.B) {
 }
 
 func benchRepository(b *testing.B, size int) {
+	b.Helper()
 	ctx := b.Context()
 	repository := server.NewRepository[*core.User](basePath+"/Users", userSchemas())
 	var seeded *core.User
@@ -57,6 +58,7 @@ func benchRepository(b *testing.B, size int) {
 }
 
 func loop(b *testing.B, run func() error) {
+	b.Helper()
 	b.ReportAllocs()
 	for b.Loop() {
 		if err := run(); err != nil {
@@ -66,6 +68,7 @@ func loop(b *testing.B, run func() error) {
 }
 
 func seed(ctx context.Context, b *testing.B, repository server.Repository[*core.User], userName string) *core.User {
+	b.Helper()
 	created, err := repository.Create(ctx, &core.User{UserName: userName})
 	if err != nil {
 		b.Fatal(err)

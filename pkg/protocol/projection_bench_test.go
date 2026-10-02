@@ -31,6 +31,7 @@ func BenchmarkProjection(b *testing.B) {
 }
 
 func benchMarshal(b *testing.B, value any) {
+	b.Helper()
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, err := json.Marshal(value); err != nil {

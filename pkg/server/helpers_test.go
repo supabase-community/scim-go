@@ -94,6 +94,8 @@ func WithRequestBody(raw []byte) Option[*http.Request] {
 }
 
 func WithRequestBodyAs[T any](t *testing.T, item T) Option[*http.Request] {
+	t.Helper()
+
 	body, err := json.Marshal(item)
 	require.NoError(t, err)
 	return WithRequestBody(body)

@@ -34,6 +34,7 @@ func FuzzParse(f *testing.F) {
 }
 
 func checkRoundTrip(t *testing.T, g filter.Grammar, input string) {
+	t.Helper()
 	if len(input) > 4096 {
 		return
 	}

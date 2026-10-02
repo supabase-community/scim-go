@@ -37,6 +37,7 @@ linters:
     - revive
     - testifylint
     - testpackage
+    - thelper
   settings:
     dupl:
       threshold: 150
