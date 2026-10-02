@@ -27,7 +27,7 @@ func FuzzParse(f *testing.F) {
 		f.Add(s)
 	}
 
-	g := filter.New(8192)
+	g := filter.New(0)
 	f.Fuzz(func(t *testing.T, input string) {
 		checkRoundTrip(t, g, input)
 	})
