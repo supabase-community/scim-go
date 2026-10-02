@@ -38,6 +38,8 @@ type revision[T core.Resource] struct {
 	resource  T
 }
 
+type change[T core.Resource] func(current T, existing core.Object) (revision[T], error)
+
 func NewService[T core.Resource](repo Repository[T], schemas core.Schemas, limits Limits, validators ...Validator[T]) Service[T] {
 	validators = append([]Validator[T]{characteristics[T](schemas)}, validators...)
 	return &service[T]{repo: repo, schemas: schemas, limits: limits, validators: validators}
@@ -65,8 +67,8 @@ func (s *service[T]) Create(ctx context.Context, document core.Object) (T, error
 }
 
 func (s *service[T]) Replace(ctx context.Context, req *protocol.ReplaceRequest) (T, error) {
-	return s.write(ctx, req.ID, req.Version, func(_ T, before core.Object) (revision[T], error) {
-		return s.replaced(before, req)
+	return s.write(ctx, req.ID, req.Version, func(_ T, existing core.Object) (revision[T], error) {
+		return s.replaced(existing, req)
 	})
 }
 
@@ -80,22 +82,22 @@ func (s *service[T]) Delete(ctx context.Context, req *protocol.DeleteRequest) er
 
 // Patch applies req to the current resource as one unit, per RFC 7644 Section 3.5.2.
 func (s *service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, error) {
-	return s.write(ctx, req.ID, req.Version, func(existing T, document core.Object) (revision[T], error) {
-		return s.patched(existing, document, req)
+	return s.write(ctx, req.ID, req.Version, func(current T, document core.Object) (revision[T], error) {
+		return s.patched(current, document, req)
 	})
 }
 
-func (s *service[T]) write(ctx context.Context, id, version string, change func(existing T, before core.Object) (revision[T], error)) (T, error) {
+func (s *service[T]) write(ctx context.Context, id, version string, apply change[T]) (T, error) {
 	var zero T
 	current, err := s.current(ctx, id, version)
 	if err != nil {
 		return zero, err
 	}
-	before, err := core.NewObject(current)
+	existing, err := core.NewObject(current)
 	if err != nil {
 		return zero, err
 	}
-	next, err := change(current, before)
+	next, err := apply(current, existing)
 	if errors.Is(err, errUnchanged) {
 		return current, nil
 	}
@@ -110,7 +112,8 @@ func (s *service[T]) save(ctx context.Context, version string, current T, next r
 	if err := s.admit(ctx, next); err != nil {
 		return zero, err
 	}
-	next.resource.Common().ID, next.resource.Common().Meta = current.Common().ID, current.Common().Meta
+	common := next.resource.Common()
+	common.ID, common.Meta = current.Common().ID, current.Common().Meta
 	saved, err := s.repo.Update(ctx, next.resource)
 	return saved, conflict(version, err)
 }
@@ -128,24 +131,24 @@ func (s *service[T]) current(ctx context.Context, id, version string) (T, error)
 	return current, nil
 }
 
-func (s *service[T]) patched(existing T, document core.Object, req *protocol.PatchRequest) (revision[T], error) {
+func (s *service[T]) patched(current T, document core.Object, req *protocol.PatchRequest) (revision[T], error) {
 	patched, err := req.Patch[T](document, s.schemas, patch.MaxFilterEvaluations(s.limits.MaxFilterEvaluations), patch.MaxWriteBytes(s.limits.MaxWriteBytes))
 	if err != nil {
 		return revision[T]{}, err
 	}
-	patched.Common().Meta = existing.Common().Meta
+	patched.Common().Meta = current.Common().Meta
 	stampSchemas(s.schemas, patched, document)
 	// RFC 7644 Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
-	return revision[T]{candidate: document, resource: patched}, unchanged(existing, patched)
+	return revision[T]{candidate: document, resource: patched}, unchanged(current, patched)
 }
 
-func (s *service[T]) replaced(before core.Object, req *protocol.ReplaceRequest) (revision[T], error) {
-	resource, err := req.Replace[T](before, s.schemas)
+func (s *service[T]) replaced(existing core.Object, req *protocol.ReplaceRequest) (revision[T], error) {
+	resource, err := req.Replace[T](existing, s.schemas)
 	if err != nil {
 		return revision[T]{}, err
 	}
 	stampSchemas(s.schemas, resource, req.Attributes)
-	return revision[T]{existing: before, candidate: req.Attributes, resource: resource}, nil
+	return revision[T]{existing: existing, candidate: req.Attributes, resource: resource}, nil
 }
 
 func (s *service[T]) admit(ctx context.Context, next revision[T]) error {
@@ -191,8 +194,8 @@ func conflict(version string, err error) error {
 	return err
 }
 
-func unchanged[T core.Resource](existing, patched T) error {
-	stored, err := json.Marshal(existing)
+func unchanged[T core.Resource](current, patched T) error {
+	stored, err := json.Marshal(current)
 	if err != nil {
 		return scimerrors.ErrInternal("could not encode the resource")
 	}
