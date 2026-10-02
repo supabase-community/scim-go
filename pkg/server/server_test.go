@@ -2277,6 +2277,7 @@ func TestRFC7644QueryingResourcesUsingHTTPPOST(t *testing.T) {
 
 // RFC 7644 3.5.1 Replacing with PUT
 func TestRFC7644ReplacingWithPUT(t *testing.T) {
+	// RFC 7644 Section 3.14: the PUT succeeds only if the supplied If-Match ETag matches the latest resource.
 	t.Run("replaces a resource and returns a new ETag when If-Match matches", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2295,6 +2296,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, "bjensen2", replaced.UserName)
 	})
 
+	// RFC 7644 Section 3.14: ETags ensure that clients do not inadvertently overwrite each other's changes.
 	t.Run("the new ETag differs from the old one even within the same second", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2311,6 +2313,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.NotEqual(t, etag, response.Header.Get("ETag"))
 	})
 
+	// RFC 7644 Section 3.14: the client MAY supply an If-Match header for PUT.
 	t.Run("replaces a resource even without If-Match", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2325,6 +2328,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: 412 when the update failed because the resource has changed on the server.
 	t.Run("rejects a replace with a stale If-Match", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2340,6 +2344,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: 404 when the specified resource does not exist.
 	t.Run("replacing an unknown id returns 404", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -2353,6 +2358,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: invalidSyntax when the request body message structure was invalid.
 	t.Run("rejects a replace with a malformed JSON body", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2369,6 +2375,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.12: invalidSyntax when the request body message structure was invalid.
 	t.Run("rejects a replace with a JSON null body instead of panicking", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2385,6 +2392,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match, or 400 SHOULD be returned with scimType "mutability".
 	t.Run("rejects a replace that changes an immutable attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
@@ -2401,6 +2409,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.5.1: if the service provider has no existing immutable values, the new value(s) SHALL be applied.
 	t.Run("allows assigning an immutable attribute for the first time", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2417,6 +2426,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, "Jensen", ReadBodyAs[core.User](t, response).Name.FamilyName)
 	})
 
+	// RFC 7644 Section 3.5.1: if the service provider has no existing immutable values, the new value(s) SHALL be applied.
 	t.Run("allows assigning an immutable sub-attribute of a group member for the first time", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
@@ -2457,6 +2467,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, original.Meta.Created, replaced.Meta.Created)
 	})
 
+	// RFC 7643 Section 7: a readOnly attribute SHALL NOT be modified.
 	t.Run("keeps readOnly values the body leaves out", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2490,6 +2501,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, []part{{Serial: "s-1", Inspector: "qa-bot"}, {Serial: "s-3"}}, ReadBodyAs[widget](t, response).Parts)
 	})
 
+	// RFC 7644 Section 3.5.1: if an attribute is "required", clients MUST specify the attribute in the PUT request.
 	t.Run("rejects a replace missing a required attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -2504,6 +2516,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 3.1: lastModified is the most recent DateTime that the details of this resource were updated.
 	t.Run("advances meta.lastModified", func(t *testing.T) {
 		srv := newTestServer(t)
 		created := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
@@ -2522,6 +2535,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.True(t, ReadBodyAs[core.User](t, response).Meta.LastModified.After(created.Meta.LastModified))
 	})
 
+	// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match.
 	t.Run("keeps an omitted immutable sub-attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "Barbara", FamilyName: "Jensen"}})
@@ -2575,6 +2589,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		}
 	})
 
+	// RFC 7643 Section 4.2: sub-attributes of group members are "immutable".
 	t.Run("group member replace is idempotent", func(t *testing.T) {
 		t.Run("PUT re-sending an existing member by value alone keeps its stored type", func(t *testing.T) {
 			srv := newTestServer(t)
@@ -2755,6 +2770,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		})
 	})
 
+	// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match.
 	t.Run("group member mutability is linear in member count", func(t *testing.T) {
 		srv := newTestServer(t)
 		grow := func(n int) time.Duration {
@@ -2793,6 +2809,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Less(t, float64(large)/float64(small), 8.0, "immutable member validation must not be quadratic in duplicate values")
 	})
 
+	// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match.
 	t.Run("concurrent versionless PUTs cannot both set an immutable value", func(t *testing.T) {
 		gate := newRaceGate(2)
 		srv := newTestServer(t, withUpdateGate(gate))
