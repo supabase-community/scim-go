@@ -963,6 +963,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 
 		for _, body := range []string{
 			`{"userName":"alice","USERNAME":"bob"}`,
+			`{"userName":"alice","userName":"bob"}`,
 			`{"userName":"alice","` + extension + `":{"department":"ops"},"` + strings.ToLower(extension) + `":{"manager":{"displayName":"forged"}}}`,
 			`{"userName":"alice","` + extension + `":{"manager":{"value":"m-1"},"MANAGER":{"displayName":"forged"}}}`,
 			`{"userName":"alice","` + extension + `":{"department":"ops"},"` + strings.Replace(extension, "enterprise", "enterpri\u017fe", 1) + `":{"manager":{"displayName":"forged"}}}`,
@@ -3527,6 +3528,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 
 		for _, operation := range []patch.Operation{
 			{Op: patch.OpReplace, Value: json.RawMessage(`{"displayName":"a","DISPLAYNAME":"b"}`)},
+			{Op: patch.OpReplace, Value: json.RawMessage(`{"displayName":"a","displayName":"b"}`)},
 			{Op: patch.OpReplace, Path: "name", Value: json.RawMessage(`{"givenName":"a","GIVENNAME":"b"}`)},
 			{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"a@example.com","VALUE":"b@example.com"}]`)},
 			{Op: patch.OpAdd, Value: json.RawMessage(`{"` + extension + `":{"department":"a","DEPARTMENT":"b"}}`)},
