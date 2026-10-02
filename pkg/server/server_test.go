@@ -1735,6 +1735,7 @@ func TestRFC7644Filtering(t *testing.T) {
 
 // RFC 7644 3.4.2.3 Sorting
 func TestRFC7644Sorting(t *testing.T) {
+	// RFC 7644 Section 3.4.2.3: if "sortBy" is provided and no "sortOrder" is specified, "sortOrder" SHALL default to ascending.
 	t.Run("sorts ascending by default when only sortBy is given", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -1756,6 +1757,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "carol", list.Resources[2].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.3: allowed "sortOrder" values are "ascending" and "descending".
 	t.Run("sorts descending when sortOrder is descending", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -1777,6 +1779,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[2].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.3: "sortBy" specifies the attribute whose value SHALL be used to order the returned responses.
 	t.Run("sorts by the common id attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		first, _ := create(t, srv, &core.User{UserName: "alice"})
@@ -1795,6 +1798,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, want[1], list.Resources[1].ID)
 	})
 
+	// RFC 7644 Section 3.4.2.3: for a complex attribute, "sortBy" must be a path to a sub-attribute, e.g., "name.givenName".
 	t.Run("sorts by a nested sub-attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "u1", Name: core.Name{GivenName: "Zoe"}})
@@ -1811,6 +1815,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "u1", list.Resources[1].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.3: resources with no data for "sortBy" are ordered last if ascending and first if descending.
 	t.Run("resources both missing the sort attribute keep their relative order", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "first"})
@@ -1844,6 +1849,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "has-name", list.Resources[1].UserName)
 	})
 
+	// RFC 7644 Section 3.12: invalidValue when the value specified was not compatible with the operation or attribute type.
 	t.Run("rejects sortBy on an attribute that is not known", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1855,6 +1861,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 7: "writeOnly" attribute values SHALL NOT be returned.
 	t.Run("rejects sortBy on a writeOnly attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1866,6 +1873,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 7: "writeOnly" attribute values SHALL NOT be returned.
 	t.Run("rejects sortBy on a sub-attribute of a writeOnly attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1877,6 +1885,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.4.2.3: "sortBy" uses standard attribute notation (Section 3.10).
 	t.Run("rejects sortBy with an invalid attribute path syntax", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1888,6 +1897,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.4.2.3: "sortOrder" MUST sort according to the attribute type.
 	t.Run("sorts by a boolean attribute, with false ranking before true", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
@@ -1919,6 +1929,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "bob", list.Resources[2].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.3: "sortOrder" MUST sort according to the attribute type.
 	t.Run("sorts by an integer attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "high", Score: 50})
@@ -1935,6 +1946,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "high", list.Resources[1]["Name"])
 	})
 
+	// RFC 7644 Section 3.4.2.3: "sortOrder" MUST sort according to the attribute type.
 	t.Run("sorts by a dateTime attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		early := time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC)
@@ -2003,6 +2015,7 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "nobody", list.Resources[2].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.3: allowed "sortOrder" values are "ascending" and "descending".
 	t.Run("rejects a sortOrder that is not ascending or descending", func(t *testing.T) {
 		srv := newTestServer(t)
 
