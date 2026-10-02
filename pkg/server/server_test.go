@@ -515,81 +515,6 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, user.Schemas)
 	})
 
-	// RFC 7644 Section 3.4.2.2: a URI-qualified attribute name reaches into a schema extension.
-	t.Run("filters by a URI-qualified extension attribute", func(t *testing.T) {
-		filterQuery := string(core.SchemaEnterpriseUser) + `:employeeNumber eq "1234"`
-		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
-		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
-		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, id, list.Resources[0].ID)
-	})
-
-	// RFC 7644 Section 3.4.2.3: sortBy also reaches into a schema extension.
-	t.Run("sorts by a URI-qualified extension attribute", func(t *testing.T) {
-		create(t, srv, &core.User{UserName: "amorris", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "0001"}})
-
-		sortBy := string(core.SchemaEnterpriseUser) + ":employeeNumber"
-		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
-		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken))
-		response := Response(t, srv, request)
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
-		require.GreaterOrEqual(t, len(list.Resources), 2)
-		assert.Equal(t, "amorris", list.Resources[0].UserName)
-	})
-
-	// RFC 7644 Section 3.10: every facet of an attribute path, including the URN, is case insensitive.
-	t.Run("filters by an extension attribute with an upper-case URN", func(t *testing.T) {
-		filterQuery := strings.ToUpper(string(core.SchemaEnterpriseUser)) + `:employeeNumber eq "1234"`
-		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
-		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
-		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, id, list.Resources[0].ID)
-	})
-
-	t.Run("sorts by an extension attribute with an upper-case URN", func(t *testing.T) {
-		sortBy := strings.ToUpper(string(core.SchemaEnterpriseUser)) + ":employeeNumber"
-		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
-		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
-
-		require.Equal(t, http.StatusOK, response.StatusCode)
-	})
-
-	// RFC 7644 Section 3.5.2: a PATCH path may be qualified with the schema extension URN.
-	t.Run("patches an extension attribute by its URN-qualified path", func(t *testing.T) {
-		patchID, _ := create(t, srv, &core.User{UserName: "patched", EnterpriseUser: &core.EnterpriseUser{Department: "eng"}})
-
-		patched := patchUser(t, srv, patchID, patch.Operation{
-			Op:    patch.OpReplace,
-			Path:  string(core.SchemaEnterpriseUser) + ":department",
-			Value: json.RawMessage(`"sales"`),
-		})
-
-		require.NotNil(t, patched.EnterpriseUser)
-		assert.Equal(t, "sales", patched.EnterpriseUser.Department)
-	})
-
-	t.Run("patches an extension object when the path is omitted", func(t *testing.T) {
-		patchID, _ := create(t, srv, &core.User{UserName: "merged", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "9"}})
-
-		patched := patchUser(t, srv, patchID, patch.Operation{
-			Op:    patch.OpReplace,
-			Value: json.RawMessage(`{"` + string(core.SchemaEnterpriseUser) + `":{"department":"ops"}}`),
-		})
-
-		require.NotNil(t, patched.EnterpriseUser)
-		assert.Equal(t, "ops", patched.EnterpriseUser.Department)
-		assert.Equal(t, "9", patched.EnterpriseUser.EmployeeNumber)
-	})
-
 	// RFC 7643 Section 3: "schemas" indicates the schemas that define the attributes present in the current JSON structure.
 	t.Run("omits the extension from schemas when no extension data is set", func(t *testing.T) {
 		plainID, _ := create(t, srv, &core.User{UserName: "plain"})
@@ -1753,6 +1678,36 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).TotalResults)
 	})
+
+	// RFC 7644 Section 3.4.2.2: a URI-qualified attribute name reaches into a schema extension.
+	t.Run("filters by a URI-qualified extension attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "1234"}})
+
+		filterQuery := string(core.SchemaEnterpriseUser) + `:employeeNumber eq "1234"`
+		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, id, list.Resources[0].ID)
+	})
+
+	// RFC 7644 Section 3.10: every facet of an attribute path, including the URN, is case insensitive.
+	t.Run("filters by an extension attribute with an upper-case URN", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "1234"}})
+
+		filterQuery := strings.ToUpper(string(core.SchemaEnterpriseUser)) + `:employeeNumber eq "1234"`
+		path := basePath + "/Users?" + url.Values{"filter": {filterQuery}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, id, list.Resources[0].ID)
+	})
 }
 
 // RFC 7644 3.4.2.3 Sorting
@@ -2032,6 +1987,38 @@ func TestRFC7644Sorting(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	// RFC 7644 Section 3.4.2.3: sortBy also reaches into a schema extension.
+	t.Run("sorts by a URI-qualified extension attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "1234"}})
+		create(t, srv, &core.User{UserName: "amorris", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "0001"}})
+
+		sortBy := string(core.SchemaEnterpriseUser) + ":employeeNumber"
+		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Len(t, list.Resources, 2)
+		assert.Equal(t, "amorris", list.Resources[0].UserName)
+	})
+
+	// RFC 7644 Section 3.10: every facet of an attribute path, including the URN, is case insensitive.
+	t.Run("sorts by an extension attribute with an upper-case URN", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "1234"}})
+		create(t, srv, &core.User{UserName: "amorris", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "0001"}})
+
+		sortBy := strings.ToUpper(string(core.SchemaEnterpriseUser)) + ":employeeNumber"
+		path := basePath + "/Users?" + url.Values{"sortBy": {sortBy}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Len(t, list.Resources, 2)
+		assert.Equal(t, "amorris", list.Resources[0].UserName)
 	})
 }
 
@@ -3640,6 +3627,36 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		response := Response(t, srv, request)
 
 		require.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode)
+	})
+
+	// RFC 7644 Section 3.5.2: a PATCH path may be qualified with the schema extension URN.
+	t.Run("patches an extension attribute by its URN-qualified path", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "patched", EnterpriseUser: &core.EnterpriseUser{Department: "eng"}})
+
+		patched := patchUser(t, srv, id, patch.Operation{
+			Op:    patch.OpReplace,
+			Path:  string(core.SchemaEnterpriseUser) + ":department",
+			Value: json.RawMessage(`"sales"`),
+		})
+
+		require.NotNil(t, patched.EnterpriseUser)
+		assert.Equal(t, "sales", patched.EnterpriseUser.Department)
+	})
+
+	// RFC 7644 Section 3.5.2: with no path, the value holds attributes keyed by the schema extension URN.
+	t.Run("patches an extension object when the path is omitted", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "merged", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "9"}})
+
+		patched := patchUser(t, srv, id, patch.Operation{
+			Op:    patch.OpReplace,
+			Value: json.RawMessage(`{"` + string(core.SchemaEnterpriseUser) + `":{"department":"ops"}}`),
+		})
+
+		require.NotNil(t, patched.EnterpriseUser)
+		assert.Equal(t, "ops", patched.EnterpriseUser.Department)
+		assert.Equal(t, "9", patched.EnterpriseUser.EmployeeNumber)
 	})
 }
 
