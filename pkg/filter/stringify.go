@@ -3,7 +3,6 @@ package filter
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 )
 
 type Stringify struct{}
@@ -73,17 +72,6 @@ func compareString(attribute AttrPath, operator string, value any) string {
 }
 
 func stringifyValue(value any) string {
-	switch v := value.(type) {
-	case string:
-		b, _ := json.Marshal(v)
-		return string(b)
-	case bool:
-		return strconv.FormatBool(v)
-	case json.Number:
-		return v.String()
-	case nil:
-		return "null"
-	default:
-		return fmt.Sprintf("%v", v)
-	}
+	b, _ := json.Marshal(value)
+	return string(b)
 }
