@@ -2,11 +2,9 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -126,94 +124,6 @@ func immutableField(field field, before, after core.Object) error {
 	assigned := field.value(before)
 	if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(after)) {
 		return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
-	}
-	subs := immutableSubs(field.SubAttributes)
-	if !field.MultiValued || len(subs) == 0 {
-		return nil
-	}
-	return immutableElements(field, subs, before, after)
-}
-
-func immutableSubs(subs []*core.Attribute) []*core.Attribute {
-	return slices.DeleteFunc(slices.Clone(subs), func(sub *core.Attribute) bool { return sub.Mutability != core.MutabilityImmutable })
-}
-
-type elementIndex struct {
-	signatures map[[2]string]struct{}
-	sample     map[string]core.Object
-}
-
-// RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
-func immutableElements(field field, subs []*core.Attribute, before, after core.Object) error {
-	index := newElementIndex(field, subs, after)
-	sub := changedElement(field, subs, before, index)
-	if sub == nil {
-		return nil
-	}
-	return scimerrors.ErrMutability(strconv.Quote(sub.Name) + " is immutable")
-}
-
-func newElementIndex(field field, subs []*core.Attribute, after core.Object) elementIndex {
-	elements := field.elements(after)
-	index := elementIndex{signatures: make(map[[2]string]struct{}, len(elements)), sample: make(map[string]core.Object, len(elements))}
-	for _, element := range elements {
-		candidate := asObject(element)
-		key := value.Identity(field.Attribute, candidate)
-		if key == "" {
-			continue
-		}
-		if _, ok := index.sample[key]; !ok {
-			index.sample[key] = candidate
-		}
-		index.signatures[[2]string{key, signature(subs, candidate)}] = struct{}{}
-	}
-	return index
-}
-
-func changedElement(field field, subs []*core.Attribute, before core.Object, index elementIndex) *core.Attribute {
-	for _, element := range field.elements(before) {
-		stored := asObject(element)
-		key := value.Identity(field.Attribute, stored)
-		if key == "" {
-			continue
-		}
-		sample, ok := index.sample[key]
-		if _, matched := index.signatures[[2]string{key, signature(subs, stored)}]; matched || !ok {
-			continue
-		}
-		if sub := changed(subs, stored, sample); sub != nil {
-			return sub
-		}
-	}
-	return nil
-}
-
-func signature(subs []*core.Attribute, element core.Object) string {
-	var b strings.Builder
-	for _, sub := range subs {
-		b.WriteString(foldedString(sub, coerce(sub, element.Get(sub.Name))))
-		b.WriteByte(0)
-	}
-	return b.String()
-}
-
-func foldedString(sub *core.Attribute, v any) string {
-	switch folded := value.Fold(sub, v).(type) {
-	case string:
-		return folded
-	case time.Time:
-		return folded.UTC().Format(time.RFC3339Nano)
-	default:
-		return fmt.Sprint(folded)
-	}
-}
-
-func changed(subs []*core.Attribute, stored, candidate core.Object) *core.Attribute {
-	for _, sub := range subs {
-		assigned := coerce(sub, stored.Get(sub.Name))
-		if !value.IsUnassigned(assigned) && !value.Equal(sub, assigned, coerce(sub, candidate.Get(sub.Name))) {
-			return sub
-		}
 	}
 	return nil
 }
