@@ -717,6 +717,7 @@ func TestRFC7644AnonymousRequests(t *testing.T) {
 
 // RFC 7644 3.3 Creating Resources
 func TestRFC7644CreatingResources(t *testing.T) {
+	// RFC 7644 Section 3.3: a successful create SHALL return 201 with the resource URI in the "Location" header.
 	t.Run("creates a resource and returns 201 with Location and ETag", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -743,6 +744,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.NotEmpty(t, user.Meta.Version)
 	})
 
+	// RFC 7644 Section 3.12: invalidSyntax when the request body message structure was invalid.
 	t.Run("rejects a malformed JSON body", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -754,6 +756,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, scimErr.ScimType)
 	})
 
+	// RFC 7644 Section 3.12: invalidSyntax when the request body message structure was invalid.
 	t.Run("rejects a body with data after the JSON value", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -769,6 +772,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, http.StatusCreated, Response(t, srv, request).StatusCode)
 	})
 
+	// RFC 7644 Section 3.12: invalidSyntax when the request body did not conform to the request schema.
 	t.Run("rejects a body that does not match the resource", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -779,6 +783,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.3: a create that conflicts with existing resources MUST return 409 with scimType "uniqueness".
 	t.Run("rejects a duplicate value for a unique attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "bjensen"})
@@ -794,6 +799,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.3: a create that conflicts with existing resources MUST return 409 with scimType "uniqueness".
 	t.Run("rejects a duplicate unique value that needs escaping", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: `b"jensen`})
@@ -809,6 +815,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 4.1.1: userName MUST be unique across the service provider's Users and is case insensitive.
 	t.Run("rejects a unique value that differs only in case", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "Bjensen"})
@@ -824,6 +831,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.Uniqueness, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 7: a "server" unique value SHOULD be unique within the current SCIM endpoint.
 	t.Run("frees a unique value that a replace gives up", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -838,6 +846,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		create(t, srv, &core.User{UserName: "bjensen"})
 	})
 
+	// RFC 7643 Section 7: a "server" unique value SHOULD be unique within the current SCIM endpoint.
 	t.Run("frees a unique value when its resource is deleted", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -848,6 +857,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		create(t, srv, &core.User{UserName: "bjensen"})
 	})
 
+	// RFC 7643 Section 7: a "server" unique value SHOULD be unique within the current SCIM endpoint.
 	t.Run("keeps a unique value after a failed replace", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
@@ -923,6 +933,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.3: in the request body, attributes whose mutability is "readOnly" SHALL be ignored.
 	t.Run("ignores readOnly groups", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -966,6 +977,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.12: invalidSyntax when the request body message structure was invalid.
 	t.Run("rejects a JSON null body instead of panicking", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -980,6 +992,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.3: a create that conflicts with existing resources MUST return 409 with scimType "uniqueness".
 	t.Run("admits one of many concurrent creates of a unique value", func(t *testing.T) {
 		srv := newTestServer(t)
 
