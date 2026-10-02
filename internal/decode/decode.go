@@ -10,7 +10,7 @@ import (
 
 var (
 	errTrailingData = errors.New("decode: data after the JSON value")
-	errNotObject    = errors.New("decode: JSON value is not an object")
+	ErrNotObject    = errors.New("decode: JSON value is not an object")
 )
 
 func JSON[T any](raw []byte) (T, error) {
@@ -49,7 +49,7 @@ func Object(raw []byte) (map[string]any, error) {
 	}
 	object, ok := out.(map[string]any)
 	if !ok {
-		return nil, errNotObject
+		return nil, ErrNotObject
 	}
 	return object, nil
 }

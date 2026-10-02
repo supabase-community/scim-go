@@ -96,9 +96,9 @@ func TestDecodeResourceKeepsReadOnlySubAttributesOfMatchingElements(t *testing.T
 func TestDecodeDocument(t *testing.T) {
 	for body, want := range map[string]*scimerrors.Error{
 		`null`:  scimerrors.ErrInvalidSyntax("request body is not a JSON object"),
-		`[]`:    scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
-		`1`:     scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
-		`"s"`:   scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
+		`[]`:    scimerrors.ErrInvalidSyntax("request body is not a JSON object"),
+		`1`:     scimerrors.ErrInvalidSyntax("request body is not a JSON object"),
+		`"s"`:   scimerrors.ErrInvalidSyntax("request body is not a JSON object"),
 		`{`:     scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
 		``:      scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
 		`{} {}`: scimerrors.ErrInvalidSyntax("request body is not valid JSON"),

@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"unicode/utf8"
@@ -33,12 +34,11 @@ func ResourceFrom[T any](document, existing core.Object, schemas core.Schemas) (
 }
 
 func objectOf(raw []byte) (map[string]any, error) {
-	value, err := decode.Value(raw)
-	if value == nil && err == nil {
+	document, err := decode.Object(raw)
+	if errors.Is(err, decode.ErrNotObject) {
 		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
 	}
-	document, ok := value.(map[string]any)
-	if !ok {
+	if err != nil {
 		return nil, scimerrors.ErrInvalidSyntax(notJSON)
 	}
 	return document, nil
