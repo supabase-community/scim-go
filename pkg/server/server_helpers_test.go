@@ -30,7 +30,10 @@ const (
 	gadgetSchema core.SchemaURI = "urn:test:gadget"
 )
 
-var errUnreachable = errors.New("dial tcp 10.0.0.1:5432: connection refused")
+var (
+	errUnreachable = errors.New("dial tcp 10.0.0.1:5432: connection refused")
+	errGateTimeout = errors.New("race gate: not every request arrived")
+)
 
 var activate = patch.Operation{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}
 
@@ -57,7 +60,7 @@ func newRaceGate(total int) *raceGate {
 	return &raceGate{total: total, release: make(chan struct{})}
 }
 
-func (g *raceGate) arrive() {
+func (g *raceGate) arrive() error {
 	g.mu.Lock()
 	g.arrived++
 	last := g.arrived == g.total
@@ -65,7 +68,12 @@ func (g *raceGate) arrive() {
 	if last {
 		close(g.release)
 	}
-	<-g.release
+	select {
+	case <-g.release:
+		return nil
+	case <-time.After(5 * time.Second):
+		return errGateTimeout
+	}
 }
 
 type testOption func(*testServer)
@@ -188,7 +196,9 @@ func withUpdateGate(gate *raceGate) testOption {
 
 func (r gatedRepository) Update(ctx context.Context, user *core.User) (*core.User, error) {
 	if r.gate != nil {
-		r.gate.arrive()
+		if err := r.gate.arrive(); err != nil {
+			return nil, err
+		}
 	}
 	return r.Repository.Update(ctx, user)
 }
