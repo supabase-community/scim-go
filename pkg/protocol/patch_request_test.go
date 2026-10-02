@@ -80,13 +80,13 @@ func TestDecodePatchRequest(t *testing.T) {
 	t.Run("rejects a null body", func(t *testing.T) {
 		_, err := protocol.DecodePatchRequest(strings.NewReader("null"))
 
-		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
+		assert.Equal(t, scimerrors.ErrInvalidSyntax("request body is not valid JSON"), err)
 	})
 
 	t.Run("rejects a body that is not valid JSON", func(t *testing.T) {
 		_, err := protocol.DecodePatchRequest(strings.NewReader("not json"))
 
-		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
+		assert.Equal(t, scimerrors.ErrInvalidSyntax("request body is not valid JSON"), err)
 	})
 }
 

@@ -6,18 +6,20 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/supabase-community/scim-go/internal/decode"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
 // DecodeDocument reads a resource body; RFC 7644 Section 3.1: a SCIM resource is a JSON object.
 func DecodeDocument(body io.Reader) (core.Object, error) {
-	document, err := Decode[map[string]any](body)
+	raw, err := read(body)
 	if err != nil {
 		return nil, err
 	}
-	if document == nil {
-		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
+	document, err := objectOf(raw)
+	if err != nil {
+		return nil, err
 	}
 	if err := checkNames(document); err != nil {
 		return nil, err
@@ -28,6 +30,18 @@ func DecodeDocument(body io.Reader) (core.Object, error) {
 // ResourceFrom drops readOnly values from document in place and builds a resource from it; RFC 7644 Sections 3.3 and 3.5.1: readOnly attribute values SHALL be ignored.
 func ResourceFrom[T any](document, existing core.Object, schemas core.Schemas) (T, error) {
 	return fromDocument[T](writable(document, existing, schemas))
+}
+
+func objectOf(raw []byte) (map[string]any, error) {
+	value, err := decode.Value(raw)
+	if value == nil && err == nil {
+		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
+	}
+	document, ok := value.(map[string]any)
+	if !ok {
+		return nil, scimerrors.ErrInvalidSyntax(notJSON)
+	}
+	return document, nil
 }
 
 // RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.

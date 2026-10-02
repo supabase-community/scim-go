@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -87,6 +89,29 @@ func TestDecodeResourceKeepsReadOnlySubAttributesOfMatchingElements(t *testing.T
 			map[string]any{"serial": "S-1", "inspector": "qa-bot"},
 			map[string]any{"serial": "s-2"},
 		}, out["parts"])
+	})
+}
+
+// RFC 7644 Section 3.1: a SCIM resource is a JSON object.
+func TestDecodeDocument(t *testing.T) {
+	for body, want := range map[string]*scimerrors.Error{
+		`null`:  scimerrors.ErrInvalidSyntax("request body is not a JSON object"),
+		`[]`:    scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
+		`1`:     scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
+		`"s"`:   scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
+		`{`:     scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
+		``:      scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
+		`{} {}`: scimerrors.ErrInvalidSyntax("request body is not valid JSON"),
+	} {
+		t.Run("rejects "+strconv.Quote(body), func(t *testing.T) {
+			_, err := protocol.DecodeDocument(strings.NewReader(body))
+			assert.Equal(t, want, err)
+		})
+	}
+
+	t.Run("rejects a body over the size limit", func(t *testing.T) {
+		_, err := protocol.DecodeDocument(http.MaxBytesReader(nil, io.NopCloser(strings.NewReader(`{"a":"bc"}`)), 4))
+		assert.Equal(t, scimerrors.ErrTooLarge("request body is too large"), err)
 	})
 }
 

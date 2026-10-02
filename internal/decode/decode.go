@@ -3,6 +3,7 @@ package decode
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"io"
 )
@@ -26,7 +27,19 @@ func JSON[T any](raw []byte) (T, error) {
 }
 
 func Value(raw []byte) (any, error) {
-	return JSON[any](raw)
+	decoder := jsontext.NewDecoder(
+		bytes.NewBuffer(raw),
+		jsontext.AllowDuplicateNames(true),
+		jsontext.AllowInvalidUTF8(true),
+	)
+	out, err := read(decoder)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := decoder.ReadToken(); !errors.Is(err, io.EOF) {
+		return nil, errors.Join(errTrailingData, err)
+	}
+	return out, nil
 }
 
 func Object(raw []byte) (map[string]any, error) {
@@ -39,4 +52,55 @@ func Object(raw []byte) (map[string]any, error) {
 		return nil, errNotObject
 	}
 	return object, nil
+}
+
+func read(decoder *jsontext.Decoder) (any, error) {
+	token, err := decoder.ReadToken()
+	if err != nil {
+		return nil, err
+	}
+	switch token.Kind() {
+	case '{':
+		return readObject(decoder)
+	case '[':
+		return readArray(decoder)
+	case '"':
+		return token.String(), nil
+	case '0':
+		return json.Number(token.String()), nil
+	case 't', 'f':
+		return token.Bool(), nil
+	}
+	return nil, nil
+}
+
+func readObject(decoder *jsontext.Decoder) (map[string]any, error) {
+	out := map[string]any{}
+	for decoder.PeekKind() != '}' {
+		token, err := decoder.ReadToken()
+		if err != nil {
+			return nil, err
+		}
+		name := token.String()
+		item, err := read(decoder)
+		if err != nil {
+			return nil, err
+		}
+		out[name] = item
+	}
+	_, err := decoder.ReadToken()
+	return out, err
+}
+
+func readArray(decoder *jsontext.Decoder) ([]any, error) {
+	out := []any{}
+	for decoder.PeekKind() != ']' {
+		item, err := read(decoder)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	_, err := decoder.ReadToken()
+	return out, err
 }

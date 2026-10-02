@@ -1,13 +1,12 @@
 package protocol
 
 import (
-	"bytes"
-	"encoding/json"
 	"io"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/supabase-community/scim-go/internal/decode"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -23,23 +22,20 @@ type PatchRequest struct {
 
 // DecodePatchRequest reads a PATCH body; RFC 7644 Section 3.5.2: it MUST contain the PatchOp "schemas" URI and one or more "Operations".
 func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
-	raw, err := Decode[json.RawMessage](body)
+	raw, err := read(body)
 	if err != nil {
 		return nil, err
 	}
-	document, err := Decode[any](bytes.NewReader(raw))
+	document, err := decode.Value(raw)
 	if err != nil {
-		return nil, err
+		return nil, scimerrors.ErrInvalidSyntax(notJSON)
 	}
 	if err := checkNames(document); err != nil {
 		return nil, err
 	}
-	req, err := Decode[*PatchRequest](bytes.NewReader(raw))
-	if err != nil {
-		return nil, err
-	}
-	if req == nil {
-		return nil, scimerrors.ErrInvalidSyntax("request body is not valid JSON")
+	req, err := decode.JSON[*PatchRequest](raw)
+	if err != nil || req == nil {
+		return nil, scimerrors.ErrInvalidSyntax(notJSON)
 	}
 	if !slices.ContainsFunc(req.Schemas, isPatchOp) {
 		return nil, scimerrors.ErrInvalidSyntax(`"schemas" must contain ` + strconv.Quote(string(SchemaPatchOp)))
