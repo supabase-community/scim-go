@@ -1130,6 +1130,7 @@ func TestRFC7644QueryResources(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		assert.Equal(t, 3, list.TotalResults)
+		require.Len(t, list.Resources, 3)
 		assert.Equal(t, "alice", list.Resources[0].UserName)
 		assert.Equal(t, []core.SchemaURI{core.SchemaUser}, list.Resources[0].Schemas)
 		assert.NotEmpty(t, list.Resources[0].Meta.Location)
