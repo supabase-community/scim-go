@@ -1,23 +1,11 @@
 package filter_test
 
 import (
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/filter"
 )
-
-func TestNestingIsLinearTime(t *testing.T) {
-	g := filter.New(0)
-	for _, depth := range []int{1000, 2000, 4000, 8000} {
-		in := strings.Repeat("(", depth) + `a eq "1"` + strings.Repeat(")", depth)
-		node, err := g.Parse(in)
-		if err != nil || node == nil {
-			t.Fatalf("depth %d: node=%v err=%v", depth, node, err)
-		}
-	}
-}
 
 func TestConcurrentParse(t *testing.T) {
 	g := filter.New(0)

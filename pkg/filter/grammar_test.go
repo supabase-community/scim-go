@@ -2,6 +2,7 @@ package filter_test
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -288,14 +289,29 @@ func TestParseErrorReportsPosition(t *testing.T) {
 
 func TestGrammarDeepNestingIsLinear(t *testing.T) {
 	g := filter.New(0)
-	const depth = 2000
-	input := strings.Repeat("(", depth) + `userName eq "bjensen"` + strings.Repeat(")", depth)
+	nested := func(depth int) string {
+		return strings.Repeat("(", depth) + `userName eq "bjensen"` + strings.Repeat(")", depth)
+	}
+	allocs := func(depth int) float64 {
+		input := nested(depth)
+		return testing.AllocsPerRun(3, func() { _, _ = g.Parse(input) })
+	}
 
-	node, err := g.Parse(input)
+	for _, depth := range []int{4, 500} {
+		if !t.Run("allocations double when depth doubles from "+strconv.Itoa(depth), func(t *testing.T) {
+			assert.Less(t, allocs(2*depth)/allocs(depth), 2.5)
+		}) {
+			return
+		}
+	}
 
-	require.NoError(t, err)
-	assert.Equal(t, "userName", node.Attribute())
-	assert.Equal(t, "eq", node.Operator())
+	t.Run("parses 8000 nested groups", func(t *testing.T) {
+		node, err := g.Parse(nested(8000))
+
+		require.NoError(t, err)
+		assert.Equal(t, "userName", node.Attribute())
+		assert.Equal(t, "eq", node.Operator())
+	})
 }
 
 func TestGrammarOperatorsAreCaseInsensitive(t *testing.T) {
