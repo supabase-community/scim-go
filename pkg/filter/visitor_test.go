@@ -76,7 +76,7 @@ func TestVisitPropagatesErrors(t *testing.T) {
 			node, err := g.Parse(tc.input)
 			require.NoError(t, err)
 			_, err = filter.Visit[string](failingVisitor{failOn: tc.failOn}, node)
-			require.Error(t, err)
+			require.ErrorIs(t, err, assert.AnError)
 		})
 	}
 }

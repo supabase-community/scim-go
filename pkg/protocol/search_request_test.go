@@ -154,7 +154,7 @@ func TestSearchRequest(t *testing.T) {
 
 		_, err := request.Projection(schemas)
 
-		require.Error(t, err)
+		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 	})
 
 	t.Run("validates its filter and sortBy", func(t *testing.T) {

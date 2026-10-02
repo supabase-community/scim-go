@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase-community/scim-go/internal/decode"
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
@@ -24,12 +25,13 @@ func TestNewObject(t *testing.T) {
 
 	t.Run("rejects a value that is not a JSON object", func(t *testing.T) {
 		_, err := core.NewObject([]string{"a"})
-		assert.Error(t, err)
+		assert.ErrorIs(t, err, decode.ErrNotObject)
 	})
 
 	t.Run("rejects a value that cannot be encoded", func(t *testing.T) {
 		_, err := core.NewObject(make(chan int))
-		assert.Error(t, err)
+		var unsupported *json.UnsupportedTypeError
+		assert.ErrorAs(t, err, &unsupported)
 	})
 }
 

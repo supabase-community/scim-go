@@ -166,7 +166,7 @@ func TestGrammarLogicalExpression(t *testing.T) {
 	t.Run("rejects a dangling operator with nothing valid after it", func(t *testing.T) {
 		_, err := g.Parse(`userName eq "bjensen" and `)
 
-		require.Error(t, err)
+		require.ErrorIs(t, err, filter.ErrInvalidFilter)
 	})
 }
 
@@ -211,7 +211,7 @@ func TestGrammarParensAndNot(t *testing.T) {
 	t.Run("not without parens is rejected", func(t *testing.T) {
 		_, err := g.Parse(`not userName pr`)
 
-		require.Error(t, err)
+		require.ErrorIs(t, err, filter.ErrInvalidFilter)
 	})
 }
 
@@ -244,7 +244,7 @@ func TestGrammarRejectsTrailingGarbage(t *testing.T) {
 	g := filter.New(0)
 	_, err := g.Parse(`userName eq "bjensen" garbage`)
 
-	require.Error(t, err)
+	require.ErrorIs(t, err, filter.ErrInvalidFilter)
 }
 
 func TestParseRejectsOversizedInput(t *testing.T) {
@@ -334,7 +334,7 @@ func TestGrammarJSONLiteralsAreCaseSensitive(t *testing.T) {
 	for _, bad := range []string{`active eq TRUE`, `active eq False`, `nickName eq Null`} {
 		t.Run("rejects "+bad, func(t *testing.T) {
 			_, err := g.Parse(bad)
-			require.Error(t, err)
+			require.ErrorIs(t, err, filter.ErrInvalidFilter)
 		})
 	}
 }
@@ -397,7 +397,7 @@ func TestGrammarValueFilterRejectsNestedValuePath(t *testing.T) {
 
 	t.Run("nested value path is rejected", func(t *testing.T) {
 		_, err := g.Parse(`emails[members[type eq "work"]]`)
-		require.Error(t, err)
+		require.ErrorIs(t, err, filter.ErrInvalidFilter)
 	})
 
 	t.Run("not-group inside brackets is accepted", func(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/json/jsontext"
 	"errors"
+	"io"
 	"strconv"
 	"strings"
 	"testing"
@@ -110,13 +111,18 @@ func TestObject(t *testing.T) {
 		assert.Equal(t, map[string]any{"a": json.Number("1")}, got)
 	})
 
-	t.Run("rejects", func(t *testing.T) {
-		for _, raw := range []string{`null`, `[]`, `"s"`, `1`, `{`} {
+	t.Run("rejects a value that is not an object", func(t *testing.T) {
+		for _, raw := range []string{`null`, `[]`, `"s"`, `1`} {
 			t.Run(raw, func(t *testing.T) {
 				_, err := decode.Object([]byte(raw))
-				assert.Error(t, err)
+				assert.ErrorIs(t, err, decode.ErrNotObject)
 			})
 		}
+	})
+
+	t.Run("rejects invalid JSON", func(t *testing.T) {
+		_, err := decode.Object([]byte(`{`))
+		assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
 	})
 }
 
