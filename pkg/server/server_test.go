@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -1054,23 +1053,17 @@ func TestRFC7644CreatingResources(t *testing.T) {
 	t.Run("admits one of many concurrent creates of a unique value", func(t *testing.T) {
 		srv := newTestServer(t)
 
-		const attempts = 16
-		statuses := make([]int, attempts)
-		var wg sync.WaitGroup
-		for i := range attempts {
-			wg.Go(func() {
-				request := Request(t, srv, http.MethodPost, basePath+"/Users",
-					WithBearerToken(validToken),
-					WithContentType(protocol.MediaType),
-					WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
-				)
-				statuses[i] = Response(t, srv, request).StatusCode
-			})
+		requests := make([]*http.Request, 16)
+		for i := range requests {
+			requests[i] = Request(t, srv, http.MethodPost, basePath+"/Users",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.User{UserName: "bjensen"}),
+			)
 		}
-		wg.Wait()
 
 		created, conflicted := 0, 0
-		for _, status := range statuses {
+		for _, status := range statusCodes(ConcurrentResponses(t, srv, requests...)) {
 			switch status {
 			case http.StatusCreated:
 				created++
@@ -1079,7 +1072,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 			}
 		}
 		assert.Equal(t, 1, created)
-		assert.Equal(t, attempts-1, conflicted)
+		assert.Equal(t, len(requests)-1, conflicted)
 	})
 }
 
@@ -2904,22 +2897,16 @@ func TestRFC7644ConcurrentVersionlessPUTsCannotBothSetAnImmutableValue(t *testin
 	srv := newTestServer(t, withUpdateGate(gate))
 	id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
-	put := func(employeeNumber string) *http.Response {
-		return Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+	put := func(employeeNumber string) *http.Request {
+		return Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 			WithRequestBodyAs(t, core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: employeeNumber}}),
-		))
+		)
 	}
 
-	responses := make([]*http.Response, 2)
-	var wg sync.WaitGroup
-	for i, employeeNumber := range []string{"a", "b"} {
-		wg.Go(func() { responses[i] = put(employeeNumber) })
-	}
-	wg.Wait()
-
-	statuses := []int{responses[0].StatusCode, responses[1].StatusCode}
+	responses := ConcurrentResponses(t, srv, put("a"), put("b"))
+	statuses := statusCodes(responses)
 	slices.Sort(statuses)
 	require.Equal(t, []int{http.StatusOK, http.StatusConflict}, statuses)
 
@@ -4289,40 +4276,28 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
-		var wg sync.WaitGroup
+		allowed := [][]int{{http.StatusCreated}, {http.StatusOK}, {http.StatusOK}, {http.StatusOK, http.StatusConflict}, {http.StatusOK, http.StatusConflict}}
+		requests := make([]*http.Request, 0, 8*len(allowed))
 		for i := range 8 {
-			wg.Go(func() {
-				create(t, srv, &core.User{UserName: "user" + strconv.Itoa(i)})
-			})
-			wg.Go(func() {
-				request := Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))
-				assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
-			})
-			wg.Go(func() {
-				request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
-				assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
-			})
-			wg.Go(func() {
-				request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+			requests = append(requests,
+				Request(t, srv, http.MethodPost, basePath+"/Users",
+					WithBearerToken(validToken),
+					WithContentType(protocol.MediaType),
+					WithRequestBodyAs(t, core.User{UserName: "user" + strconv.Itoa(i)}),
+				),
+				Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)),
+				Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken)),
+				Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
 					WithBearerToken(validToken),
 					WithContentType(protocol.MediaType),
 					WithRequestBody([]byte(`{"userName":"bjensen"}`)),
-				)
-				assert.Contains(t, []int{http.StatusOK, http.StatusConflict}, Response(t, srv, request).StatusCode)
-			})
-			wg.Go(func() {
-				request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-					WithBearerToken(validToken),
-					WithContentType(protocol.MediaType),
-					WithRequestBodyAs(t, protocol.PatchRequest{
-						Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-						Operations: []patch.Operation{{Op: patch.OpReplace, Path: "active", Value: json.RawMessage("true")}},
-					}),
-				)
-				assert.Contains(t, []int{http.StatusOK, http.StatusConflict}, Response(t, srv, request).StatusCode)
-			})
+				),
+				patchRequest(t, srv, id, activate),
+			)
 		}
-		wg.Wait()
+		for i, response := range ConcurrentResponses(t, srv, requests...) {
+			assert.Contains(t, allowed[i%len(allowed)], response.StatusCode)
+		}
 
 		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken))
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, Response(t, srv, request))
@@ -4333,12 +4308,10 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t, withUpdateGate(newRaceGate(2)))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
-		statuses := make([]int, 2)
-		var wg sync.WaitGroup
-		for i, op := range []patch.Operation{activate, {Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}} {
-			wg.Go(func() { statuses[i] = Response(t, srv, patchRequest(t, srv, id, op)).StatusCode })
-		}
-		wg.Wait()
+		statuses := statusCodes(ConcurrentResponses(t, srv,
+			patchRequest(t, srv, id, activate),
+			patchRequest(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}),
+		))
 
 		assert.ElementsMatch(t, []int{http.StatusOK, http.StatusConflict}, statuses)
 		user := ReadBodyAs[core.User](t, Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken))))
@@ -4356,14 +4329,10 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t, withUpdateGate(newRaceGate(2)))
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
-		statuses := make([]int, 2)
-		var wg sync.WaitGroup
-		for i, op := range []patch.Operation{activate, {Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}} {
-			wg.Go(func() {
-				statuses[i] = Response(t, srv, patchRequest(t, srv, id, op, WithHeader("If-Match", etag))).StatusCode
-			})
-		}
-		wg.Wait()
+		statuses := statusCodes(ConcurrentResponses(t, srv,
+			patchRequest(t, srv, id, activate, WithHeader("If-Match", etag)),
+			patchRequest(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}, WithHeader("If-Match", etag)),
+		))
 
 		assert.ElementsMatch(t, []int{http.StatusOK, http.StatusPreconditionFailed}, statuses)
 	})

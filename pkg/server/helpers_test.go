@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,6 +36,25 @@ func Response(t *testing.T, srv *httptest.Server, r *http.Request) *http.Respons
 		_ = response.Body.Close()
 	})
 	return response
+}
+
+func ConcurrentResponses(t *testing.T, srv *httptest.Server, requests ...*http.Request) []*http.Response {
+	t.Helper()
+
+	responses := make([]*http.Response, len(requests))
+	errs := make([]error, len(requests))
+	var wg sync.WaitGroup
+	for i, request := range requests {
+		wg.Go(func() { responses[i], errs[i] = srv.Client().Do(request) })
+	}
+	wg.Wait()
+	for _, response := range responses {
+		if response != nil {
+			t.Cleanup(func() { _ = response.Body.Close() })
+		}
+	}
+	require.NoError(t, errors.Join(errs...))
+	return responses
 }
 
 func Server(t *testing.T, handler http.Handler) *httptest.Server {
@@ -93,6 +114,14 @@ func ReadBodyAs[T any](t *testing.T, w *http.Response) T {
 	var item T
 	require.NoError(t, json.Unmarshal(body, &item))
 	return item
+}
+
+func statusCodes(responses []*http.Response) []int {
+	codes := make([]int, len(responses))
+	for i, response := range responses {
+		codes[i] = response.StatusCode
+	}
+	return codes
 }
 
 func keysOf(m map[string]any) []string {
