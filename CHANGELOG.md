@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.1](https://github.com/supabase-community/scim-go/compare/v0.11.0...v0.11.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* **decode:** reject duplicate JSON object member names ([32d8a90](https://github.com/supabase-community/scim-go/commit/32d8a90af55114bba1982094892f05687dde0cdb))
+* **patch:** name a repeated attribute name in an operation value ([40c4b0a](https://github.com/supabase-community/scim-go/commit/40c4b0af2af7ba93ddfff473c9b9052866db7464))
+* **protocol:** name the cause when a PATCH body fails to decode ([63b2b3c](https://github.com/supabase-community/scim-go/commit/63b2b3c5a0628e9ff25dba7d298fdfde6c7fe3f5))
+* **protocol:** report non-object bodies as not a JSON object ([323052d](https://github.com/supabase-community/scim-go/commit/323052df7e1a704659f5503c637ff0e13a663174))
+
+
+### Performance Improvements
+
+* **core:** stop reboxing values in coerce and Fold ([381db59](https://github.com/supabase-community/scim-go/commit/381db59f73d1ec0f7ecc2f51be100db84b02eda6))
+* **decode:** build decode.Value from jsontext tokens ([6763c72](https://github.com/supabase-community/scim-go/commit/6763c72f7488539ad156e94ab2940efbde490882))
+
 ## [0.11.0](https://github.com/supabase-community/scim-go/compare/v0.10.1...v0.11.0) (2026-10-02)
 
 
