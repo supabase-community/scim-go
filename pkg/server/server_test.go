@@ -1100,6 +1100,7 @@ func TestRFC7644QueryEndpoints(t *testing.T) {
 
 // RFC 7644 3.4.2.2 Filtering
 func TestRFC7644Filtering(t *testing.T) {
+	// RFC 7644 Section 3.4.2.2: when specified, only those resources matching the filter expression SHALL be returned.
 	t.Run("filters resources by an exact match on userName", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -1118,6 +1119,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.12: invalidFilter when the attribute and filter comparison combination is not supported.
 	t.Run("rejects a filter on an attribute that is not filterable", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1132,6 +1134,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.4.2.2: eq matches identical values and ne matches values that are not identical.
 	t.Run("filters on a boolean attribute with eq and ne", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
@@ -1184,6 +1187,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.4.2.2: pr matches an attribute with a non-empty or non-null value.
 	t.Run("filters with the pr operator for presence", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -1197,6 +1201,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, 1, list.TotalResults)
 	})
 
+	// RFC 7644 Section 3.4.2.2: pr matches an attribute with a non-empty or non-null value.
 	t.Run("pr matches a non-string value and excludes an absent one", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
@@ -1213,6 +1218,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[0].UserName)
 	})
 
+	// RFC 7643 Section 3.1: "id" is a common attribute of every resource.
 	t.Run("filters by eq and pr on the common id attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "alice"})
@@ -1236,6 +1242,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, 2, list.TotalResults)
 	})
 
+	// RFC 7644 Section 3.4.2.2: pr matches a complex attribute that contains a non-empty node.
 	t.Run("pr matches a complex attribute with a non-empty node", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "Barbara"}})
@@ -1251,6 +1258,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.2: the expression within square brackets MUST be a valid filter expression based upon sub-attributes of the parent attribute.
 	t.Run("rejects a value path filter whose inner expression is invalid", func(t *testing.T) {
 		srv := newTestServer(t)
 
@@ -1262,6 +1270,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 3.1: "externalId" and "meta" are common attributes of every resource.
 	t.Run("filters by presence on the other common attributes", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice", ExternalID: "ext-1"})
@@ -1285,6 +1294,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.4.2.2: co, sw, and ew match a substring anywhere, at the start, and at the end of the value.
 	t.Run("filters with the co, sw, and ew string operators", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -1319,6 +1329,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.2: and is only a match if both expressions evaluate to true.
 	t.Run("combines clauses with and", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
@@ -1335,6 +1346,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.2: or is a match if either expression evaluates to true.
 	t.Run("combines clauses with or", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -1352,6 +1364,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "carol", list.Resources[1].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.2: not is a match if the expression evaluates to false.
 	t.Run("negates a clause with not", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -1367,6 +1380,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.2: for string attribute types, gt, ge, lt, and le are a lexicographical comparison.
 	t.Run("filters with the ordering operators ne, gt, ge, lt, and le", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice"})
@@ -1416,6 +1430,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "alice", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.2: complex attribute filter expressions MUST be applied to the same value of a parent attribute.
 	t.Run("a value path filter with and requires both conditions on the same element", func(t *testing.T) {
 		srv := newTestServer(t)
 		alicePrimary := false
@@ -1439,6 +1454,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "bob", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.2: valFilter = attrExp / logExp / *1"not" "(" valFilter ")"
 	t.Run("a value path filter combines conditions with or", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
@@ -1480,6 +1496,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.4.2.2: valFilter = attrExp / logExp / *1"not" "(" valFilter ")"
 	t.Run("a value path filter negates a condition with not", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
@@ -1495,6 +1512,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "bob", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.2: attrExp = (attrPath SP "pr") / (attrPath SP compareOp SP compValue)
 	t.Run("a value path filter tests presence within the element", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com"}}})
@@ -1533,6 +1551,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.4.2.2: for integer attributes, gt, ge, lt, and le are a comparison by numeric value.
 	t.Run("filters an integer attribute with the ordering operators", func(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "low", Score: 5})
@@ -1558,6 +1577,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.4.2.2: for DateTime types, gt, ge, lt, and le are a chronological comparison.
 	t.Run("filters a dateTime attribute with the ordering operators", func(t *testing.T) {
 		srv := newTestServer(t)
 		early := time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC)
@@ -1601,6 +1621,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "tagged", list.Resources[0]["Name"])
 	})
 
+	// RFC 7643 Section 2.5: unassigned attributes and the null value SHALL be considered equivalent.
 	t.Run("a candidate missing the filtered attribute does not match", func(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "has-nick", Nick: "al"})
@@ -1616,6 +1637,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "has-nick", list.Resources[0]["Name"])
 	})
 
+	// RFC 7644 Section 3.4.2.2: the actual comparison is dependent on the attribute type.
 	t.Run("compares a value by the type of its attribute", func(t *testing.T) {
 		srv := newTestServer(t)
 		createWidget(t, srv, &widget{Name: "bolt", Score: 7, When: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)})
@@ -1668,6 +1690,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.4.2.2: attribute names and attribute operators used in filters are case insensitive.
 	t.Run("treats attribute names and operators as case insensitive", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "bjensen"})
