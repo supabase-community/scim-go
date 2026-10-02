@@ -963,7 +963,6 @@ func TestRFC7644CreatingResources(t *testing.T) {
 
 		for _, body := range []string{
 			`{"userName":"alice","USERNAME":"bob"}`,
-			`{"userName":"alice","userName":"bob"}`,
 			`{"userName":"alice","` + extension + `":{"department":"ops"},"` + strings.ToLower(extension) + `":{"manager":{"displayName":"forged"}}}`,
 			`{"userName":"alice","` + extension + `":{"manager":{"value":"m-1"},"MANAGER":{"displayName":"forged"}}}`,
 			`{"userName":"alice","` + extension + `":{"department":"ops"},"` + strings.Replace(extension, "enterprise", "enterpri\u017fe", 1) + `":{"manager":{"displayName":"forged"}}}`,
@@ -979,6 +978,20 @@ func TestRFC7644CreatingResources(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, response.StatusCode, body)
 			assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 		}
+	})
+
+	// RFC 8259 Section 4: the names within an object SHOULD be unique.
+	t.Run("rejects a duplicate attribute name", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"userName":"alice","userName":"bob"}`)),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
 	t.Run("ignores readOnly groups", func(t *testing.T) {
@@ -3528,7 +3541,6 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 
 		for _, operation := range []patch.Operation{
 			{Op: patch.OpReplace, Value: json.RawMessage(`{"displayName":"a","DISPLAYNAME":"b"}`)},
-			{Op: patch.OpReplace, Value: json.RawMessage(`{"displayName":"a","displayName":"b"}`)},
 			{Op: patch.OpReplace, Path: "name", Value: json.RawMessage(`{"givenName":"a","GIVENNAME":"b"}`)},
 			{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"a@example.com","VALUE":"b@example.com"}]`)},
 			{Op: patch.OpAdd, Value: json.RawMessage(`{"` + extension + `":{"department":"a","DEPARTMENT":"b"}}`)},
@@ -3543,6 +3555,23 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, response.StatusCode, string(operation.Value))
 			assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType, string(operation.Value))
 		}
+	})
+
+	// RFC 8259 Section 4: the names within an object SHOULD be unique.
+	t.Run("rejects a value with a duplicate attribute name", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
+				{Op: patch.OpReplace, Value: json.RawMessage(`{"displayName":"a","displayName":"b"}`)},
+			}}),
+		))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 }
 
