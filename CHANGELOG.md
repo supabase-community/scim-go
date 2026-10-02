@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.0](https://github.com/supabase-community/scim-go/compare/v0.10.1...v0.11.0) (2026-10-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** build the existing Object with core.NewObject
+
+### Performance Improvements
+
+* **server:** let pkg/patch gate immutable attributes on PATCH without a clone ([3e61b64](https://github.com/supabase-community/scim-go/commit/3e61b64675dc0f93ce269d33706c43f5beff07c4))
+
+
+### Code Refactoring
+
+* **core:** build the existing Object with core.NewObject ([5fee9c0](https://github.com/supabase-community/scim-go/commit/5fee9c0d22105a803e43be3f71026579487bc7d2))
+
 ## [0.10.1](https://github.com/supabase-community/scim-go/compare/v0.10.0...v0.10.1) (2026-10-02)
 
 
