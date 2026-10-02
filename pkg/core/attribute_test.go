@@ -92,7 +92,7 @@ func TestNewAttribute(t *testing.T) {
 	t.Run("names the resource types a reference may point at", func(t *testing.T) {
 		attribute := core.NewAttribute("$ref", core.TypeReference)
 
-		require.Same(t, attribute, attribute.Referencing(core.ReferenceType("User"), core.ReferenceExternal, core.ReferenceURI))
+		require.Same(t, attribute, attribute.Referencing(core.ResourceTypeName("User").Reference(), core.ReferenceExternal, core.ReferenceURI))
 
 		body, err := json.Marshal(attribute)
 
