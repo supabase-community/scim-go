@@ -16,10 +16,6 @@ func NewObject(v any) (Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return DecodeObject(raw)
-}
-
-func DecodeObject(raw []byte) (Object, error) {
 	return decode.JSON[Object](bytes.NewReader(raw))
 }
 

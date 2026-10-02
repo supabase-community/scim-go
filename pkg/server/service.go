@@ -111,7 +111,7 @@ func (s *service[T]) current(ctx context.Context, id, version string) (T, error)
 
 func (s *service[T]) patched(ctx context.Context, existing T, req *protocol.PatchRequest) (T, error) {
 	var zero T
-	stored, document, err := encode(existing)
+	document, err := core.NewObject(existing)
 	if err != nil {
 		return zero, err
 	}
@@ -122,7 +122,7 @@ func (s *service[T]) patched(ctx context.Context, existing T, req *protocol.Patc
 	patched.Common().Meta = existing.Common().Meta
 	stampSchemas(s.schemas, patched, document)
 	// RFC 7644 Section 3.5.2.1: a no-op SHALL NOT change the modify timestamp.
-	if err := unchanged(stored, patched); err != nil {
+	if err := unchanged(existing, patched); err != nil {
 		return patched, err
 	}
 	return patched, s.admit(ctx, nil, document, patched)
@@ -130,7 +130,7 @@ func (s *service[T]) patched(ctx context.Context, existing T, req *protocol.Patc
 
 func (s *service[T]) replaced(ctx context.Context, existing T, req *protocol.ReplaceRequest) (T, error) {
 	var zero T
-	_, before, err := encode(existing)
+	before, err := core.NewObject(existing)
 	if err != nil {
 		return zero, err
 	}
@@ -178,15 +178,6 @@ func schemaURIsToAny(uris []core.SchemaURI) []any {
 	return ids
 }
 
-func encode[T core.Resource](resource T) ([]byte, core.Object, error) {
-	raw, err := json.Marshal(resource)
-	if err != nil {
-		return nil, nil, scimerrors.ErrInternal("could not encode the resource")
-	}
-	object, err := core.DecodeObject(raw)
-	return raw, object, err
-}
-
 func conflict(version string, err error) error {
 	if version == "" && errors.Is(err, scimerrors.ErrPreconditionFailed("")) {
 		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
@@ -194,7 +185,11 @@ func conflict(version string, err error) error {
 	return err
 }
 
-func unchanged[T core.Resource](stored []byte, patched T) error {
+func unchanged[T core.Resource](existing, patched T) error {
+	stored, err := json.Marshal(existing)
+	if err != nil {
+		return scimerrors.ErrInternal("could not encode the resource")
+	}
 	candidate, err := json.Marshal(patched)
 	if err != nil {
 		return scimerrors.ErrInternal("could not encode the resource")
