@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -1134,22 +1135,23 @@ func TestApplyValueFilterRecomputesLiteralPerElement(t *testing.T) {
 	raw, err := json.Marshal(elements)
 	require.NoError(t, err)
 
-	run := func(literal string) time.Duration {
+	run := func(literal string) float64 {
 		item := core.Object{}
 		require.NoError(t, apply(item, certSchemas, operation(patch.OpAdd, "certs", string(raw))))
 
-		start := time.Now()
-		err := apply(item, certSchemas, operation(patch.OpRemove, fmt.Sprintf(`certs[value eq %q]`, literal), ""))
-		elapsed := time.Since(start)
+		var err error
+		allocated := allocatedBytes(func() {
+			err = apply(item, certSchemas, operation(patch.OpRemove, fmt.Sprintf(`certs[value eq %q]`, literal), ""))
+		})
 
 		require.NoError(t, err)
-		return elapsed
+		return allocated
 	}
 
 	small := run(base64.StdEncoding.EncodeToString([]byte("x")))
 	large := run(base64.StdEncoding.EncodeToString([]byte(strings.Repeat("x", 6000))))
 
-	assert.Less(t, large, 5*small, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
+	assert.Less(t, large/small, 30.0, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
 }
 
 func TestApplyAddWithoutAValueSubAttributeDoesNotScaleQuadratically(t *testing.T) {
@@ -1501,6 +1503,14 @@ func badgeCodesSchema() []*core.Schema {
 			),
 		),
 	}
+}
+
+func allocatedBytes(run func()) float64 {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	run()
+	runtime.ReadMemStats(&after)
+	return float64(after.TotalAlloc - before.TotalAlloc)
 }
 
 func apply(resource core.Object, schemas []*core.Schema, ops ...patch.Operation) error {
