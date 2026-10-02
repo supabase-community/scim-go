@@ -47,7 +47,7 @@ func checkRoundTrip(t *testing.T, g filter.Grammar, input string) {
 
 	text, err := filter.Visit[string](filter.Stringify{}, node)
 	if err != nil {
-		return
+		t.Fatalf("stringify %q failed: %v", input, err)
 	}
 	reparsed, err := g.Parse(text)
 	if err != nil {
