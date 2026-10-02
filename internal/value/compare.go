@@ -30,7 +30,10 @@ func Fold(attribute *core.Attribute, value any) any {
 	if !ok || attribute.CaseExact || attribute.Type == core.TypeBinary || attribute.Type == core.TypeReference {
 		return value
 	}
-	return strings.ToLower(s)
+	if lower := strings.ToLower(s); lower != s {
+		return lower
+	}
+	return value
 }
 
 func Equal(attribute *core.Attribute, a, b any) bool {

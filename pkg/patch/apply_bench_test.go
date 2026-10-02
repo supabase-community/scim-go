@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -95,6 +96,21 @@ func BenchmarkApplyManyAddsToALargeGroup(b *testing.B) {
 			members[i] = map[string]any{"value": fmt.Sprintf("m-%d", i)}
 		}
 		b.Run(fmt.Sprintf("members=%d/ops=100", n), func(b *testing.B) {
+			benchApply(b, func() map[string]any { return map[string]any{"members": slices.Clone(members)} }, ops, schemas)
+		})
+	}
+}
+
+func BenchmarkApplyValueFilterOnALargeGroup(b *testing.B) {
+	schemas := groupSchemas()
+	path := "members[" + strings.Repeat(`value eq "nope" or `, 99) + `value eq "m-0"]`
+	ops := []patch.Operation{{Op: patch.OpRemove, Path: path}}
+	for _, n := range []int{1000, 10000} {
+		members := make([]any, n)
+		for i := range members {
+			members[i] = map[string]any{"value": fmt.Sprintf("m-%d", i)}
+		}
+		b.Run(fmt.Sprintf("members=%d/clauses=100", n), func(b *testing.B) {
 			benchApply(b, func() map[string]any { return map[string]any{"members": slices.Clone(members)} }, ops, schemas)
 		})
 	}

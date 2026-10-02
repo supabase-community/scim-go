@@ -24,14 +24,13 @@ const (
 func (a AttributeType) coerce(value any) (any, bool) {
 	switch a {
 	case TypeString, TypeReference:
-		s, ok := value.(string)
-		return s, ok
+		return text(value)
 	case TypeBinary:
 		s, ok := value.(string)
 		if !ok || !isBase64(s) {
 			return nil, false
 		}
-		return s, true
+		return value, true
 	case TypeBoolean:
 		b, ok := value.(bool)
 		return b, ok
@@ -50,13 +49,20 @@ func (a AttributeType) coerce(value any) (any, bool) {
 	return nil, false
 }
 
+func text(value any) (any, bool) {
+	if _, ok := value.(string); !ok {
+		return "", false
+	}
+	return value, true
+}
+
 func decimal(value any) (any, bool) {
 	switch n := value.(type) {
 	case json.Number:
 		f, err := n.Float64()
 		return f, err == nil
 	case float64:
-		return n, true
+		return value, true
 	case int64:
 		return float64(n), true
 	case int:
@@ -71,7 +77,7 @@ func integer(value any) (any, bool) {
 		i, err := n.Int64()
 		return i, err == nil
 	case int64:
-		return n, true
+		return value, true
 	case int:
 		return int64(n), true
 	case float64:
