@@ -3,6 +3,7 @@
 COVERAGE := coverage.out
 COVER_MIN := 95
 COVER_EXCLUDE := /pkg/scimtest/|/internal/|/cmd/server/
+BENCHCOUNT ?= 1
 
 .PHONY: clean
 clean:
@@ -22,7 +23,7 @@ test:
 
 .PHONY: bench
 bench:
-	go test -run '^$$' -bench=. -benchmem ./...
+	go test -run '^$$' -bench=. -benchmem -count $(BENCHCOUNT) ./...
 
 .PHONY: cover
 cover:
