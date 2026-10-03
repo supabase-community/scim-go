@@ -54,7 +54,7 @@ func TestNewPath(t *testing.T) {
 			"name.familyName.extra", "a_b:name", "foo bar:department", "userName ",
 			`emails[type eq "work"] and displayName pr`,
 			`(emails[type eq "work"])`, `not (emails[type eq "work"])`, `((emails[type eq "work"]))`,
-			`emails.value[type eq "work"].display`,
+			`emails.value[type eq "work"].display`, `emails.value[type eq "work"]`,
 		} {
 			_, err := filter.NewPath(text)
 			require.Error(t, err, text)

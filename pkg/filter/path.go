@@ -1,5 +1,7 @@
 package filter
 
+import "strings"
+
 // Path is a parsed PATCH path, per RFC 7644 Section 3.5.2.
 type Path struct {
 	AttrPath
@@ -12,13 +14,12 @@ func NewPath(text string) (Path, error) {
 		return Path{}, err
 	}
 	path := Path{AttrPath: node.AttrPath(), ValueFilter: node.ValueFilter()}
-	sub := node.SubAttribute()
-	if sub == "" {
+	if path.ValueFilter == nil {
 		return path, nil
 	}
 	if path.SubAttribute != "" {
-		return Path{}, newParseError(text, len(text)-len(sub)-1)
+		return Path{}, newParseError(text, strings.IndexByte(text, '['))
 	}
-	path.SubAttribute = sub
+	path.SubAttribute = node.SubAttribute()
 	return path, nil
 }

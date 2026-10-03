@@ -3354,6 +3354,25 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidPath, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7644 Section 3.4.2.2: the bracketed filter is "based upon sub-attributes of the parent attribute".
+	t.Run("rejects a patch path with a value filter on a sub-attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "bjensen@example.com", Type: "work"}}})
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: `emails.value[type eq "work"]`, Value: json.RawMessage(`"x@example.com"`)}},
+			}),
+		)
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidPath, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
 	// RFC 7644 Section 3.12: mutability when the modification is not compatible with the target attribute's mutability.
 	t.Run("rejects a patch that changes an immutable attribute", func(t *testing.T) {
 		srv := newTestServer(t)
