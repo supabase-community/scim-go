@@ -33,6 +33,59 @@ func FuzzParse(f *testing.F) {
 	})
 }
 
+func FuzzNewPath(f *testing.F) {
+	seeds := []string{
+		`userName`,
+		`name.familyName`,
+		`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department`,
+		`emails[type eq "work"]`,
+		`emails[type eq "work"].value`,
+		`members[value eq "2819c223" or display sw "B"]`,
+		``,
+		`emails[`,
+		`name.familyName.extra`,
+		`emails.value[type eq "work"].display`,
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, input string) {
+		if len(input) > 1024 {
+			return
+		}
+		path, err := filter.NewPath(input)
+		if err != nil {
+			return
+		}
+
+		text := pathText(t, path)
+		reparsed, err := filter.NewPath(text)
+		if err != nil {
+			t.Fatalf("path %q -> %q failed to reparse: %v", input, text, err)
+		}
+		if !reflect.DeepEqual(path, reparsed) {
+			t.Fatalf("round-trip changed the path: %q -> %q", input, text)
+		}
+	})
+}
+
+func pathText(t *testing.T, path filter.Path) string {
+	t.Helper()
+	if path.ValueFilter == nil {
+		return path.String()
+	}
+	valueFilter, err := filter.Visit[string](filter.Stringify{}, path.ValueFilter)
+	if err != nil {
+		t.Fatalf("stringify %v failed: %v", path.ValueFilter, err)
+	}
+	text := filter.AttrPath{URI: path.URI, Name: path.Name}.String() + "[" + valueFilter + "]"
+	if path.SubAttribute != "" {
+		text += "." + path.SubAttribute
+	}
+	return text
+}
+
 func checkRoundTrip(t *testing.T, g filter.Grammar, input string) {
 	t.Helper()
 	if len(input) > 4096 {

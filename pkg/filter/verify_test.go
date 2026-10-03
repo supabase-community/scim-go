@@ -16,14 +16,12 @@ func TestConcurrentParse(t *testing.T) {
 	}
 	var wg sync.WaitGroup
 	for i := range 200 {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+		wg.Go(func() {
 			in := inputs[i%len(inputs)]
 			if node, err := g.Parse(in); err != nil || node == nil {
 				t.Errorf("parse %q: node=%v err=%v", in, node, err)
 			}
-		}(i)
+		})
 	}
 	wg.Wait()
 }

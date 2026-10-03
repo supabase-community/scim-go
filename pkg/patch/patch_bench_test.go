@@ -140,8 +140,7 @@ func BenchmarkApplyManyAddsWithoutAValueSubAttribute(b *testing.B) {
 func benchApply(b *testing.B, doc func() map[string]any, ops []patch.Operation, schemas []*core.Schema) {
 	b.Helper()
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if err := patch.Apply(doc(), ops, schemas); err != nil {
 			b.Fatal(err)
 		}

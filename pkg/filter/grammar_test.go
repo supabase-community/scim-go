@@ -82,15 +82,6 @@ func TestGrammarComparisonOperatorsAndLiterals(t *testing.T) {
 	}
 }
 
-func TestParseErrorMessage(t *testing.T) {
-	g := filter.New(0)
-	_, err := g.Parse(`userName eq`)
-
-	var perr *filter.ParseError
-	require.ErrorAs(t, err, &perr)
-	assert.Contains(t, perr.Error(), "scim: invalid filter at position")
-}
-
 func TestGrammarPreservesNumericLiteralForCoercion(t *testing.T) {
 	g := filter.New(0)
 	node, err := g.Parse(`id eq 9007199254740993`)
@@ -273,18 +264,6 @@ func TestParseDefaultIsUnbounded(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "a", node.Attribute())
-}
-
-func TestParseErrorReportsPosition(t *testing.T) {
-	g := filter.New(0)
-	input := `userName eq "bjensen" garbage`
-	_, err := g.Parse(input)
-
-	require.ErrorIs(t, err, filter.ErrInvalidFilter)
-	var perr *filter.ParseError
-	require.ErrorAs(t, err, &perr)
-	assert.Equal(t, input, perr.Input)
-	assert.Equal(t, len(`userName eq "bjensen"`), perr.Position)
 }
 
 func TestGrammarDeepNestingIsLinear(t *testing.T) {

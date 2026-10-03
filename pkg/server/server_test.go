@@ -4420,7 +4420,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		srv := newTestServer(t)
 		_, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
-		assert.True(t, strings.HasPrefix(etag, `W/"`))
+		assert.Regexp(t, `^W/"[^"]+"$`, etag)
 	})
 
 	// RFC 7644 Section 3.14: ETags MUST be an HTTP header and SHOULD be specified within the 'version' attribute of 'meta'.
