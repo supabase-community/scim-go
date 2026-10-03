@@ -48,6 +48,15 @@ func TestNewPath(t *testing.T) {
 		require.NotNil(t, p.ValueFilter)
 	})
 
+	t.Run("parses a schema-qualified value path with a sub-attribute", func(t *testing.T) {
+		p, err := filter.NewPath(`urn:ietf:params:scim:schemas:core:2.0:User:emails[type eq "work"].value`)
+		require.NoError(t, err)
+		assert.Equal(t, "urn:ietf:params:scim:schemas:core:2.0:User", p.URI)
+		assert.Equal(t, "emails", p.Name)
+		assert.Equal(t, "value", p.SubAttribute)
+		require.NotNil(t, p.ValueFilter)
+	})
+
 	t.Run("rejects malformed paths", func(t *testing.T) {
 		for _, text := range []string{
 			"", "123bad", "emails[", `emails[type eq "work"`, "name.", ".name",
