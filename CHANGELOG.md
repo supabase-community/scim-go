@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.2](https://github.com/supabase-community/scim-go/compare/v0.11.1...v0.11.2) (2026-10-03)
+
+
+### Bug Fixes
+
+* **filter:** reject a PATCH path with a value filter on a sub-attribute ([0ee0a31](https://github.com/supabase-community/scim-go/commit/0ee0a31c9a7853f3c65a3cd7e53ea8d68f5642a1))
+* **server:** describe resource types in /ResourceTypes ([9dbfdb7](https://github.com/supabase-community/scim-go/commit/9dbfdb7973f0047d148ee475adeb0c137c887ed1))
+
 ## [0.11.1](https://github.com/supabase-community/scim-go/compare/v0.11.0...v0.11.1) (2026-10-02)
 
 
