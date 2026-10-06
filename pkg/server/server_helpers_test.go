@@ -317,6 +317,19 @@ func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag strin
 	return created.ID, response.Header.Get("ETag")
 }
 
+func createGroup(t *testing.T, srv *httptest.Server, group *core.Group) core.Group {
+	t.Helper()
+
+	request := Request(t, srv, http.MethodPost, basePath+"/Groups",
+		WithBearerToken(validToken),
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, group),
+	)
+	response := Response(t, srv, request)
+	require.Equal(t, http.StatusCreated, response.StatusCode)
+	return ReadBodyAs[core.Group](t, response)
+}
+
 func createWidget(t *testing.T, srv *httptest.Server, w *widget) map[string]any {
 	t.Helper()
 
