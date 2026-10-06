@@ -75,7 +75,7 @@ ops() {
 
 names() {
 	call GET "/Users?sortBy=userName&filter=$(uri "$1")"
-	field '[.Resources[]?.userName] | join(",")'
+	echo "$status $(field '[.Resources[]?.userName] | join(",")')"
 }
 
 echo "== RFC 6750 2.1 Authorization Request Header Field =="
@@ -130,11 +130,11 @@ expect "RFC 7643 2.5" "treats false as a value" "201 false" "$status $(field .ac
 
 echo "== RFC 7643 3 Common Attributes =="
 call POST /Users '{"userName":"common","externalId":"ext-1"}'
-expect "RFC 7643 3" "sets lastModified to created on create" true "$(field '.meta.created == .meta.lastModified')"
-expect "RFC 7643 3" "keeps externalId" ext-1 "$(field .externalId)"
-expect "RFC 7643 3" "sets meta.resourceType" User "$(field .meta.resourceType)"
+expect "RFC 7643 3" "sets lastModified to created on create" "201 true" "$status $(field '.meta.created == .meta.lastModified')"
+expect "RFC 7643 3" "keeps externalId" "201 ext-1" "$status $(field .externalId)"
+expect "RFC 7643 3" "sets meta.resourceType" "201 User" "$status $(field .meta.resourceType)"
 call GET "/Users/$(field .id)"
-expect "RFC 7643 3" "sets the Content-Location header to meta.location" "$(field .meta.location)" "$(header Content-Location)"
+expect "RFC 7643 3" "sets the Content-Location header to meta.location" "200 $(field .meta.location)" "$status $(header Content-Location)"
 call POST /Users '{"id":"client-chosen","userName":"common-ro","meta":{"created":"2000-01-01T00:00:00Z"}}'
 expect "RFC 7643 3" "ignores readOnly id and meta" "201 true" "$status $(field '.id != "client-chosen" and (.meta.created | startswith("2000") | not)')"
 
@@ -146,23 +146,23 @@ expect "RFC 7643 4.2" "requires displayName" "400 invalidValue" "$status $(field
 
 echo "== RFC 7643 4.3 Enterprise User Schema Extension =="
 call POST /Users "{\"userName\":\"ent\",\"$ENTERPRISE\":{\"employeeNumber\":\"701\"}}"
-expect "RFC 7643 4.3" "lists the extension in the resource's schemas" true "$(field ".schemas | index(\"$ENTERPRISE\") != null")"
+expect "RFC 7643 4.3" "lists the extension in the resource's schemas" "201 true" "$status $(field ".schemas | index(\"$ENTERPRISE\") != null")"
 call POST /Users '{"userName":"ent-none"}'
-expect "RFC 7643 4.3" "omits the extension from schemas when unset" "[\"$USER_URN\"]" "$(field .schemas)"
+expect "RFC 7643 4.3" "omits the extension from schemas when unset" "201 [\"$USER_URN\"]" "$status $(field .schemas)"
 call GET /ResourceTypes/User
-expect "RFC 7643 4.3" "advertises the extension on the resource type" "$ENTERPRISE" "$(field '.schemaExtensions[0].schema')"
+expect "RFC 7643 4.3" "advertises the extension on the resource type" "200 $ENTERPRISE" "$status $(field '.schemaExtensions[0].schema')"
 call GET "/Schemas/$ENTERPRISE"
 expect "RFC 7643 4.3" "publishes the extension schema" "200 $ENTERPRISE" "$status $(field .id)"
 
 echo "== RFC 7643 5 Service Provider Configuration Schema =="
 anonymous=1 call GET /ServiceProviderConfig
 expect "RFC 7643 5" "reads ServiceProviderConfig without a token" 200 "$status"
-expect "RFC 7643 5" "advertises the bearer token scheme" oauthbearertoken "$(field '.authenticationSchemes[0].type')"
-expect "RFC 7643 5" "advertises its capabilities" '[true,true,true,true,false,false]' "$(field '[.filter.supported,.sort.supported,.patch.supported,.etag.supported,.bulk.supported,.changePassword.supported]')"
+expect "RFC 7643 5" "advertises the bearer token scheme" "200 oauthbearertoken" "$status $(field '.authenticationSchemes[0].type')"
+expect "RFC 7643 5" "advertises its capabilities" "200 "'[true,true,true,true,false,false]' "$status $(field '[.filter.supported,.sort.supported,.patch.supported,.etag.supported,.bulk.supported,.changePassword.supported]')"
 
 echo "== RFC 7643 7 Schema Definition =="
 call GET /Schemas
-expect "RFC 7643 7" "lists the User, Group and EnterpriseUser schemas" true "$(field "[.Resources[].id] | contains([\"$USER_URN\",\"urn:ietf:params:scim:schemas:core:2.0:Group\",\"$ENTERPRISE\"])")"
+expect "RFC 7643 7" "lists the User, Group and EnterpriseUser schemas" "200 true" "$status $(field "[.Resources[].id] | contains([\"$USER_URN\",\"urn:ietf:params:scim:schemas:core:2.0:Group\",\"$ENTERPRISE\"])")"
 
 echo "== RFC 7644 2 Authentication and Authorization =="
 anonymous=1 call POST /Users '{"userName":"anonymous"}'
@@ -172,9 +172,9 @@ echo "== RFC 7644 3.3 Creating Resources =="
 call POST /Users '{"userName":"alice","active":true,"name":{"givenName":"Alice"},"password":"t1meMa$heen","groups":[{"value":"g-1"}]}'
 alice=$(field .id)
 expect "RFC 7644 3.3" "creates a user" 201 "$status"
-expect "RFC 7644 3.3" "returns the Location of the user" "$BASE_URL/Users/$alice" "$(header Location)"
-expect "RFC 7644 3.3" "never returns the writeOnly password" false "$(field 'has("password")')"
-expect "RFC 7644 3.3" "ignores readOnly groups" false "$(field 'has("groups")')"
+expect "RFC 7644 3.3" "returns the Location of the user" "201 $BASE_URL/Users/$alice" "$status $(header Location)"
+expect "RFC 7644 3.3" "never returns the writeOnly password" "201 false" "$status $(field 'has("password")')"
+expect "RFC 7644 3.3" "ignores readOnly groups" "201 false" "$status $(field 'has("groups")')"
 call POST /Users '{"userName":"alice"}'
 expect "RFC 7644 3.3" "rejects a duplicate userName" "409 uniqueness" "$status $(field .scimType)"
 call POST /Users '{"userName":'
@@ -189,7 +189,7 @@ expect "RFC 7644 3.3" "rejects a duplicate attribute name" "400 invalidSyntax" "
 echo "== RFC 7644 3.4.1 Retrieving a Known Resource =="
 call GET "/Users/$alice"
 expect "RFC 7644 3.4.1" "fetches the user by id" "200 alice" "$status $(field .userName)"
-expect "RFC 7644 3.4.1" "never returns the writeOnly password" false "$(field 'has("password")')"
+expect "RFC 7644 3.4.1" "never returns the writeOnly password" "200 false" "$status $(field 'has("password")')"
 call GET /Users/does-not-exist
 expect "RFC 7644 3.4.1" "returns 404 for an unknown id" "404 404" "$status $(field .status)"
 
@@ -197,7 +197,7 @@ echo "== RFC 7644 3.4.2 Query Resources =="
 call GET "/Users?filter=$(uri 'userName eq "nobody"')"
 expect "RFC 7644 3.4.2" "returns an empty ListResponse" '200 ["urn:ietf:params:scim:api:messages:2.0:ListResponse"] 0' "$status $(field .schemas) $(field .totalResults)"
 call GET "/Users?filter=$(uri 'userName eq "alice"')"
-expect "RFC 7644 3.4.2" "finds the user by userName" "$alice" "$(field '.Resources[0].id')"
+expect "RFC 7644 3.4.2" "finds the user by userName" "200 $alice" "$status $(field '.Resources[0].id')"
 
 echo "== RFC 7644 3.4.2.2 Filtering =="
 ann=$(user flt-ann Ann)
@@ -205,20 +205,20 @@ call PATCH "/Users/$ann" "$(ops "{\"op\":\"add\",\"value\":{\"$ENTERPRISE:employ
 call POST /Users '{"userName":"flt-ben","active":false}'
 call POST /Users '{"userName":"flt-cat","active":true,"title":"Lead","emails":[{"value":"cat@example.org","type":"home"}]}'
 scope='userName sw "flt-"'
-expect "RFC 7644 3.4.2.2" "filters with eq" flt-ann "$(names 'userName eq "flt-ann"')"
-expect "RFC 7644 3.4.2.2" "filters with co" flt-ben "$(names "$scope and userName co \"-b\"")"
-expect "RFC 7644 3.4.2.2" "filters with sw" flt-ann,flt-ben,flt-cat "$(names "$scope")"
-expect "RFC 7644 3.4.2.2" "filters with ew" flt-cat "$(names "$scope and userName ew \"cat\"")"
-expect "RFC 7644 3.4.2.2" "filters with pr" flt-ann,flt-cat "$(names "$scope and emails pr")"
-expect "RFC 7644 3.4.2.2" "filters with eq null" flt-ann,flt-ben "$(names "$scope and title eq null")"
-expect "RFC 7644 3.4.2.2" "filters with ne on a boolean" flt-ben "$(names "$scope and active ne true")"
-expect "RFC 7644 3.4.2.2" "combines clauses with or" flt-ann,flt-cat "$(names "$scope and (userName eq \"flt-ann\" or title eq \"Lead\")")"
-expect "RFC 7644 3.4.2.2" "negates a clause with not" flt-ben "$(names "$scope and not (active eq true)")"
-expect "RFC 7644 3.4.2.2" "filters a dateTime with gt" flt-ann,flt-ben,flt-cat "$(names "$scope and meta.lastModified gt \"2000-01-01T00:00:00Z\"")"
-expect "RFC 7644 3.4.2.2" "filters a dateTime with lt" "" "$(names "$scope and meta.lastModified lt \"2000-01-01T00:00:00Z\"")"
-expect "RFC 7644 3.4.2.2" "filters with a value path" flt-ann "$(names "$scope and emails[type eq \"work\"]")"
-expect "RFC 7644 3.4.2.2" "filters by a URI-qualified extension attribute" flt-ann "$(names "$ENTERPRISE:employeeNumber eq \"1\"")"
-expect "RFC 7644 3.4.2.2" "treats attribute names and operators as case insensitive" flt-ann "$(names 'USERNAME EQ "flt-ann"')"
+expect "RFC 7644 3.4.2.2" "filters with eq" "200 flt-ann" "$(names 'userName eq "flt-ann"')"
+expect "RFC 7644 3.4.2.2" "filters with co" "200 flt-ben" "$(names "$scope and userName co \"-b\"")"
+expect "RFC 7644 3.4.2.2" "filters with sw" "200 flt-ann,flt-ben,flt-cat" "$(names "$scope")"
+expect "RFC 7644 3.4.2.2" "filters with ew" "200 flt-cat" "$(names "$scope and userName ew \"cat\"")"
+expect "RFC 7644 3.4.2.2" "filters with pr" "200 flt-ann,flt-cat" "$(names "$scope and emails pr")"
+expect "RFC 7644 3.4.2.2" "filters with eq null" "200 flt-ann,flt-ben" "$(names "$scope and title eq null")"
+expect "RFC 7644 3.4.2.2" "filters with ne on a boolean" "200 flt-ben" "$(names "$scope and active ne true")"
+expect "RFC 7644 3.4.2.2" "combines clauses with or" "200 flt-ann,flt-cat" "$(names "$scope and (userName eq \"flt-ann\" or title eq \"Lead\")")"
+expect "RFC 7644 3.4.2.2" "negates a clause with not" "200 flt-ben" "$(names "$scope and not (active eq true)")"
+expect "RFC 7644 3.4.2.2" "filters a dateTime with gt" "200 flt-ann,flt-ben,flt-cat" "$(names "$scope and meta.lastModified gt \"2000-01-01T00:00:00Z\"")"
+expect "RFC 7644 3.4.2.2" "filters a dateTime with lt" "200 " "$(names "$scope and meta.lastModified lt \"2000-01-01T00:00:00Z\"")"
+expect "RFC 7644 3.4.2.2" "filters with a value path" "200 flt-ann" "$(names "$scope and emails[type eq \"work\"]")"
+expect "RFC 7644 3.4.2.2" "filters by a URI-qualified extension attribute" "200 flt-ann" "$(names "$ENTERPRISE:employeeNumber eq \"1\"")"
+expect "RFC 7644 3.4.2.2" "treats attribute names and operators as case insensitive" "200 flt-ann" "$(names 'USERNAME EQ "flt-ann"')"
 call GET "/Users?filter=$(uri 'userName zz "bob"')"
 expect "RFC 7644 3.4.2.2" "rejects a bad filter" "400 invalidFilter" "$status $(field .scimType)"
 
@@ -228,11 +228,11 @@ for name in srt-bob:3 srt-dave:1 srt-carol:2; do
 done
 scope=$(uri 'userName sw "srt-"')
 call GET "/Users?filter=$scope&sortBy=userName"
-expect "RFC 7644 3.4.2.3" "sorts ascending by default" '["srt-bob","srt-carol","srt-dave"]' "$(field '[.Resources[].userName]')"
+expect "RFC 7644 3.4.2.3" "sorts ascending by default" "200 "'["srt-bob","srt-carol","srt-dave"]' "$status $(field '[.Resources[].userName]')"
 call GET "/Users?filter=$scope&sortBy=userName&sortOrder=descending"
-expect "RFC 7644 3.4.2.3" "sorts users descending" '["srt-dave","srt-carol","srt-bob"]' "$(field '[.Resources[].userName]')"
+expect "RFC 7644 3.4.2.3" "sorts users descending" "200 "'["srt-dave","srt-carol","srt-bob"]' "$status $(field '[.Resources[].userName]')"
 call GET "/Users?filter=$scope&sortBy=$ENTERPRISE:employeeNumber"
-expect "RFC 7644 3.4.2.3" "sorts by a URI-qualified extension attribute" '["srt-dave","srt-carol","srt-bob"]' "$(field '[.Resources[].userName]')"
+expect "RFC 7644 3.4.2.3" "sorts by a URI-qualified extension attribute" "200 "'["srt-dave","srt-carol","srt-bob"]' "$status $(field '[.Resources[].userName]')"
 call GET "/Users?sortBy=userName&sortOrder=sideways"
 expect "RFC 7644 3.4.2.3" "rejects an unknown sortOrder" "400 invalidValue" "$status $(field .scimType)"
 call GET "/Users?sortBy=bogus"
@@ -240,18 +240,18 @@ expect "RFC 7644 3.4.2.3" "rejects an unknown sortBy" "400 invalidValue" "$statu
 
 echo "== RFC 7644 3.4.2.4 Pagination =="
 call GET "/Users?filter=$scope&sortBy=userName&startIndex=2&count=1"
-expect "RFC 7644 3.4.2.4" "pages with startIndex and count" "3 2 1 srt-carol" "$(field '"\(.totalResults) \(.startIndex) \(.itemsPerPage) \(.Resources[0].userName)"')"
+expect "RFC 7644 3.4.2.4" "pages with startIndex and count" "200 3 2 1 srt-carol" "$status $(field '"\(.totalResults) \(.startIndex) \(.itemsPerPage) \(.Resources[0].userName)"')"
 call GET "/Users?filter=$scope&count=0"
-expect "RFC 7644 3.4.2.4" "counts without returning resources" "3 0 0" "$(field '"\(.totalResults) \(.itemsPerPage) \(.Resources | length)"')"
+expect "RFC 7644 3.4.2.4" "counts without returning resources" "200 3 0 0" "$status $(field '"\(.totalResults) \(.itemsPerPage) \(.Resources | length)"')"
 call GET "/Users?startIndex=two"
 expect "RFC 7644 3.4.2.4" "rejects a non-integer startIndex" "400 invalidValue" "$status $(field .scimType)"
 
 echo "== RFC 7644 3.4.2.5 Attributes =="
 bob=$(user bob Bob)
 call GET "/Users/$bob?attributes=userName"
-expect "RFC 7644 3.4.2.5" "returns only the requested attributes" '["id","schemas","userName"]' "$(field 'keys')"
+expect "RFC 7644 3.4.2.5" "returns only the requested attributes" "200 "'["id","schemas","userName"]' "$status $(field 'keys')"
 call GET "/Users/$bob?excludedAttributes=emails"
-expect "RFC 7644 3.4.2.5" "drops excluded attributes" false "$(field 'has("emails")')"
+expect "RFC 7644 3.4.2.5" "drops excluded attributes" "200 false" "$status $(field 'has("emails")')"
 call GET "/Users/$bob?attributes=userName&excludedAttributes=emails"
 expect "RFC 7644 3.4.2.5" "rejects attributes with excludedAttributes" 400 "$status"
 call POST "/Users?attributes=userName" '{"userName":"shaped","title":"Lead"}'
@@ -275,8 +275,8 @@ before=$(header ETag)
 created=$(field .meta.created)
 call PUT "/Users/$alice" '{"userName":"alice","active":true,"name":{"givenName":"Alicia"}}' "If-Match: $before"
 expect "RFC 7644 3.5.1" "replaces the user with PUT" "200 Alicia" "$status $(field .name.givenName)"
-expect "RFC 7644 3.5.1" "returns a new ETag" true "$([[ $(header ETag) != "$before" ]] && echo true || echo false)"
-expect "RFC 7644 3.5.1" "keeps meta.created" "$created" "$(field .meta.created)"
+expect "RFC 7644 3.5.1" "returns a new ETag" "200 true" "$status $([[ $(header ETag) != "$before" ]] && echo true || echo false)"
+expect "RFC 7644 3.5.1" "keeps meta.created" "200 $created" "$status $(field .meta.created)"
 call PUT "/Users/$alice" '{"userName":"alice"}' "If-Match: $before"
 expect "RFC 7644 3.5.1" "rejects a stale If-Match" 412 "$status"
 call PUT /Users/does-not-exist '{"userName":"ghost"}'
@@ -287,7 +287,7 @@ expect "RFC 7644 3.5.1" "rejects a replace missing a required attribute" "400 in
 echo "== RFC 7644 3.5.2 Modifying with PATCH =="
 call PATCH "/Users/$alice" "$(ops '{"op":"replace","path":"active","value":false}')"
 expect "RFC 7644 3.5.2" "deactivates the user with PATCH" "200 false" "$status $(field .active)"
-expect "RFC 7644 3.5.2" "returns an ETag" "$(field .meta.version)" "$(header ETag)"
+expect "RFC 7644 3.5.2" "returns an ETag" "200 $(field .meta.version)" "$status $(header ETag)"
 call PATCH "/Users/$alice" '{"Operations":[{"op":"replace","path":"active","value":true}]}'
 expect "RFC 7644 3.5.2" "rejects a patch without the PatchOp schema" "400 invalidSyntax" "$status $(field .scimType)"
 call PATCH "/Users/$alice" "$(ops '{"op":"replace","path":"id","value":"other"}')"
@@ -296,7 +296,7 @@ call PATCH "/Users/$alice" "$(ops '{"op":"replace","path":"bogus","value":"x"}')
 expect "RFC 7644 3.5.2" "rejects a patch that targets an unknown attribute" "400 invalidPath" "$status $(field .scimType)"
 call PATCH "/Users/$alice" "$(ops '{"op":"replace","path":"title","value":"Lead"},{"op":"replace","path":"bogus","value":"x"}')"
 call GET "/Users/$alice"
-expect "RFC 7644 3.5.2" "leaves the resource unchanged when a later operation fails" false "$(field 'has("title")')"
+expect "RFC 7644 3.5.2" "leaves the resource unchanged when a later operation fails" "200 false" "$status $(field 'has("title")')"
 call PATCH "/Users/$alice" "$(ops "{\"op\":\"add\",\"path\":\"$ENTERPRISE:department\",\"value\":\"Tour\"}")"
 expect "RFC 7644 3.5.2" "patches an extension attribute by its URN-qualified path" "200 Tour" "$status $(field ".\"$ENTERPRISE\".department")"
 team=$(group Team)
@@ -307,10 +307,10 @@ expect "RFC 7644 3.5.2" "rejects a changed immutable member type" "400 mutabilit
 
 echo "== RFC 7644 3.5.2.1 Add Operation =="
 call PATCH "/Users/$bob" "$(ops '{"op":"add","path":"emails","value":[{"value":"bob@example.org","type":"home"}]}')"
-expect "RFC 7644 3.5.2.1" "adds a value" '["bob@example.com","bob@example.org"]' "$(field '[.emails[].value]')"
+expect "RFC 7644 3.5.2.1" "adds a value" "200 "'["bob@example.com","bob@example.org"]' "$status $(field '[.emails[].value]')"
 version=$(field .meta.version)
 call PATCH "/Users/$bob" "$(ops '{"op":"add","path":"emails","value":[{"value":"bob@example.org","type":"home"}]}')"
-expect "RFC 7644 3.5.2.1" "does not append a value already present" "2 $version" "$(field '.emails | length') $(field .meta.version)"
+expect "RFC 7644 3.5.2.1" "does not append a value already present" "200 2 $version" "$status $(field '.emails | length') $(field .meta.version)"
 call PATCH "/Users/$bob" "$(ops '{"op":"add","value":{"title":"Lead","nickName":"Bobby"}}')"
 expect "RFC 7644 3.5.2.1" "adds the attributes of the value when the path is omitted" "200 Lead Bobby" "$status $(field .title) $(field .nickName)"
 
@@ -318,7 +318,7 @@ echo "== RFC 7644 3.5.2.2 Remove Operation =="
 call PATCH "/Groups/$team" "$(ops "{\"op\":\"remove\",\"path\":\"members[value eq \\\"$bob\\\"]\"}")"
 expect "RFC 7644 3.5.2.2" "removes one member by filter" 204 "$status"
 call GET "/Groups/$team"
-expect "RFC 7644 3.5.2.2" "keeps only the other member" "[\"$carol\"]" "$(field '[.members[].value]')"
+expect "RFC 7644 3.5.2.2" "keeps only the other member" "200 [\"$carol\"]" "$status $(field '[.members[].value]')"
 call PATCH "/Users/$bob" "$(ops '{"op":"remove","path":"title","value":"Lead"}')"
 expect "RFC 7644 3.5.2.2" "rejects a remove that carries a value" "400 invalidSyntax" "$status $(field .scimType)"
 call PATCH "/Users/$bob" "$(ops '{"op":"remove","path":"userName"}')"
@@ -328,7 +328,7 @@ expect "RFC 7644 3.5.2.2" "rejects a remove without a path" "400 noTarget" "$sta
 
 echo "== RFC 7644 3.5.2.3 Replace Operation =="
 call PATCH "/Users/$bob" "$(ops '{"op":"replace","path":"name","value":{"familyName":"Builder"}}')"
-expect "RFC 7644 3.5.2.3" "merges the sub-attributes of a complex attribute" "Bob Builder" "$(field .name.givenName) $(field .name.familyName)"
+expect "RFC 7644 3.5.2.3" "merges the sub-attributes of a complex attribute" "200 Bob Builder" "$status $(field .name.givenName) $(field .name.familyName)"
 call PATCH "/Users/$bob" "$(ops '{"op":"replace","path":"emails[type eq \"other\"].value","value":"x@example.com"}')"
 expect "RFC 7644 3.5.2.3" "rejects a value path that matches nothing" "400 noTarget" "$status $(field .scimType)"
 
@@ -361,8 +361,8 @@ expect "RFC 7644 3.12" "returns 405 with the allowed methods" "405 405 true" "$s
 echo "== RFC 7644 3.14 Versioning Resources =="
 call GET "/Users/$bob"
 current=$(header ETag)
-expect "RFC 7644 3.14" "returns a weak ETag" 'W/"' "${current:0:3}"
-expect "RFC 7644 3.14" "meta.version matches the ETag" "$current" "$(field .meta.version)"
+expect "RFC 7644 3.14" "returns a weak ETag" "200 "'W/"' "$status ${current:0:3}"
+expect "RFC 7644 3.14" "meta.version matches the ETag" "200 $current" "$status $(field .meta.version)"
 call PUT "/Users/$bob" '{"userName":"bob","active":false}' "If-Match: W/\"stale\""
 expect "RFC 7644 3.14" "rejects a stale If-Match" 412 "$status"
 call PUT "/Users/$bob" '{"userName":"bob","active":false}' "If-Match: $current"
@@ -372,10 +372,10 @@ expect "RFC 7644 3.14" "If-Match * matches any version" 200 "$status"
 
 echo "== RFC 7644 4 Service Provider Configuration Endpoints =="
 anonymous=1 call GET /ServiceProviderConfig
-expect "RFC 7644 4" "advertises filter support" true "$(field .filter.supported)"
-expect "RFC 7644 4" "advertises its own location" "$BASE_URL/ServiceProviderConfig" "$(field .meta.location)"
+expect "RFC 7644 4" "advertises filter support" "200 true" "$status $(field .filter.supported)"
+expect "RFC 7644 4" "advertises its own location" "200 $BASE_URL/ServiceProviderConfig" "$status $(field .meta.location)"
 call GET /ResourceTypes
-expect "RFC 7644 4" "lists User and Group resource types" '["Group","User"]' "$(field '[.Resources[].name] | sort')"
+expect "RFC 7644 4" "lists User and Group resource types" "200 "'["Group","User"]' "$status $(field '[.Resources[].name] | sort')"
 call GET /ResourceTypes/Group
 expect "RFC 7644 4" "fetches a resource type by id" "200 /Groups" "$status $(field .endpoint)"
 call GET /ResourceTypes/Bogus
