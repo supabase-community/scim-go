@@ -18,6 +18,10 @@ build:
 run:
 	go run ./cmd/server
 
+.PHONY: smoke
+smoke: build
+	scripts/smoke-test.sh
+
 .PHONY: test
 test:
 	CGO_ENABLED=1 go test -race ./...
@@ -68,7 +72,7 @@ tidy:
 	go mod tidy
 
 .PHONY: ci
-ci: tidy fmt lint vulncheck cover-check
+ci: tidy fmt lint vulncheck cover-check smoke
 
 .PHONY: help
 help: ## List available targets
