@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"io"
 	"net/url"
 	"strconv"
@@ -30,26 +31,35 @@ func (l Limits) ParseSearchRequest(values url.Values) (*SearchRequest, error) {
 		return nil, err
 	}
 
-	sortOrder, err := sortOrderParam(values)
-	if err != nil {
-		return nil, err
-	}
-
-	attributes, excluded, err := parseAttributeParams(values)
-	if err != nil {
-		return nil, err
-	}
-
-	return &SearchRequest{
+	return l.normalize(&SearchRequest{
 		Schemas:            []core.SchemaURI{SchemaSearchRequest},
-		Attributes:         attributes,
-		ExcludedAttributes: excluded,
+		Attributes:         listParam(values, "attributes"),
+		ExcludedAttributes: listParam(values, "excludedAttributes"),
 		Filter:             values.Get("filter"),
 		SortBy:             values.Get("sortBy"),
-		SortOrder:          sortOrder,
-		StartIndex:         max(startIndex, 1),
-		Count:              min(max(count, 0), l.MaxCount),
-	}, nil
+		SortOrder:          SortOrder(values.Get("sortOrder")),
+		StartIndex:         startIndex,
+		Count:              count,
+	})
+}
+
+// DecodeSearchRequest reads a POST ".search" body; RFC 7644 Section 3.4.3: it MUST contain the SearchRequest "schemas" URI.
+func (l Limits) DecodeSearchRequest(body io.Reader) (*SearchRequest, error) {
+	raw, err := read(body)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := objectOf(raw); err != nil {
+		return nil, err
+	}
+	req := &SearchRequest{Count: l.DefaultCount}
+	if err := json.Unmarshal(raw, req); err != nil {
+		return nil, mistyped(err)
+	}
+	if err := requireSchema(req.Schemas, SchemaSearchRequest); err != nil {
+		return nil, err
+	}
+	return l.normalize(req)
 }
 
 func (l Limits) DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
@@ -60,6 +70,21 @@ func (l Limits) DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	if l.MaxOperations > 0 && len(req.Operations) > l.MaxOperations {
 		return nil, scimerrors.ErrTooLarge(`"Operations" must contain at most ` + strconv.Itoa(l.MaxOperations) + " operations")
 	}
+	return req, nil
+}
+
+func (l Limits) normalize(req *SearchRequest) (*SearchRequest, error) {
+	switch req.SortOrder {
+	case SortAscending, SortDescending:
+	case "":
+		if req.SortBy != "" {
+			req.SortOrder = SortAscending
+		}
+	default:
+		return nil, scimerrors.ErrInvalidValue(`"sortOrder" must be "ascending" or "descending"`)
+	}
+	req.StartIndex = max(req.StartIndex, 1)
+	req.Count = min(max(req.Count, 0), l.MaxCount)
 	return req, nil
 }
 
@@ -74,18 +99,4 @@ func intParam(values url.Values, name string, fallback int) (int, error) {
 		return 0, scimerrors.ErrInvalidValue(strconv.Quote(name) + " must be an integer")
 	}
 	return value, nil
-}
-
-func sortOrderParam(values url.Values) (SortOrder, error) {
-	switch order := SortOrder(values.Get("sortOrder")); order {
-	case SortAscending, SortDescending:
-		return order, nil
-	case "":
-		if values.Get("sortBy") != "" {
-			return SortAscending, nil
-		}
-		return "", nil
-	default:
-		return "", scimerrors.ErrInvalidValue(`"sortOrder" must be "ascending" or "descending"`)
-	}
 }

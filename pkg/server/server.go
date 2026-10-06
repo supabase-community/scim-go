@@ -158,7 +158,7 @@ func bulk(w http.ResponseWriter, _ *http.Request) error {
 	return protocol.SendError(w, scimerrors.ErrNotImplemented(`"/Bulk" is not supported`))
 }
 
-// search declines querying resources with POST ".search", per RFC 7644, Section 3.4.3.
+// search declines querying from the root with POST "/.search", per RFC 7644, Section 3.4.3.
 func search(w http.ResponseWriter, _ *http.Request) error {
 	return protocol.SendError(w, scimerrors.ErrNotImplemented(`".search" is not supported`))
 }

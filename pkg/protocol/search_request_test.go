@@ -3,6 +3,7 @@ package protocol_test
 import (
 	"encoding/json"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -108,7 +109,6 @@ func TestParseSearchRequest(t *testing.T) {
 		{"a start index that is not a number", "startIndex=first", "startIndex"},
 		{"a count that is not a number", "count=all", "count"},
 		{"an order that is neither ascending nor descending", "sortBy=userName&sortOrder=sideways", "sortOrder"},
-		{"attributes together with excluded attributes", "attributes=userName&excludedAttributes=meta", "mutually exclusive"},
 	} {
 		t.Run("rejects "+tc.name, func(t *testing.T) {
 			request, err := parseQuery(t, tc.query)
@@ -116,6 +116,73 @@ func TestParseSearchRequest(t *testing.T) {
 			require.Nil(t, request)
 			require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
 			assert.Contains(t, err.Error(), tc.detail)
+		})
+	}
+}
+
+func TestDecodeSearchRequest(t *testing.T) {
+	const schemas = `"schemas":["urn:ietf:params:scim:api:messages:2.0:SearchRequest"]`
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want protocol.SearchRequest
+	}{
+		{
+			name: "decodes the body a client posts to .search",
+			body: `{` + schemas + `,"attributes":["displayName","userName"],"filter":"displayName sw \"smith\"","startIndex":11,"count":10}`,
+			want: protocol.SearchRequest{
+				Attributes: []string{"displayName", "userName"},
+				Filter:     `displayName sw "smith"`,
+				StartIndex: 11,
+				Count:      10,
+			},
+		},
+		{
+			name: "defaults to the whole first page when the client asks for nothing",
+			body: `{` + schemas + `}`,
+			want: protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount},
+		},
+		{
+			name: "keeps a count of zero",
+			body: `{` + schemas + `,"count":0}`,
+			want: protocol.SearchRequest{StartIndex: 1},
+		},
+		{
+			name: "caps a count larger than the provider is willing to return",
+			body: `{` + schemas + `,"count":5000}`,
+			want: protocol.SearchRequest{StartIndex: 1, Count: protocol.DefaultLimits.MaxCount},
+		},
+		{
+			name: "sorts ascending when sortBy has no sortOrder",
+			body: `{` + schemas + `,"sortBy":"userName"}`,
+			want: protocol.SearchRequest{SortBy: "userName", SortOrder: protocol.SortAscending, StartIndex: 1, Count: protocol.DefaultLimits.DefaultCount},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := protocol.DefaultLimits.DecodeSearchRequest(strings.NewReader(tc.body))
+
+			require.NoError(t, err)
+
+			tc.want.Schemas = []core.SchemaURI{protocol.SchemaSearchRequest}
+			assert.Equal(t, &tc.want, request)
+		})
+	}
+
+	for _, tc := range []struct {
+		name, body string
+		want       error
+	}{
+		{"a body that is not an object", `[]`, scimerrors.ErrInvalidSyntax("")},
+		{"a body without the SearchRequest schema", `{"filter":"userName pr"}`, scimerrors.ErrInvalidSyntax("")},
+		{"a count that is not a number", `{` + schemas + `,"count":"all"}`, scimerrors.ErrInvalidSyntax("")},
+		{"an order that is neither ascending nor descending", `{` + schemas + `,"sortBy":"userName","sortOrder":"sideways"}`, scimerrors.ErrInvalidValue("")},
+	} {
+		t.Run("rejects "+tc.name, func(t *testing.T) {
+			request, err := protocol.DefaultLimits.DecodeSearchRequest(strings.NewReader(tc.body))
+
+			require.Nil(t, request)
+			assert.ErrorIs(t, err, tc.want)
 		})
 	}
 }
@@ -155,6 +222,17 @@ func TestSearchRequest(t *testing.T) {
 		_, err := request.Projection(schemas)
 
 		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
+	})
+
+	// RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.
+	t.Run("rejects attributes together with excludedAttributes", func(t *testing.T) {
+		schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString))}
+		request := &protocol.SearchRequest{Attributes: []string{"userName"}, ExcludedAttributes: []string{"userName"}}
+
+		_, err := request.Projection(schemas)
+
+		require.ErrorIs(t, err, scimerrors.ErrInvalidValue(""))
+		assert.Contains(t, err.Error(), "mutually exclusive")
 	})
 
 	t.Run("validates its filter and sortBy", func(t *testing.T) {
@@ -219,19 +297,6 @@ func TestSearchRequest(t *testing.T) {
 			"startIndex": 1,
 			"count": 10
 		}`, string(body))
-	})
-
-	t.Run("decodes the body a client posts to .search", func(t *testing.T) {
-		var request protocol.SearchRequest
-		require.NoError(t, json.Unmarshal([]byte(`{
-			"schemas": ["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],
-			"filter": "userName eq \"bjensen\"",
-			"startIndex": 11,
-			"count": 10
-		}`), &request))
-
-		assert.Equal(t, `userName eq "bjensen"`, request.Filter)
-		assert.Equal(t, 10, request.Offset())
 	})
 }
 

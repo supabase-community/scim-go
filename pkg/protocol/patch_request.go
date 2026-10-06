@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/supabase-community/scim-go/internal/decode"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -35,8 +33,8 @@ func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	if err != nil {
 		return nil, mistyped(err)
 	}
-	if !slices.ContainsFunc(req.Schemas, isPatchOp) {
-		return nil, scimerrors.ErrInvalidSyntax(`"schemas" must contain ` + strconv.Quote(string(SchemaPatchOp)))
+	if err := requireSchema(req.Schemas, SchemaPatchOp); err != nil {
+		return nil, err
 	}
 	if len(req.Operations) == 0 {
 		return nil, scimerrors.ErrInvalidSyntax(`"Operations" must contain at least one operation`)
@@ -58,8 +56,4 @@ func mistyped(err error) error {
 		return scimerrors.ErrInvalidSyntax(strconv.Quote(typeErr.Field) + " has the wrong type: " + typeErr.Value)
 	}
 	return scimerrors.ErrInvalidSyntax(notJSON)
-}
-
-func isPatchOp(uri core.SchemaURI) bool {
-	return strings.EqualFold(string(uri), string(SchemaPatchOp))
 }

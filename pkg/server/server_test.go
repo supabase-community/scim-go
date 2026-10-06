@@ -2349,15 +2349,121 @@ func TestRFC7644Attributes(t *testing.T) {
 
 // RFC 7644 3.4.3 Querying Resources Using HTTP POST
 func TestRFC7644QueryingResourcesUsingHTTPPOST(t *testing.T) {
-	srv := newTestServer(t)
+	search := func(t *testing.T, srv *httptest.Server, path, body string) *http.Response {
+		t.Helper()
+		return Response(t, srv, Request(t, srv, http.MethodPost, path,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(body)),
+		))
+	}
 
 	// RFC 7644 Section 3.12: 501 when the service provider does not support the requested operation.
-	for _, path := range []string{basePath + "/.search", basePath + "/Users/.search"} {
-		response := Response(t, srv, Request(t, srv, http.MethodPost, path, WithBearerToken(validToken)))
+	t.Run("declines a search from the root", func(t *testing.T) {
+		srv := newTestServer(t)
 
-		assert.Equal(t, http.StatusNotImplemented, response.StatusCode, path)
-		assert.Equal(t, "501", ReadBodyAs[scimerrors.Error](t, response).Status, path)
-	}
+		response := search(t, srv, basePath+"/.search", `{"schemas":["urn:ietf:params:scim:api:messages:2.0:SearchRequest"]}`)
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+		assert.Equal(t, "501", ReadBodyAs[scimerrors.Error](t, response).Status)
+	})
+
+	// RFC 7644 Section 3.4.3: after receiving an HTTP POST request, a response is returned as specified in Section 3.4.2.
+	t.Run("answers a search on a resource endpoint with a ListResponse", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "bob"})
+
+		response := search(t, srv, basePath+"/Users/.search", `{
+			"schemas": ["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],
+			"attributes": ["userName"],
+			"filter": "userName sw \"b\"",
+			"sortBy": "userName",
+			"sortOrder": "descending",
+			"startIndex": 1,
+			"count": 1
+		}`)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[map[string]any]](t, response)
+		assert.Equal(t, []core.SchemaURI{protocol.SchemaListResponse}, list.Schemas)
+		assert.Equal(t, 2, list.TotalResults)
+		require.Len(t, list.Resources, 1)
+		assert.Equal(t, "bob", list.Resources[0]["userName"])
+		assert.NotContains(t, list.Resources[0], "meta")
+	})
+
+	// RFC 7644 Section 3.4.3: clients MAY execute queries by using HTTP POST on the "/.search" path of any resource endpoint.
+	t.Run("answers a search on the Groups endpoint", func(t *testing.T) {
+		srv := newTestServer(t)
+		for _, name := range []string{"Admins", "Tour Guides"} {
+			created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBodyAs(t, core.Group{DisplayName: name}),
+			))
+			require.Equal(t, http.StatusCreated, created.StatusCode)
+		}
+
+		response := search(t, srv, basePath+"/Groups/.search", `{
+			"schemas": ["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],
+			"filter": "displayName eq \"Admins\""
+		}`)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[core.Group]](t, response)
+		assert.Equal(t, 1, list.TotalResults)
+		require.Len(t, list.Resources, 1)
+		assert.Equal(t, "Admins", list.Resources[0].DisplayName)
+	})
+
+	// RFC 7644 Section 3.12: invalidValue when a request attribute has an incompatible value.
+	t.Run("rejects an unknown attribute name", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := search(t, srv, basePath+"/Users/.search", `{
+			"schemas": ["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],
+			"attributes": ["leak!"]
+		}`)
+
+		assert.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	// RFC 7644 Section 3.4.3: query requests MUST be identified using the SearchRequest URI.
+	t.Run("rejects a search without the SearchRequest schema", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := search(t, srv, basePath+"/Users/.search", `{"filter":"userName eq \"bjensen\""}`)
+
+		assert.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidSyntax, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+
+	// RFC 7644 Section 3.12: 501 when the service provider does not support the requested operation.
+	t.Run("declines a filter when Filter.Supported is false", func(t *testing.T) {
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
+
+		response := search(t, srv, basePath+"/Users/.search", `{
+			"schemas": ["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],
+			"filter": "userName eq \"bjensen\""
+		}`)
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+	})
+
+	// RFC 7644 Section 3.12: 501 when the service provider does not support the requested operation.
+	t.Run("declines sortBy when Sort.Supported is false", func(t *testing.T) {
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig()))
+
+		response := search(t, srv, basePath+"/Users/.search", `{
+			"schemas": ["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],
+			"sortBy": "userName"
+		}`)
+
+		assert.Equal(t, http.StatusNotImplemented, response.StatusCode)
+	})
 }
 
 // RFC 7644 3.5.1 Replacing with PUT

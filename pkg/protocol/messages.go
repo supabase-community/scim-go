@@ -1,6 +1,10 @@
 package protocol
 
 import (
+	"slices"
+	"strconv"
+	"strings"
+
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -15,3 +19,10 @@ const (
 	SchemaPatchOp       core.SchemaURI = messagesRoot + ":PatchOp"
 	SchemaSearchRequest core.SchemaURI = messagesRoot + ":SearchRequest"
 )
+
+func requireSchema(schemas []core.SchemaURI, uri core.SchemaURI) error {
+	if slices.ContainsFunc(schemas, func(s core.SchemaURI) bool { return strings.EqualFold(string(s), string(uri)) }) {
+		return nil
+	}
+	return scimerrors.ErrInvalidSyntax(`"schemas" must contain ` + strconv.Quote(string(uri)))
+}

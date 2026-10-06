@@ -24,11 +24,7 @@ type projectionKey struct{}
 
 // ParseProjection reads "attributes"/"excludedAttributes"; RFC 7644 Section 3.9: they are mutually exclusive.
 func ParseProjection(values url.Values, schemas core.Schemas) (Projection, error) {
-	attributes, excluded, err := parseAttributeParams(values)
-	if err != nil {
-		return Projection{}, err
-	}
-	return newProjection(schemas, attributes, excluded)
+	return newProjection(schemas, listParam(values, "attributes"), listParam(values, "excludedAttributes"))
 }
 
 func WithProjection(ctx context.Context, projection Projection) context.Context {
@@ -41,6 +37,9 @@ func ProjectionFrom(ctx context.Context) Projection {
 }
 
 func newProjection(schemas core.Schemas, attributes, excluded []string) (Projection, error) {
+	if err := checkAttributes(attributes, excluded); err != nil {
+		return Projection{}, err
+	}
 	included, err := qualify(schemas, attributes)
 	if err != nil {
 		return Projection{}, err
@@ -241,18 +240,11 @@ func (n names) within(name string) bool {
 	return slices.ContainsFunc(n, func(e string) bool { return strings.HasPrefix(e, name+".") })
 }
 
-func parseAttributeParams(values url.Values) (attributes, excluded []string, err error) {
-	attributes = listParam(values, "attributes")
-	excluded = listParam(values, "excludedAttributes")
+func checkAttributes(attributes, excluded []string) error {
 	if len(attributes) > 0 && len(excluded) > 0 {
-		return nil, nil, scimerrors.ErrInvalidValue(`"attributes" and "excludedAttributes" are mutually exclusive`)
+		return scimerrors.ErrInvalidValue(`"attributes" and "excludedAttributes" are mutually exclusive`)
 	}
-	for _, name := range slices.Concat(attributes, excluded) {
-		if _, err := filter.NewAttrPath(name); err != nil {
-			return nil, nil, invalidName()
-		}
-	}
-	return attributes, excluded, nil
+	return nil
 }
 
 func invalidName() error {

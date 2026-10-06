@@ -11,6 +11,7 @@ import (
 // Controller handles the HTTP requests for one SCIM resource type, per RFC 7644, Section 3.
 type Controller[T core.Resource] interface {
 	List(http.ResponseWriter, *http.Request) error
+	Search(http.ResponseWriter, *http.Request) error
 	ByID(http.ResponseWriter, *http.Request) error
 	Create(http.ResponseWriter, *http.Request) error
 	Replace(http.ResponseWriter, *http.Request) error
@@ -35,16 +36,28 @@ func NewController[T core.Resource](service Service[T], schemas core.Schemas, li
 }
 
 func (c *controller[T]) List(w http.ResponseWriter, r *http.Request) error {
-	values := r.URL.Query()
-	if values.Get("filter") != "" && !c.config.SupportsFilter() {
-		return protocol.SendError(w, scimerrors.ErrNotImplemented(`"filter" is not supported`))
-	}
-	if values.Get("sortBy") != "" && !c.config.SupportsSort() {
-		return protocol.SendError(w, scimerrors.ErrNotImplemented(`"sortBy" is not supported`))
-	}
-	query, err := c.limits.ParseSearchRequest(values)
+	query, err := c.limits.ParseSearchRequest(r.URL.Query())
 	if err != nil {
 		return protocol.SendError(w, err)
+	}
+	return c.list(w, r, query)
+}
+
+// Search queries resources with POST ".search", per RFC 7644, Section 3.4.3.
+func (c *controller[T]) Search(w http.ResponseWriter, r *http.Request) error {
+	query, err := c.limits.DecodeSearchRequest(r.Body)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	return c.list(w, r, query)
+}
+
+func (c *controller[T]) list(w http.ResponseWriter, r *http.Request, query *protocol.SearchRequest) error {
+	if query.Filter != "" && !c.config.SupportsFilter() {
+		return protocol.SendError(w, scimerrors.ErrNotImplemented(`"filter" is not supported`))
+	}
+	if query.SortBy != "" && !c.config.SupportsSort() {
+		return protocol.SendError(w, scimerrors.ErrNotImplemented(`"sortBy" is not supported`))
 	}
 	if err := query.Validate(c.schemas); err != nil {
 		return protocol.SendError(w, err)
