@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/supabase-community/scim-go/compare/v0.11.2...v0.12.0) (2026-10-06)
+
+
+### Features
+
+* **server:** support POST .search on resource endpoints ([4856d1e](https://github.com/supabase-community/scim-go/commit/4856d1e7ec56062467f74cd092cc982c0d400b04))
+
 ## [0.11.2](https://github.com/supabase-community/scim-go/compare/v0.11.1...v0.11.2) (2026-10-03)
 
 
