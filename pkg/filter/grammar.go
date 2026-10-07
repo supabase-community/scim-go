@@ -87,18 +87,10 @@ func (g *grammar) exceedsMax(text string) bool {
 }
 
 // RFC 7644 Section 3.4.2.2: filters MUST be evaluated with "and" taking precedence over "or".
-func (g *grammar) or(left, filter peg.Parser) peg.Parser {
-	return binaryExpression(left, peg.Fold("or"), "or", filter)
-}
-
-func (g *grammar) and(atom, self peg.Parser) peg.Parser {
-	return binaryExpression(atom, peg.Fold("and"), "and", self)
-}
-
 func (g *grammar) logExpr(atom, fallback peg.Parser) peg.Parser {
 	var and peg.Parser
-	and = g.and(atom, peg.Ref(&and))
-	return g.or(and, fallback)
+	and = binaryExpression(atom, peg.Fold("and"), "and", peg.Ref(&and))
+	return binaryExpression(and, peg.Fold("or"), "or", fallback)
 }
 
 // RFC 7644 Section 3.4.2.2: Figure 2 puts SP between "not" and "(", which the ABNF omits.
