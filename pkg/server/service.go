@@ -26,6 +26,8 @@ type Service[T core.Resource] interface {
 	Delete(ctx context.Context, req *protocol.DeleteRequest) error
 }
 
+type Validator[T core.Resource] func(ctx context.Context, candidate T) error
+
 type service[T core.Resource] struct {
 	repo            Repository[T]
 	schemas         core.Schemas
