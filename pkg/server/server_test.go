@@ -980,6 +980,37 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.NotContains(t, ReadBodyAs[map[string]any](t, response), "groups")
 	})
 
+	// RFC 7643 Section 7: a returned "request" attribute is returned in response to a PUT, POST, or PATCH that specified it.
+	t.Run("returns a request attribute the client wrote", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo"})["id"].(string)
+		patchOf := func(op patch.Operation) protocol.PatchRequest {
+			return protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{op}}
+		}
+
+		for _, tc := range []struct {
+			method, path string
+			body         any
+			want         string
+		}{
+			{http.MethodPost, "/Widgets", &widget{Name: "one", Note: "n1"}, "n1"},
+			{http.MethodPost, "/Widgets?attributes=name", &widget{Name: "two", Note: "n2"}, ""},
+			{http.MethodPost, "/Widgets?excludedAttributes=note", &widget{Name: "three", Note: "n3"}, ""},
+			{http.MethodPut, "/Widgets/" + id, &widget{Name: "gizmo", Note: "n4"}, "n4"},
+			{http.MethodPatch, "/Widgets/" + id, patchOf(patch.Operation{Op: patch.OpReplace, Path: "note", Value: json.RawMessage(`"n5"`)}), "n5"},
+			{http.MethodPatch, "/Widgets/" + id, patchOf(patch.Operation{Op: patch.OpReplace, Value: json.RawMessage(`{"note":"n6"}`)}), "n6"},
+			{http.MethodPatch, "/Widgets/" + id, patchOf(patch.Operation{Op: patch.OpReplace, Path: "score", Value: json.RawMessage(`7`)}), ""},
+		} {
+			response := Response(t, srv, Request(t, srv, tc.method, basePath+tc.path, WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, tc.body)))
+
+			require.Less(t, response.StatusCode, http.StatusMultipleChoices, "%s %s", tc.method, tc.path)
+			assert.Equal(t, tc.want, ReadBodyAs[widget](t, response).Note, "%s %s", tc.method, tc.path)
+		}
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Widgets/"+id, WithBearerToken(validToken)))
+		assert.Empty(t, ReadBodyAs[widget](t, response).Note)
+	})
+
 	// RFC 7643 Section 7: an attribute returned "never" is never returned, even when requested.
 	t.Run("never returns the writeOnly password", func(t *testing.T) {
 		srv := newTestServer(t)

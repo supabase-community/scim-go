@@ -88,6 +88,7 @@ type widget struct {
 	Parts  []part
 	Secret string           `json:",omitempty"`
 	Keys   []map[string]any `json:",omitempty"`
+	Note   string           `json:",omitempty"`
 }
 
 type kit struct {
@@ -279,6 +280,7 @@ func widgetAttributes() core.Attributes {
 		),
 		core.NewAttribute("secret", core.TypeString).AsWriteOnly(),
 		core.NewAttribute("keys", core.TypeComplex).AsMultiValued().AsWriteOnly().With(core.NewAttribute("value", core.TypeString)),
+		core.NewAttribute("note", core.TypeString).ReturnedAs(core.ReturnedRequest),
 	}
 }
 

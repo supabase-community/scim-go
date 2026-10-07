@@ -96,6 +96,7 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
+	projection = projection.Written(document)
 	created, err := c.service.Create(r.Context(), document)
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -115,6 +116,7 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	req.ID, req.Version = r.PathValue("id"), c.ifMatch(r)
+	projection = projection.Written(req.Attributes)
 	replaced, err := c.service.Replace(r.Context(), req)
 	if err != nil {
 		return protocol.SendError(w, err)
@@ -136,6 +138,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	req.ID, req.Version = r.PathValue("id"), c.ifMatch(r)
+	projection = projection.Patched(req.Operations)
 	patched, err := c.service.Patch(r.Context(), req)
 	if err != nil {
 		return protocol.SendError(w, err)

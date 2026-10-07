@@ -7,9 +7,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/supabase-community/scim-go/internal/decode"
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
+	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
@@ -18,6 +20,7 @@ type Projection struct {
 	schemas  core.Schemas
 	included names
 	excluded names
+	written  names
 }
 
 type projectionKey struct{}
@@ -60,6 +63,25 @@ func (p Projection) Returns(name string) bool {
 	uri := core.SchemaURI(path.URI)
 	attribute, ok := p.schemas.Resolve(uri, path.Name, "")
 	return !ok || p.returns(attribute, qualifiedKey(p.schemas.Lookup(uri).ID, attribute.Name))
+}
+
+// Written marks the attributes a POST or PUT body specified, per RFC 7643, Section 7.
+func (p Projection) Written(document core.Object) Projection {
+	p.written = p.namesIn(document, p.written)
+	return p
+}
+
+// Patched marks the attributes PATCH operations specified, per RFC 7643, Section 7.
+func (p Projection) Patched(operations []patch.Operation) Projection {
+	for _, op := range operations {
+		if op.Path == "" {
+			document, _ := decode.Object(op.Value)
+			p.written = p.namesIn(document, p.written)
+		} else if path, err := filter.NewPath(op.Path); err == nil {
+			p.written = p.write(p.written, path.String())
+		}
+	}
+	return p
 }
 
 func (p Projection) Of(resource any) json.Marshaler {
@@ -133,12 +155,19 @@ func (p Projection) returns(attribute *core.Attribute, name string) bool {
 	case attribute.Returned == core.ReturnedAlways:
 		return true
 	case attribute.Returned == core.ReturnedRequest:
-		return slices.Contains(p.included, name) || p.included.within(name)
+		return p.requested(name)
 	case p.included != nil:
 		return p.included.covers(name) || p.included.within(name)
 	default:
 		return !p.excluded.covers(name)
 	}
+}
+
+func (p Projection) requested(name string) bool {
+	if p.included != nil {
+		return slices.Contains(p.included, name) || p.included.within(name)
+	}
+	return (p.written.covers(name) || p.written.within(name)) && !p.excluded.covers(name)
 }
 
 func (p Projection) value(attribute *core.Attribute, name string, value any) (any, bool) {
@@ -171,6 +200,28 @@ func (p Projection) object(attribute *core.Attribute, parentName string, object 
 		}
 		return p.value(sub, parentName+"."+strings.ToLower(sub.Name), value)
 	})
+}
+
+func (p Projection) namesIn(document core.Object, written names) names {
+	for key, value := range document {
+		switch extension := p.schemas.Lookup(core.SchemaURI(key)); {
+		case extension == nil:
+			written = p.write(written, key)
+		case p.schemas.IsExtension(extension):
+			body, _ := value.(map[string]any)
+			for sub := range body {
+				written = p.write(written, key+":"+sub)
+			}
+		}
+	}
+	return written
+}
+
+func (p Projection) write(written names, raw string) names {
+	if name, known, err := qualifyName(p.schemas, raw); err == nil && known {
+		return append(written, name)
+	}
+	return written
 }
 
 type projected struct {
