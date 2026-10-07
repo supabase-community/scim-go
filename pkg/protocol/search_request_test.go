@@ -165,7 +165,7 @@ func TestDecodeSearchRequest(t *testing.T) {
 			require.NoError(t, err)
 
 			tc.want.Schemas = []core.SchemaURI{protocol.SchemaSearchRequest}
-			assert.Equal(t, &tc.want, request)
+			assert.EqualExportedValues(t, &tc.want, request)
 		})
 	}
 

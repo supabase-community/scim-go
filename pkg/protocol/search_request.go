@@ -25,6 +25,7 @@ type SearchRequest struct {
 	SortOrder          SortOrder        `json:"sortOrder,omitempty"`
 	StartIndex         int              `json:"startIndex,omitempty"`
 	Count              int              `json:"count,omitempty"`
+	inBody             bool
 }
 
 // Offset is the zero-based start index, per Table 6 of RFC 7644, Section 3.4.2.4.
@@ -39,7 +40,7 @@ func (s *SearchRequest) Descending() bool {
 // Validate rejects an invalid filter or sortBy before any Repository sees it, per RFC 7644, Section 3.4.2.
 func (s *SearchRequest) Validate(schemas core.Schemas) error {
 	if s.Filter != "" {
-		if _, err := evaluate(newVisitor(schemas, accept{}, true), s.Filter); err != nil {
+		if _, err := evaluate(newVisitor(schemas, accept{}, !s.inBody), s.Filter); err != nil {
 			return err
 		}
 	}

@@ -4834,6 +4834,29 @@ func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 7.5.2: HTTP POST is the remedy for a sensitive filter refused in a GET.
+	t.Run("accepts a POST .search filter for equality on a writeOnly attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", Password: "hunter2"})
+
+		for _, query := range []struct {
+			filter string
+			status int
+		}{
+			{`password eq \"hunter2\"`, http.StatusOK},
+			{`password sw \"hun\"`, http.StatusBadRequest},
+		} {
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],"filter":"` + query.filter + `"}`
+			response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users/.search",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBody([]byte(body)),
+			))
+
+			assert.Equal(t, query.status, response.StatusCode, "filter: %s", query.filter)
+		}
+	})
+
 	// RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
 	t.Run("rejects presence of a writeOnly attribute with invalidFilter because it sends no value", func(t *testing.T) {
 		srv := newTestServer(t)

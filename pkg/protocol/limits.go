@@ -52,7 +52,7 @@ func (l Limits) DecodeSearchRequest(body io.Reader) (*SearchRequest, error) {
 	if _, err := objectOf(raw); err != nil {
 		return nil, err
 	}
-	req := &SearchRequest{Count: l.DefaultCount}
+	req := &SearchRequest{Count: l.DefaultCount, inBody: true}
 	if err := json.Unmarshal(raw, req); err != nil {
 		return nil, mistyped(err)
 	}
