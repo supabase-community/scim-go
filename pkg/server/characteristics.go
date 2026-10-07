@@ -11,16 +11,16 @@ import (
 )
 
 // newCharacteristics enforces RFC 7643 Section 2.2, except uniqueness.
-func newCharacteristics(schemas core.Schemas) func(before, after core.Object) error {
+func newCharacteristics(schemas core.Schemas) func(existing, candidate core.Object) error {
 	fields := newFields(schemas)
 	constrained := slices.DeleteFunc(slices.Clone(fields), func(field field) bool { return !isConstrained(field) })
-	return func(before, after core.Object) error {
+	return func(existing, candidate core.Object) error {
 		for _, field := range constrained {
-			if err := conforms(field, after); err != nil {
+			if err := conforms(field, candidate); err != nil {
 				return err
 			}
 		}
-		return immutable(fields, before, after)
+		return immutable(fields, existing, candidate)
 	}
 }
 
@@ -83,21 +83,21 @@ func count(values []any, target any) int {
 }
 
 // immutable rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7644, Section 3.5.1.
-func immutable(fields fields, before, after core.Object) error {
+func immutable(fields fields, existing, candidate core.Object) error {
 	for _, field := range fields {
-		if err := immutableField(field, before, after); err != nil {
+		if err := immutableField(field, existing, candidate); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func immutableField(field field, before, after core.Object) error {
+func immutableField(field field, existing, candidate core.Object) error {
 	if field.parent != nil && field.parent.MultiValued {
 		return nil
 	}
-	assigned := field.value(before)
-	if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(after)) {
+	assigned := field.value(existing)
+	if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(candidate)) {
 		return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
 	}
 	return nil

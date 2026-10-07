@@ -32,7 +32,7 @@ type service[T core.Resource] struct {
 	repo            Repository[T]
 	schemas         core.Schemas
 	limits          Limits
-	characteristics func(before, after core.Object) error
+	characteristics func(existing, candidate core.Object) error
 	validators      []Validator[T]
 }
 
