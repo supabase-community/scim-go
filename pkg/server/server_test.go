@@ -3275,6 +3275,23 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		}
 	})
 
+	// RFC 7644 Section 3.12: invalidFilter when the attribute and filter comparison combination is not supported.
+	t.Run("rejects a value path filter on a single-valued complex attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "alice", Name: core.Name{GivenName: "alice"}})
+
+		for _, op := range []patch.Operation{
+			{Op: patch.OpReplace, Path: `name[givenName eq "alice"].familyName`, Value: json.RawMessage(`"x"`)},
+			{Op: patch.OpAdd, Path: `name[givenName eq "alice"].familyName`, Value: json.RawMessage(`"x"`)},
+			{Op: patch.OpRemove, Path: `name[givenName eq "alice"]`},
+		} {
+			response := Response(t, srv, patchRequest(t, srv, id, op))
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, op.Op)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType, op.Op)
+		}
+	})
+
 	// RFC 7644 Section 3.5.2: the body carries the PatchOp schema and one or more operations.
 	t.Run("rejects a patch without the PatchOp schema or operations", func(t *testing.T) {
 		srv := newTestServer(t)

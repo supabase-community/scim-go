@@ -24,6 +24,9 @@ type matcher struct {
 }
 
 func compile(attr *core.Attribute, node *filter.Node) (predicate, int, error) {
+	if attr != permissiveAttr && !attr.MultiValued {
+		return nil, 0, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
+	}
 	m := matcher{attr: attr, clauses: new(int)}
 	pred, err := filter.Visit[predicate](m, node)
 	var scimErr *scimerrors.Error
