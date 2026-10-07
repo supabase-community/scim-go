@@ -27,10 +27,11 @@ type Service[T core.Resource] interface {
 }
 
 type service[T core.Resource] struct {
-	repo       Repository[T]
-	schemas    core.Schemas
-	limits     Limits
-	validators []Validator[T]
+	repo            Repository[T]
+	schemas         core.Schemas
+	limits          Limits
+	characteristics func(before, after core.Object) error
+	validators      []Validator[T]
 }
 
 type revision[T core.Resource] struct {
@@ -48,8 +49,7 @@ type snapshot[T core.Resource] struct {
 type change[T core.Resource] func(before snapshot[T]) (revision[T], error)
 
 func NewService[T core.Resource](repo Repository[T], schemas core.Schemas, limits Limits, validators ...Validator[T]) Service[T] {
-	validators = append([]Validator[T]{characteristics[T](schemas)}, validators...)
-	return &service[T]{repo: repo, schemas: schemas, limits: limits, validators: validators}
+	return &service[T]{repo: repo, schemas: schemas, limits: limits, characteristics: newCharacteristics(schemas), validators: validators}
 }
 
 func (s *service[T]) Get(ctx context.Context, id string) (T, error) {
@@ -159,15 +159,11 @@ func (s *service[T]) replaced(existing core.Object, req *protocol.ReplaceRequest
 }
 
 func (s *service[T]) admit(ctx context.Context, next revision[T]) error {
-	if next.existing != nil {
-		ctx = withExisting(ctx, next.existing)
+	if err := s.characteristics(next.existing, next.candidate); err != nil {
+		return err
 	}
-	return s.validate(withCandidate(ctx, next.candidate), next.resource)
-}
-
-func (s *service[T]) validate(ctx context.Context, item T) error {
 	for _, validate := range s.validators {
-		if err := validate(ctx, item); err != nil {
+		if err := validate(ctx, next.resource); err != nil {
 			return err
 		}
 	}

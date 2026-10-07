@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,13 +10,11 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
-// characteristics enforces RFC 7643 Section 2.2, except uniqueness.
-func characteristics[T core.Resource](schemas core.Schemas) Validator[T] {
+// newCharacteristics enforces RFC 7643 Section 2.2, except uniqueness.
+func newCharacteristics(schemas core.Schemas) func(before, after core.Object) error {
 	fields := newFields(schemas)
 	constrained := slices.DeleteFunc(slices.Clone(fields), func(field field) bool { return !isConstrained(field) })
-	return func(ctx context.Context, _ T) error {
-		after, _ := candidateFrom(ctx)
-		before, _ := existingFrom(ctx)
+	return func(before, after core.Object) error {
 		for _, field := range constrained {
 			if err := conforms(field, after); err != nil {
 				return err
@@ -83,28 +80,6 @@ func count(values []any, target any) int {
 		}
 	}
 	return n
-}
-
-type existingKey struct{}
-
-func withExisting(ctx context.Context, existing core.Object) context.Context {
-	return context.WithValue(ctx, existingKey{}, existing)
-}
-
-func existingFrom(ctx context.Context) (core.Object, bool) {
-	existing, ok := ctx.Value(existingKey{}).(core.Object)
-	return existing, ok
-}
-
-type candidateKey struct{}
-
-func withCandidate(ctx context.Context, after core.Object) context.Context {
-	return context.WithValue(ctx, candidateKey{}, after)
-}
-
-func candidateFrom(ctx context.Context) (core.Object, bool) {
-	after, ok := ctx.Value(candidateKey{}).(core.Object)
-	return after, ok
 }
 
 // immutable rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7644, Section 3.5.1.
