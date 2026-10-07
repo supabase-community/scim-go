@@ -182,12 +182,8 @@ func (c *controller[T]) send(w http.ResponseWriter, status int, resource T, proj
 }
 
 func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
-	c.setETag(w, resource.Common().Meta.Version)
-}
-
-func (c *controller[T]) setETag(w http.ResponseWriter, version string) {
 	if c.config.SupportsVersioning() {
-		w.Header().Set("ETag", version)
+		w.Header().Set("ETag", resource.Common().Meta.Version)
 	}
 }
 

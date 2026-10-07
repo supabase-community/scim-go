@@ -1,6 +1,7 @@
 package filter
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -24,7 +25,7 @@ type Visitor[Output any] interface {
 func Visit[Output any](v Visitor[Output], n *Node) (Output, error) {
 	var zero Output
 	if n == nil {
-		return zero, fmt.Errorf("scim: cannot visit a nil node")
+		return zero, errors.New("scim: cannot visit a nil node")
 	}
 	if n.Not() {
 		operand, err := Visit(v, n.Operand())
