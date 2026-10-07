@@ -14,7 +14,4 @@ require (
 	golang.org/x/vuln v1.7.0 // indirect
 )
 
-tool (
-	golang.org/x/tools/cmd/goimports
-	golang.org/x/vuln/cmd/govulncheck
-)
+tool golang.org/x/vuln/cmd/govulncheck

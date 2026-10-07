@@ -51,16 +51,10 @@ cover-check: cover
 
 .PHONY: fmt
 fmt:
-	gofmt -l -w .
-	go tool goimports -w .
 	golangci-lint fmt
 
-.PHONY: vet
-vet:
-	go vet ./...
-
 .PHONY: lint
-lint: vet
+lint:
 	golangci-lint run
 
 .PHONY: vulncheck
