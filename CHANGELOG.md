@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/supabase-community/scim-go/compare/v0.12.0...v0.13.0) (2026-10-07)
+
+
+### Features
+
+* **server:** add WithService and Hooks for lifecycle events ([83adba9](https://github.com/supabase-community/scim-go/commit/83adba97fae7bc35867062e2060b35031ba017f7))
+
 ## [0.12.0](https://github.com/supabase-community/scim-go/compare/v0.11.2...v0.12.0) (2026-10-06)
 
 
