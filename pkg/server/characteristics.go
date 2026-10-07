@@ -14,13 +14,14 @@ import (
 func newCharacteristics(schemas core.Schemas) func(existing, candidate core.Object) error {
 	fields := newFields(schemas)
 	constrained := slices.DeleteFunc(slices.Clone(fields), func(field field) bool { return !isConstrained(field) })
+	immutables := slices.DeleteFunc(fields, func(field field) bool { return !isImmutable(field) })
 	return func(existing, candidate core.Object) error {
 		for _, field := range constrained {
 			if err := conforms(field, candidate); err != nil {
 				return err
 			}
 		}
-		return immutable(fields, existing, candidate)
+		return immutable(immutables, existing, candidate)
 	}
 }
 
@@ -45,6 +46,10 @@ func conforms(field field, candidate core.Object) error {
 
 func isConstrained(field field) bool {
 	return field.Required || isPrimaryField(field.Attribute) || len(field.CanonicalValues) > 0 || field.Type == core.TypeBinary
+}
+
+func isImmutable(field field) bool {
+	return field.Mutability == core.MutabilityImmutable && (field.parent == nil || !field.parent.MultiValued)
 }
 
 func isPrimaryField(attribute *core.Attribute) bool {
@@ -85,20 +90,10 @@ func count(values []any, target any) int {
 // immutable rejects a change to an "immutable" attribute once a value has been assigned, per RFC 7644, Section 3.5.1.
 func immutable(fields fields, existing, candidate core.Object) error {
 	for _, field := range fields {
-		if err := immutableField(field, existing, candidate); err != nil {
-			return err
+		assigned := field.value(existing)
+		if !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(candidate)) {
+			return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
 		}
-	}
-	return nil
-}
-
-func immutableField(field field, existing, candidate core.Object) error {
-	if field.parent != nil && field.parent.MultiValued {
-		return nil
-	}
-	assigned := field.value(existing)
-	if field.Mutability == core.MutabilityImmutable && !value.IsUnassigned(assigned) && !value.Equal(field.Attribute, assigned, field.value(candidate)) {
-		return scimerrors.ErrMutability(strconv.Quote(field.Name) + " is immutable")
 	}
 	return nil
 }
