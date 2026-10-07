@@ -5,11 +5,10 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
@@ -19,6 +18,8 @@ import (
 )
 
 const basePath = "/scim/v2"
+
+var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 func main() {
 	addr, token, baseURL := configFromEnv()
@@ -46,7 +47,8 @@ func configFromEnv() (addr, token, baseURL string) {
 	}
 	token = os.Getenv("SCIM_BEARER_TOKEN")
 	if token == "" {
-		log.Fatal("SCIM_BEARER_TOKEN must be set")
+		logger.Error("SCIM_BEARER_TOKEN must be set")
+		os.Exit(1)
 	}
 	return addr, token, os.Getenv("SCIM_BASE_URL")
 }
@@ -54,7 +56,8 @@ func configFromEnv() (addr, token, baseURL string) {
 func run(done <-chan struct{}, httpServer *http.Server) {
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
+			logger.Error("listen failed", "error", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -62,23 +65,25 @@ func run(done <-chan struct{}, httpServer *http.Server) {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("%v\n", err)
+		logger.ErrorContext(shutdownCtx, "shutdown failed", "error", err)
 	}
 }
 
 func newServer(config *core.ServiceProviderConfig, token, baseURL string) http.Handler {
 	errorHandler := func(r *http.Request, err error) {
-		log.Printf("%s %s: %v\n", strconv.Quote(r.Method), strconv.Quote(r.URL.Path), err)
+		logger.ErrorContext(r.Context(), "request failed", "method", r.Method, "path", r.URL.Path, "error", err)
 	}
 	return server.New(basePath, config,
 		server.ErrorHandler(errorHandler),
 		server.WithBaseURL(baseURL),
 		server.WithResource(server.
 			NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
-			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...),
+			WithExtension(core.SchemaEnterpriseUser, core.EnterpriseUserAttributes()...).
+			WithService(logged[*core.User]()),
 		),
 		server.WithResource(server.
-			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...),
+			NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
+			WithService(logged[*core.Group]()),
 		),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 			func(ctx context.Context, candidate string) (context.Context, error) {
@@ -89,4 +94,15 @@ func newServer(config *core.ServiceProviderConfig, token, baseURL string) http.H
 			},
 		)),
 	)
+}
+
+func logAt[T core.Resource](message string) func(context.Context, server.Event[T]) error {
+	return func(ctx context.Context, event server.Event[T]) error {
+		logger.InfoContext(ctx, message, "event", event)
+		return nil
+	}
+}
+
+func logged[T core.Resource]() func(server.Service[T]) server.Service[T] {
+	return server.Hooks[T]{Before: logAt[T]("before"), After: logAt[T]("after")}.Wrap
 }

@@ -10,6 +10,7 @@ type Resource[T core.Resource] struct {
 	attributes  core.Attributes
 	extensions  []extension
 	repository  Repository[T]
+	wrap        func(Service[T]) Service[T]
 }
 
 func NewResource[T core.Resource](name, endpoint string, id core.SchemaURI, attributes ...*core.Attribute) *Resource[T] {
@@ -34,6 +35,11 @@ func (c *Resource[T]) WithExtension(id core.SchemaURI, attributes ...*core.Attri
 
 func (c *Resource[T]) WithRepository(repository Repository[T]) *Resource[T] {
 	c.repository = repository
+	return c
+}
+
+func (c *Resource[T]) WithService(wrap func(Service[T]) Service[T]) *Resource[T] {
+	c.wrap = wrap
 	return c
 }
 
@@ -77,7 +83,11 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	if repository == nil {
 		repository = NewRepository[T](s.base()+c.endpoint, schemas)
 	}
-	controller := NewController(NewService(repository, schemas, s.limits), schemas, s.limits, s.config)
+	service := NewService(repository, schemas, s.limits)
+	if c.wrap != nil {
+		service = c.wrap(service)
+	}
+	controller := NewController(service, schemas, s.limits, s.config)
 
 	s.mux.HandleFunc("GET "+path, s.handle(controller.List))
 	s.mux.HandleFunc("POST "+path, s.handle(controller.Create))
