@@ -11,6 +11,7 @@ type Resource[T core.Resource] struct {
 	extensions  []extension
 	repository  Repository[T]
 	wrap        func(Service[T]) Service[T]
+	validators  []Validator[T]
 }
 
 func NewResource[T core.Resource](name, endpoint string, id core.SchemaURI, attributes ...*core.Attribute) *Resource[T] {
@@ -40,6 +41,11 @@ func (c *Resource[T]) WithRepository(repository Repository[T]) *Resource[T] {
 
 func (c *Resource[T]) WithService(wrap func(Service[T]) Service[T]) *Resource[T] {
 	c.wrap = wrap
+	return c
+}
+
+func (c *Resource[T]) WithValidators(validators ...Validator[T]) *Resource[T] {
+	c.validators = append(c.validators, validators...)
 	return c
 }
 
@@ -83,7 +89,7 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	if repository == nil {
 		repository = NewRepository[T](s.base()+c.endpoint, schemas)
 	}
-	service := NewService(repository, schemas, s.limits)
+	service := NewService(repository, schemas, s.limits, c.validators...)
 	if c.wrap != nil {
 		service = c.wrap(service)
 	}
