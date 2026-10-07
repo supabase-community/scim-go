@@ -93,21 +93,22 @@ func (p *patcher) remove(root core.Object, op Operation) error {
 // RFC 7644 Section 3.5.2.1: if "path" is omitted, the target location is assumed to be the resource itself.
 func (p *patcher) mergeRoot(root core.Object, values map[string]any, kind Op) error {
 	for key, value := range values {
-		if schema := p.schemas.Lookup(core.SchemaURI(key)); schema != nil {
-			if err := p.mergeSchema(root, schema, value, kind); err != nil {
-				return err
-			}
-			continue
-		}
-		path := p.keyPath(key)
-		if p.repeatsReadOnly(root, path, value) {
-			continue
-		}
-		if err := p.writeAt(root, path, kind, value); err != nil {
+		if err := p.mergeKey(root, key, value, kind); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (p *patcher) mergeKey(root core.Object, key string, value any, kind Op) error {
+	if schema := p.schemas.Lookup(core.SchemaURI(key)); schema != nil {
+		return p.mergeSchema(root, schema, value, kind)
+	}
+	path := p.keyPath(key)
+	if strings.EqualFold(key, "schemas") || p.repeatsReadOnly(root, path, value) {
+		return nil
+	}
+	return p.writeAt(root, path, kind, value)
 }
 
 // RFC 7643 Section 7: readOnly means "The attribute SHALL NOT be modified."

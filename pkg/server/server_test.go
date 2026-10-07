@@ -3864,6 +3864,17 @@ func TestRFC7644AddOperation(t *testing.T) {
 		assert.Equal(t, "employee", patched.UserType)
 	})
 
+	// RFC 7643 Section 3: "schemas" lists the base schema and each extension present, so the server derives it.
+	t.Run("ignores a schemas key in the value when the path is omitted", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "1"}})
+
+		patched := patchUser(t, srv, id, patch.Operation{Op: patch.OpReplace, Value: json.RawMessage(`{"schemas":["` + string(core.SchemaUser) + `"],"userType":"employee"}`)})
+
+		assert.Equal(t, "employee", patched.UserType)
+		assert.Equal(t, []core.SchemaURI{core.SchemaUser, core.SchemaEnterpriseUser}, patched.Schemas)
+	})
+
 	// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made, and the modify timestamp SHALL NOT change.
 	t.Run("does not append an email the target location already contains, and leaves meta.lastModified unchanged", func(t *testing.T) {
 		srv := newTestServer(t)
