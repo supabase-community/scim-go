@@ -3,10 +3,12 @@ package scimtest
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 func AssertJSON(t TB, name string, value any, ignore ...string) bool {
@@ -17,12 +19,12 @@ func AssertJSON(t TB, name string, value any, ignore ...string) bool {
 		return false
 	}
 
-	differences := without(paths, ignore)
+	differences := slices.DeleteFunc(paths, func(path string) bool { return slices.Contains(ignore, path) })
 	if len(differences) == 0 {
 		return true
 	}
 
-	t.Errorf("scimtest: %T does not match %s:\n%s", value, name, join(differences))
+	t.Errorf("scimtest: %T does not match %s:\n%s", value, name, "  "+strings.Join(differences, "\n  ")+"\n")
 	return false
 }
 
@@ -39,7 +41,7 @@ func RoundTripDiff(t TB, name string, value any) []string {
 		return nil
 	}
 
-	sort.Strings(paths)
+	slices.Sort(paths)
 	return paths
 }
 
@@ -59,20 +61,6 @@ func goldenDiff(t TB, name string, value any) ([]string, bool) {
 	}
 
 	return diff("", want, got), true
-}
-
-func without(paths, ignore []string) []string {
-	if len(ignore) == 0 {
-		return paths
-	}
-
-	kept := paths[:0]
-	for _, path := range paths {
-		if !slices.Contains(ignore, path) {
-			kept = append(kept, path)
-		}
-	}
-	return kept
 }
 
 func decode(data []byte) (any, error) {
@@ -113,20 +101,19 @@ func diff(path string, want, got any) []string {
 	}
 }
 
-func diffObject(path string, want, got map[string]any) []string {
+func diffObject(path string, want, got core.Object) []string {
 	var paths []string
 
-	for _, key := range sorted(want) {
-		actual, present := lookup(got, key)
-		if !present {
+	for _, key := range slices.Sorted(maps.Keys(want)) {
+		if !got.Has(key) {
 			paths = append(paths, join1(path, key))
 			continue
 		}
-		paths = append(paths, diff(join1(path, key), want[key], actual)...)
+		paths = append(paths, diff(join1(path, key), want[key], got.Get(key))...)
 	}
 
-	for _, key := range sorted(got) {
-		if _, present := lookup(want, key); !present {
+	for _, key := range slices.Sorted(maps.Keys(got)) {
+		if !want.Has(key) {
 			paths = append(paths, join1(path, key))
 		}
 	}
@@ -146,42 +133,9 @@ func diffArray(path string, want, got []any) []string {
 	return paths
 }
 
-// lookup matches an attribute name case insensitively, per RFC 7643, Section 2.1.
-func lookup(object map[string]any, key string) (any, bool) {
-	if value, ok := object[key]; ok {
-		return value, true
-	}
-
-	for name, value := range object {
-		if strings.EqualFold(name, key) {
-			return value, true
-		}
-	}
-	return nil, false
-}
-
-func sorted(object map[string]any) []string {
-	keys := make([]string, 0, len(object))
-	for key := range object {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 func join1(path, key string) string {
 	if path == "" {
 		return key
 	}
 	return path + "." + key
-}
-
-func join(paths []string) string {
-	var out strings.Builder
-	for _, p := range paths {
-		out.WriteString("  ")
-		out.WriteString(p)
-		out.WriteString("\n")
-	}
-	return out.String()
 }
