@@ -72,9 +72,3 @@ linters:
           - gocyclo
           - gosec
           - revive
-      - linters:
-          - revive
-        text: "should have comment or be unexported"
-      - linters:
-          - revive
-        text: "comment on exported .* should be of the form"

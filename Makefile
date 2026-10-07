@@ -73,7 +73,3 @@ tidy:
 
 .PHONY: ci
 ci: tidy fmt lint vulncheck cover-check smoke
-
-.PHONY: help
-help: ## List available targets
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "%-10s %s\n", $$1, $$2}'
