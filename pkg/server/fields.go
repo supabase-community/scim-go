@@ -17,7 +17,7 @@ type fields []field
 func newFields(schemas core.Schemas) fields {
 	f := fields{}
 	root := func(d core.Object) any { return d }
-	for _, name := range []string{"id", "externalId", "meta"} {
+	for _, name := range []string{"schemas", "id", "externalId", "meta"} {
 		attribute, _ := core.CommonAttribute(name)
 		f = f.with(root, attribute)
 	}

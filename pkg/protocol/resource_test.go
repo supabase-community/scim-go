@@ -168,7 +168,6 @@ func TestDecodeResource(t *testing.T) {
 		out, err := decodeResource(requestBody(body()), nil, schemas)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{
-			"schemas":  []any{string(core.SchemaUser)},
 			"userName": "bjensen",
 			"nickName": "Babs",
 			"badge":    map[string]any{"label": "B"},

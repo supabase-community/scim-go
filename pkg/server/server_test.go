@@ -1155,6 +1155,21 @@ func TestRFC7644QueryEndpoints(t *testing.T) {
 
 // RFC 7644 3.4.2.2 Filtering
 func TestRFC7644Filtering(t *testing.T) {
+	// RFC 7644 Section 3.4.2.2: filter=schemas eq "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+	t.Run("filters resources by schemas", func(t *testing.T) {
+		srv := newTestServer(t)
+		create(t, srv, &core.User{UserName: "alice", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "1"}})
+		create(t, srv, &core.User{UserName: "bob"})
+
+		path := basePath + "/Users?" + url.Values{"filter": {`schemas eq "` + string(core.SchemaEnterpriseUser) + `"`}}.Encode()
+		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType)))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+		require.Equal(t, 1, list.TotalResults)
+		assert.Equal(t, "alice", list.Resources[0].UserName)
+	})
+
 	// RFC 7644 Section 3.4.2.2: when specified, only those resources matching the filter expression SHALL be returned.
 	t.Run("filters resources by an exact match on userName", func(t *testing.T) {
 		srv := newTestServer(t)
