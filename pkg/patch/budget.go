@@ -8,12 +8,7 @@ import (
 
 const DefaultMaxWriteBytes = 8 << 20
 
-type Option func(*limits)
-
-type limits struct {
-	maxEvaluations int
-	maxWriteBytes  int
-}
+type Option func(*budget)
 
 type budget struct {
 	max            int
@@ -24,20 +19,12 @@ type budget struct {
 
 // MaxFilterEvaluations caps the value filter clause checks of one request; costlier requests are refused, and zero lifts the cap.
 func MaxFilterEvaluations(n int) Option {
-	return func(l *limits) { l.maxEvaluations = n }
+	return func(b *budget) { b.max = n }
 }
 
 // MaxWriteBytes caps the bytes one request's add and replace operations may write; costlier requests are refused, and zero lifts the cap.
 func MaxWriteBytes(n int) Option {
-	return func(l *limits) { l.maxWriteBytes = n }
-}
-
-func defaultLimits() limits {
-	return limits{maxWriteBytes: DefaultMaxWriteBytes}
-}
-
-func (l limits) budget() *budget {
-	return &budget{max: l.maxEvaluations, maxOutputBytes: l.maxWriteBytes}
+	return func(b *budget) { b.maxOutputBytes = n }
 }
 
 func (b *budget) charge(evaluations int) error {
