@@ -1,10 +1,7 @@
 package filter
 
-var (
-	defaultGrammar         = newGrammar(8192)
-	DefaultGrammar Grammar = defaultGrammar
-)
+var defaultGrammar = newGrammar(8192)
 
 func Parse(text string) (*Node, error) {
-	return DefaultGrammar.Parse(text)
+	return defaultGrammar.Parse(text)
 }
