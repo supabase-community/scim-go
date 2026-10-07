@@ -10,7 +10,7 @@ import (
 // RFC 7644 Section 3.5.2: a client MUST NOT modify an attribute that has mutability "immutable".
 func carryImmutable(attr *core.Attribute, kind Op, stored []any, candidate any) any {
 	elements, ok := candidate.([]any)
-	subs := immutableSubs(attr.SubAttributes)
+	subs := slices.DeleteFunc(slices.Clone(attr.SubAttributes), func(sub *core.Attribute) bool { return sub.Mutability != core.MutabilityImmutable })
 	if kind != OpReplace || !ok || len(subs) == 0 {
 		return candidate
 	}
@@ -19,10 +19,6 @@ func carryImmutable(attr *core.Attribute, kind Op, stored []any, candidate any) 
 		fillOmitted(attr, asMember(element), subs, byIdentity)
 	}
 	return candidate
-}
-
-func immutableSubs(subs []*core.Attribute) []*core.Attribute {
-	return slices.DeleteFunc(slices.Clone(subs), func(sub *core.Attribute) bool { return sub.Mutability != core.MutabilityImmutable })
 }
 
 func fillOmitted(attr *core.Attribute, member map[string]any, subs []*core.Attribute, stored map[string]map[string]any) {

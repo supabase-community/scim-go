@@ -16,6 +16,8 @@ var (
 	inferredDecimal = core.NewAttribute("", core.TypeDecimal)
 )
 
+type predicate func(map[string]any) bool
+
 type matcher struct {
 	attr    *core.Attribute
 	clauses *int
