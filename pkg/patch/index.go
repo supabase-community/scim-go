@@ -39,7 +39,7 @@ func (ix *index) fresh(stored, candidates []any) []any {
 		if !ix.contains(candidate) {
 			return false
 		}
-		if value.Primary(candidate) {
+		if value.Primary(candidate) && ix.attr.SubAttribute("primary") != nil {
 			ix.promote(stored, candidate)
 		}
 		return true

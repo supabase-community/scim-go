@@ -106,6 +106,15 @@ func TestApplyAddSkipsAnElementAlreadyPresentByValueCaseInsensitively(t *testing
 	assert.Len(t, item["members"], 1)
 }
 
+// RFC 7644 Section 3.5.2: only an attribute with a "primary" sub-attribute has a primary value to promote.
+func TestApplyAddOfAPresentMemberAsPrimaryLeavesMembersUnchanged(t *testing.T) {
+	item := core.Object{"members": []any{map[string]any{"value": "u-1"}, map[string]any{"value": "u-2"}}}
+
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpAdd, "members", `[{"value":"u-1","primary":true}]`)))
+
+	assert.Equal(t, []any{map[string]any{"value": "u-1"}, map[string]any{"value": "u-2"}}, item["members"])
+}
+
 // RFC 7643 Section 2.4: the same "value" MAY repeat under a different "type", so adding one is not a no-op.
 func TestApplyAddDoesNotSkipTheSameValueUnderADifferentType(t *testing.T) {
 	item := core.Object{"emails": []any{map[string]any{"value": "a@b.com", "type": "work"}}}
