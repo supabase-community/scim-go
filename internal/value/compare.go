@@ -37,7 +37,7 @@ func Fold(attribute *core.Attribute, value any) any {
 }
 
 func Equal(attribute *core.Attribute, a, b any) bool {
-	if order, ok := Compare(Fold(attribute, typed(attribute, a)), Fold(attribute, typed(attribute, b))); ok {
+	if order, ok := Compare(canonical(attribute, a), canonical(attribute, b)); ok {
 		return order == 0
 	}
 	return reflect.DeepEqual(a, b)
@@ -84,6 +84,10 @@ func Compare(a, b any) (int, bool) {
 		return x.Compare(y), true
 	}
 	return 0, false
+}
+
+func canonical(attribute *core.Attribute, value any) any {
+	return Fold(attribute, typed(attribute, value))
 }
 
 func typed(attribute *core.Attribute, value any) any {

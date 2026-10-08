@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 )
@@ -34,7 +35,7 @@ func compositeIdentity(attribute *core.Attribute, element core.Object) string {
 	folded := make([]any, 0, len(attribute.SubAttributes))
 	for _, sub := range attribute.SubAttributes {
 		if sub.Mutability == core.MutabilityReadWrite && !Hidden(nil, sub) && !strings.EqualFold(sub.Name, "primary") {
-			folded = append(folded, Fold(sub, element.Get(sub.Name)))
+			folded = append(folded, canonical(sub, element.Get(sub.Name)))
 		}
 	}
 	if len(folded) == 0 {
@@ -55,6 +56,12 @@ func identityKey(values []any) string {
 			raw = strconv.AppendBool(raw, item)
 		case json.Number:
 			raw = append(raw, item...)
+		case float64:
+			raw = strconv.AppendFloat(raw, normalizeZero(item), 'g', -1, 64)
+		case int64:
+			raw = strconv.AppendInt(raw, item, 10)
+		case time.Time:
+			raw = item.UTC().AppendFormat(raw, time.RFC3339Nano)
 		default:
 			encoded, _ := json.Marshal(item)
 			raw = append(raw, encoded...)

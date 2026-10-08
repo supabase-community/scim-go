@@ -1,6 +1,7 @@
 package value_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -48,6 +49,23 @@ func TestIdentity(t *testing.T) {
 			core.NewAttribute("code", core.TypeString).AsImmutable(),
 		)
 		assert.Equal(t, value.Identity(attribute, core.Object{"serial": "s-1", "code": "A"}), value.Identity(attribute, core.Object{"serial": "s-1", "code": "B"}))
+	})
+
+	t.Run("compares a decimal sub-attribute by value", func(t *testing.T) {
+		attribute := core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("n", core.TypeDecimal),
+		)
+		for _, pair := range [][2]json.Number{{"0", "-0"}, {"1", "1.0"}, {"1", "1e0"}} {
+			assert.Equal(t, value.Identity(attribute, core.Object{"n": pair[0]}), value.Identity(attribute, core.Object{"n": pair[1]}))
+		}
+		assert.NotEqual(t, value.Identity(attribute, core.Object{"n": json.Number("1")}), value.Identity(attribute, core.Object{"n": json.Number("2")}))
+	})
+
+	t.Run("compares a dateTime sub-attribute by instant", func(t *testing.T) {
+		attribute := core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("when", core.TypeDateTime),
+		)
+		assert.Equal(t, value.Identity(attribute, core.Object{"when": "2026-01-01T12:00:00Z"}), value.Identity(attribute, core.Object{"when": "2026-01-01T13:00:00+01:00"}))
 	})
 }
 
