@@ -56,7 +56,10 @@ func Match(op filter.Operator, got, want any) bool {
 		return substring(op, got, want)
 	}
 	order, ok := Compare(got, want)
-	return ok && holds(op, order)
+	if !ok {
+		return op == filter.OpNotEquals && IsUnassigned(got)
+	}
+	return holds(op, order)
 }
 
 func Compare(a, b any) (int, bool) {

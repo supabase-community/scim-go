@@ -50,6 +50,9 @@ func TestApplyValuePathComparisonMatrix(t *testing.T) {
 
 		{"native int matches", map[string]any{"score": 5}, `score eq 5`, true},
 		{"nil value never matches", map[string]any{"value": nil}, `value eq "x"`, false},
+		{"ne matches an unassigned value", map[string]any{"score": json.Number("5")}, `value ne "x"`, true},
+		{"eq matches an empty string", map[string]any{"value": ""}, `value eq ""`, true},
+		{"ne misses an equal empty string", map[string]any{"value": ""}, `value ne ""`, false},
 	}
 
 	for _, tc := range cases {

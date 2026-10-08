@@ -1366,19 +1366,22 @@ func TestRFC7644Filtering(t *testing.T) {
 	})
 
 	// RFC 7643 Section 2.5: unassigned attributes and the null value SHALL be considered equivalent.
-	t.Run("filters with eq null and ne null as unassigned and assigned", func(t *testing.T) {
+	t.Run("filters with eq null and ne null as unassigned and assigned, and ne a value as including unassigned", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
 		create(t, srv, &core.User{UserName: "alice", NickName: "al", Active: &active, Emails: []core.Email{{Value: "alice@example.com"}}})
 		create(t, srv, &core.User{UserName: "bob"})
 
 		for filter, want := range map[string]string{
-			`nickName eq null`:     "bob",
-			`nickName ne null`:     "alice",
-			`active eq null`:       "bob",
-			`emails eq null`:       "bob",
-			`emails ne null`:       "alice",
-			`emails.value eq null`: "bob",
+			`nickName eq null`:                    "bob",
+			`nickName ne null`:                    "alice",
+			`active eq null`:                      "bob",
+			`emails eq null`:                      "bob",
+			`emails ne null`:                      "alice",
+			`emails.value eq null`:                "bob",
+			`nickName ne "al"`:                    "bob",
+			`active ne true`:                      "bob",
+			`emails.value ne "alice@example.com"`: "bob",
 		} {
 			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
 			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))

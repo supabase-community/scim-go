@@ -122,6 +122,9 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 	return func(element any) bool {
 		got := field(element, path.Name)
 		typed := inferred(got)
+		if got == nil {
+			typed = inferred(want)
+		}
 		expected, ok := literal(typed, op, want)
 		actual, _ := typed.Coerce(got)
 		return ok && value.Match(op, value.Fold(typed, actual), expected)

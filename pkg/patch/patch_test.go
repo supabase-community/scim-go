@@ -629,6 +629,20 @@ func TestApplyValuePathNullFilter(t *testing.T) {
 	assert.Equal(t, "work", emails[0].(map[string]any)["type"])
 }
 
+// RFC 7643 Section 2.5: an unassigned attribute is null, which is not identical to the operator value.
+func TestApplyValuePathNotEqualsMatchesUnassignedWithoutSchemas(t *testing.T) {
+	item := map[string]any{"emails": []any{
+		map[string]any{"type": "work", "value": "w@x"},
+		map[string]any{"value": "u@x"},
+	}}
+
+	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[type ne "work"]`, "")))
+
+	emails := item["emails"].([]any)
+	require.Len(t, emails, 1)
+	assert.Equal(t, "work", emails[0].(map[string]any)["type"])
+}
+
 func TestApplyValuePathNumericFilterNativeInt(t *testing.T) {
 	item := map[string]any{"scores": []any{
 		map[string]any{"kind": "a", "n": 10},
