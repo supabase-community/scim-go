@@ -48,7 +48,7 @@ func (a AttributeType) coerce(value any) (any, bool) {
 	return nil, false
 }
 
-// RFC 7643 Section 2.3.5: an xsd:dateTime time zone offset is optional, absent is read as UTC.
+// RFC 7643 Section 2.3.5: a DateTime is an xsd:dateTime, whose time zone offset is optional.
 func dateTime(s string) (any, bool) {
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
