@@ -74,12 +74,18 @@ func (p Projection) Returns(name string) bool {
 
 // Written marks the attributes a POST or PUT body specified, per RFC 7643, Section 7.
 func (p Projection) Written(document core.Object) Projection {
+	if !returnsOnRequest(p.schemas) {
+		return p
+	}
 	p.written = p.namesIn(document, p.written)
 	return p
 }
 
 // Patched marks the attributes PATCH operations specified, per RFC 7643, Section 7.
 func (p Projection) Patched(operations []patch.Operation) Projection {
+	if !returnsOnRequest(p.schemas) {
+		return p
+	}
 	for _, op := range operations {
 		if op.Path == "" {
 			document, _ := decode.Object(op.Value)
@@ -357,6 +363,15 @@ func alwaysIn(attribute *core.Attribute, v any) (any, bool) {
 func returnsAlways(attribute *core.Attribute) bool {
 	return !value.Hidden(nil, attribute) && slices.ContainsFunc(attribute.SubAttributes, func(sub *core.Attribute) bool {
 		return sub.Returned == core.ReturnedAlways
+	})
+}
+
+func returnsOnRequest(schemas core.Schemas) bool {
+	onRequest := func(attribute *core.Attribute) bool { return attribute.Returned == core.ReturnedRequest }
+	return slices.ContainsFunc(schemas, func(schema *core.Schema) bool {
+		return slices.ContainsFunc(schema.Attributes, func(attribute *core.Attribute) bool {
+			return onRequest(attribute) || slices.ContainsFunc(attribute.SubAttributes, onRequest)
+		})
 	})
 }
 

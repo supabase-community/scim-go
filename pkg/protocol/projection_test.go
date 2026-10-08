@@ -246,6 +246,25 @@ func TestProjectionReturnsAnExtensionAttribute(t *testing.T) {
 	assert.True(t, projection.Returns("bogus"))
 }
 
+// RFC 7643 Section 7: a "request" attribute is returned when the client wrote it.
+func TestProjectionReturnsAWrittenExtensionRequestAttribute(t *testing.T) {
+	schemas := core.Schemas{
+		core.NewSchema(core.SchemaUser).With(core.UserAttributes()...),
+		core.NewSchema(core.SchemaEnterpriseUser).With(core.NewAttribute("badge", core.TypeString).ReturnedAs(core.ReturnedRequest)),
+	}
+	document := core.Object{"userName": "bjensen", string(core.SchemaEnterpriseUser): map[string]any{"badge": "b1"}}
+	projection, err := protocol.ParseProjection(url.Values{}, schemas)
+	require.NoError(t, err)
+
+	written, err := json.Marshal(projection.Written(document).Of(document))
+	require.NoError(t, err)
+	unwritten, err := json.Marshal(projection.Of(document))
+	require.NoError(t, err)
+
+	assert.Contains(t, string(written), `"badge":"b1"`)
+	assert.NotContains(t, string(unwritten), `"badge"`)
+}
+
 func TestProjectionFillsSchemasAndResourceType(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString)),
