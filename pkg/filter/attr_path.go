@@ -17,19 +17,6 @@ func NewAttrPath(text string) (AttrPath, error) {
 	return splitAttrPath(raw.(string)), nil
 }
 
-func splitAttrPath(raw string) AttrPath {
-	var path AttrPath
-	if i := strings.LastIndex(raw, ":"); i >= 0 {
-		path.URI, raw = raw[:i], raw[i+1:]
-	}
-	if i := strings.IndexByte(raw, '.'); i >= 0 {
-		path.Name, path.SubAttribute = raw[:i], raw[i+1:]
-	} else {
-		path.Name = raw
-	}
-	return path
-}
-
 func (p AttrPath) String() string {
 	s := p.Name
 	if p.SubAttribute != "" {
@@ -46,4 +33,17 @@ func (p AttrPath) Key() string {
 		return strings.ToLower(p.Name)
 	}
 	return strings.ToLower(p.Name + "." + p.SubAttribute)
+}
+
+func splitAttrPath(raw string) AttrPath {
+	var path AttrPath
+	if i := strings.LastIndex(raw, ":"); i >= 0 {
+		path.URI, raw = raw[:i], raw[i+1:]
+	}
+	if i := strings.IndexByte(raw, '.'); i >= 0 {
+		path.Name, path.SubAttribute = raw[:i], raw[i+1:]
+	} else {
+		path.Name = raw
+	}
+	return path
 }

@@ -19,6 +19,8 @@ const (
 	schemeWithRealm         = `Bearer realm="scim"`
 )
 
+type reporterKey struct{}
+
 // TokenValidator resolves an RFC 6750 bearer token into a context to continue with, or an error.
 type TokenValidator func(ctx context.Context, token string) (context.Context, error)
 
@@ -64,8 +66,6 @@ func requireBearerToken(w http.ResponseWriter, r *http.Request, next http.Handle
 func challenge(w http.ResponseWriter, errorCode, description string) {
 	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`%s, error=%q, error_description=%q`, schemeWithRealm, errorCode, description))
 }
-
-type reporterKey struct{}
 
 func withReporter(r *http.Request, fn func(*http.Request, error)) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), reporterKey{}, fn))

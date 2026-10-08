@@ -25,6 +25,13 @@ type Projection struct {
 
 type projectionKey struct{}
 
+type projected struct {
+	projection Projection
+	resource   any
+}
+
+type names []string
+
 // ParseProjection reads "attributes"/"excludedAttributes"; RFC 7644 Section 3.9: they are mutually exclusive.
 func ParseProjection(values url.Values, schemas core.Schemas) (Projection, error) {
 	return newProjection(schemas, listParam(values, "attributes"), listParam(values, "excludedAttributes"))
@@ -220,11 +227,6 @@ func (p Projection) write(written names, raw string) names {
 	return written
 }
 
-type projected struct {
-	projection Projection
-	resource   any
-}
-
 func (v projected) MarshalJSON() ([]byte, error) {
 	document, err := core.NewObject(v.resource)
 	if err != nil {
@@ -236,7 +238,15 @@ func (v projected) MarshalJSON() ([]byte, error) {
 	return json.Marshal(document)
 }
 
-type names []string
+func (n names) covers(name string) bool {
+	return slices.ContainsFunc(n, func(e string) bool {
+		return name == e || strings.HasPrefix(name, e+":") || strings.HasPrefix(name, e+".")
+	})
+}
+
+func (n names) within(name string) bool {
+	return slices.ContainsFunc(n, func(e string) bool { return strings.HasPrefix(e, name+".") })
+}
 
 func qualify(schemas core.Schemas, list []string) (names, error) {
 	if len(list) == 0 {
@@ -275,16 +285,6 @@ func qualifyName(schemas core.Schemas, raw string) (string, bool, error) {
 		qualified += "." + strings.ToLower(path.SubAttribute)
 	}
 	return qualified, true, nil
-}
-
-func (n names) covers(name string) bool {
-	return slices.ContainsFunc(n, func(e string) bool {
-		return name == e || strings.HasPrefix(name, e+":") || strings.HasPrefix(name, e+".")
-	})
-}
-
-func (n names) within(name string) bool {
-	return slices.ContainsFunc(n, func(e string) bool { return strings.HasPrefix(e, name+".") })
 }
 
 func checkAttributes(attributes, excluded []string) error {
