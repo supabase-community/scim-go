@@ -265,6 +265,23 @@ func TestProjectionReturnsAWrittenExtensionRequestAttribute(t *testing.T) {
 	assert.NotContains(t, string(unwritten), `"badge"`)
 }
 
+// RFC 7643 Section 7: a "request" sub-attribute is returned when the client wrote it.
+func TestProjectionReturnsAWrittenRequestSubAttribute(t *testing.T) {
+	schemas := core.Schemas{
+		core.NewSchema(core.SchemaUser).With(core.NewAttribute("credential", core.TypeComplex).With(
+			core.NewAttribute("hint", core.TypeString).ReturnedAs(core.ReturnedRequest),
+		)),
+	}
+	document := core.Object{"credential": map[string]any{"hint": "h1"}}
+	projection, err := protocol.ParseProjection(url.Values{}, schemas)
+	require.NoError(t, err)
+
+	written, err := json.Marshal(projection.Written(document).Of(document))
+	require.NoError(t, err)
+
+	assert.Contains(t, string(written), `"hint":"h1"`)
+}
+
 func TestProjectionFillsSchemasAndResourceType(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("userName", core.TypeString)),
