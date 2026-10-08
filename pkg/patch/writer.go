@@ -17,8 +17,7 @@ type merger struct {
 
 // RFC 7643 Section 7: an immutable complex attribute SHALL NOT be updated, including through its sub-attributes.
 type parentGate struct {
-	attr     *core.Attribute
-	assigned bool
+	attr *core.Attribute
 }
 
 func newMerger(holder core.Object, parent *core.Attribute, kind Op) merger {
@@ -26,7 +25,10 @@ func newMerger(holder core.Object, parent *core.Attribute, kind Op) merger {
 }
 
 func newParentGate(attr *core.Attribute, holder core.Object) parentGate {
-	return parentGate{attr: attr, assigned: len(holder) > 0}
+	if attr == nil || attr.MultiValued || attr.Mutability != core.MutabilityImmutable || len(holder) == 0 {
+		return parentGate{}
+	}
+	return parentGate{attr: attr}
 }
 
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
@@ -60,24 +62,21 @@ func (m merger) field(key, name string, incoming any) error {
 }
 
 func (g parentGate) check(sub *core.Attribute, before, final any) error {
-	if g.attr == nil || g.attr.MultiValued || g.attr.Mutability != core.MutabilityImmutable {
+	if g.attr == nil || value.Equal(sub, before, final) {
 		return nil
 	}
-	return gateUnlessUnchanged(g.attr, g.assigned, value.Equal(sub, before, final))
+	return errImmutable(g.attr)
 }
 
 // RFC 7643 Section 7: an assigned immutable sub-attribute rejects any write that would change it.
 func gateImmutableWrite(sub *core.Attribute, before, candidate any) error {
-	if sub.Mutability != core.MutabilityImmutable {
+	if sub.Mutability != core.MutabilityImmutable || value.IsUnassigned(before) || value.Equal(sub, before, candidate) {
 		return nil
 	}
-	return gateUnlessUnchanged(sub, !value.IsUnassigned(before), value.Equal(sub, before, candidate))
+	return errImmutable(sub)
 }
 
-func gateUnlessUnchanged(attr *core.Attribute, assigned, unchanged bool) error {
-	if attr.Mutability != core.MutabilityImmutable || !assigned || unchanged {
-		return nil
-	}
+func errImmutable(attr *core.Attribute) error {
 	return scimerrors.ErrMutability(strconv.Quote(attr.Name) + " is immutable")
 }
 
