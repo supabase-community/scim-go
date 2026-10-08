@@ -2,6 +2,7 @@ package value
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 )
@@ -42,9 +43,9 @@ func ByIdentity(attribute *core.Attribute, existing any) map[string]map[string]a
 }
 
 func compositeIdentity(attribute *core.Attribute, element core.Object) string {
-	folded := []any{}
+	folded := make([]any, 0, len(attribute.SubAttributes))
 	for _, sub := range attribute.SubAttributes {
-		if sub.Mutability == core.MutabilityReadWrite && !Hidden(nil, sub) {
+		if sub.Mutability == core.MutabilityReadWrite && !Hidden(nil, sub) && !strings.EqualFold(sub.Name, "primary") {
 			folded = append(folded, Fold(sub, element.Get(sub.Name)))
 		}
 	}

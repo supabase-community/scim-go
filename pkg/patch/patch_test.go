@@ -124,6 +124,41 @@ func TestApplyAddOfADuplicatedValueAsPrimaryPromotesOneCopy(t *testing.T) {
 	assert.Equal(t, []any{map[string]any{"value": "a", "type": "work", "primary": true}, map[string]any{"value": "a", "type": "work"}}, item["emails"])
 }
 
+// RFC 7644 Section 3.5.2: adding a stored value as primary promotes it instead of storing it twice.
+func TestApplyAddOfAStoredValueWithoutAValueSubAttributeAsPrimary(t *testing.T) {
+	item := core.Object{"addresses": []any{
+		map[string]any{"streetAddress": "1", "primary": true},
+		map[string]any{"streetAddress": "2"},
+	}}
+
+	require.NoError(t, apply(item, []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)},
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"2","primary":true}]`),
+	))
+
+	assert.Equal(t, []any{
+		map[string]any{"streetAddress": "1", "primary": false},
+		map[string]any{"streetAddress": "2", "primary": true},
+	}, item["addresses"])
+}
+
+// RFC 7644 Section 3.5.2.1: a value demoted by an earlier operation is already present for a later one.
+func TestApplyAddOfAValueDemotedByAnEarlierOperation(t *testing.T) {
+	item := core.Object{"addresses": []any{
+		map[string]any{"streetAddress": "1", "primary": true},
+		map[string]any{"streetAddress": "2", "primary": true},
+	}}
+
+	require.NoError(t, apply(item, []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)},
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"1","primary":true}]`),
+		operation(patch.OpAdd, "addresses", `[{"streetAddress":"2","primary":false}]`),
+	))
+
+	assert.Equal(t, []any{
+		map[string]any{"streetAddress": "1", "primary": true},
+		map[string]any{"streetAddress": "2", "primary": false},
+	}, item["addresses"])
+}
+
 // RFC 7643 Section 7: an immutable attribute SHALL NOT be updated, including by promoting a stored value to primary.
 func TestApplyAddPromotingAStoredValueOfAnImmutableAttribute(t *testing.T) {
 	schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
