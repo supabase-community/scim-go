@@ -2409,6 +2409,15 @@ func TestRFC7644Attributes(t *testing.T) {
 		}
 	})
 
+	// RFC 7643 Section 2.5: unassigned attributes MAY be omitted.
+	t.Run("omits elements that have none of the requested sub-attributes", func(t *testing.T) {
+		_, body := get(t, "/Users/"+id+"?attributes=emails.display")
+		assert.NotContains(t, body, "emails")
+
+		_, body = get(t, "/Users/"+id+"?attributes=emails.value")
+		assert.Equal(t, []any{map[string]any{"value": "bjensen@example.com"}}, body["emails"])
+	})
+
 	// RFC 7644 Section 3.9: clients MAY request a partial representation on any operation that returns a resource.
 	t.Run("shapes the resource returned by a replace", func(t *testing.T) {
 		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id+"?attributes=userName",

@@ -177,22 +177,17 @@ func (p Projection) value(attribute *core.Attribute, name string, value any) (an
 	if len(attribute.SubAttributes) == 0 {
 		return value, true
 	}
-	switch v := value.(type) {
-	case map[string]any:
-		p.object(attribute, name, v)
-		return v, len(v) > 0
-	case []any:
-		for _, element := range v {
-			if object, ok := element.(map[string]any); ok {
-				p.object(attribute, name, object)
-			}
-		}
-		return v, true
+	if list, ok := value.([]any); ok {
+		return keepEach(list, func(element any) (any, bool) { return p.object(attribute, name, element) })
 	}
-	return value, true
+	return p.object(attribute, name, value)
 }
 
-func (p Projection) object(attribute *core.Attribute, parentName string, object map[string]any) {
+func (p Projection) object(attribute *core.Attribute, parentName string, value any) (any, bool) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return value, true
+	}
 	prune(object, func(key string, value any) (any, bool) {
 		sub := attribute.SubAttribute(key)
 		if sub == nil {
@@ -200,6 +195,7 @@ func (p Projection) object(attribute *core.Attribute, parentName string, object 
 		}
 		return p.value(sub, parentName+"."+strings.ToLower(sub.Name), value)
 	})
+	return object, len(object) > 0
 }
 
 func (p Projection) namesIn(document core.Object, written names) names {
@@ -325,19 +321,23 @@ func prune(object map[string]any, project func(key string, value any) (any, bool
 	}
 }
 
+func keepEach(list []any, project func(element any) (any, bool)) ([]any, bool) {
+	kept := list[:0]
+	for _, element := range list {
+		if projected, ok := project(element); ok {
+			kept = append(kept, projected)
+		}
+	}
+	return kept, len(kept) > 0
+}
+
 // RFC 7643 Section 7: an "always" sub-attribute is returned even when its parent is left out.
 func always(attribute *core.Attribute, v any) (any, bool) {
 	list, ok := v.([]any)
 	if !returnsAlways(attribute) || !ok {
 		return alwaysIn(attribute, v)
 	}
-	elements := list[:0]
-	for _, element := range list {
-		if object, ok := alwaysIn(attribute, element); ok {
-			elements = append(elements, object)
-		}
-	}
-	return elements, len(elements) > 0
+	return keepEach(list, func(element any) (any, bool) { return alwaysIn(attribute, element) })
 }
 
 func alwaysIn(attribute *core.Attribute, v any) (any, bool) {
