@@ -51,7 +51,7 @@ func (ix *index) promote(stored []any, candidate any) {
 	id := value.Identity(ix.attr, asMember(candidate))
 	ix.primaries = ix.primaries[:0]
 	for _, element := range stored {
-		if value.Identity(ix.attr, asMember(element)) != id {
+		if len(ix.primaries) > 0 || value.Identity(ix.attr, asMember(element)) != id {
 			setPrimaryFalse(element)
 			continue
 		}

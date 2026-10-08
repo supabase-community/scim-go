@@ -115,6 +115,15 @@ func TestApplyAddOfAPresentMemberAsPrimaryLeavesMembersUnchanged(t *testing.T) {
 	assert.Equal(t, []any{map[string]any{"value": "u-1"}, map[string]any{"value": "u-2"}}, item["members"])
 }
 
+// RFC 7644 Section 3.5.2: setting "primary" to "true" sets it to "false" for every other value of the attribute.
+func TestApplyAddOfADuplicatedValueAsPrimaryPromotesOneCopy(t *testing.T) {
+	item := core.Object{"emails": []any{map[string]any{"value": "a", "type": "work"}, map[string]any{"value": "a", "type": "work"}}}
+
+	require.NoError(t, apply(item, []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}, operation(patch.OpAdd, "emails", `[{"value":"a","type":"work","primary":true}]`)))
+
+	assert.Equal(t, []any{map[string]any{"value": "a", "type": "work", "primary": true}, map[string]any{"value": "a", "type": "work", "primary": false}}, item["emails"])
+}
+
 // RFC 7643 Section 2.4: the same "value" MAY repeat under a different "type", so adding one is not a no-op.
 func TestApplyAddDoesNotSkipTheSameValueUnderADifferentType(t *testing.T) {
 	item := core.Object{"emails": []any{map[string]any{"value": "a@b.com", "type": "work"}}}
