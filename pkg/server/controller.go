@@ -2,6 +2,8 @@ package server
 
 import (
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -115,7 +117,7 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	req.ID, req.Version = r.PathValue("id"), c.ifMatch(r)
+	req.ID, req.Versions = r.PathValue("id"), c.ifMatch(r)
 	projection = projection.Written(req.Attributes)
 	replaced, err := c.service.Replace(r.Context(), req)
 	if err != nil {
@@ -137,7 +139,7 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	req.ID, req.Version = r.PathValue("id"), c.ifMatch(r)
+	req.ID, req.Versions = r.PathValue("id"), c.ifMatch(r)
 	projection = projection.Patched(req.Operations)
 	patched, err := c.service.Patch(r.Context(), req)
 	if err != nil {
@@ -157,7 +159,7 @@ func (c *controller[T]) sendPatched(w http.ResponseWriter, patched T, projection
 }
 
 func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
-	if err := c.service.Delete(r.Context(), &protocol.DeleteRequest{ID: r.PathValue("id"), Version: c.ifMatch(r)}); err != nil {
+	if err := c.service.Delete(r.Context(), &protocol.DeleteRequest{ID: r.PathValue("id"), Versions: c.ifMatch(r)}); err != nil {
 		return protocol.SendError(w, err)
 	}
 	return protocol.Send(w, http.StatusNoContent, nil)
@@ -190,10 +192,34 @@ func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
 	}
 }
 
-func (c *controller[T]) ifMatch(r *http.Request) string {
-	match := r.Header.Get("If-Match")
-	if !c.config.SupportsVersioning() || match == "*" {
-		return ""
+func (c *controller[T]) ifMatch(r *http.Request) []string {
+	lines := r.Header.Values("If-Match")
+	if !c.config.SupportsVersioning() || slices.Equal(lines, []string{"*"}) {
+		return nil
 	}
-	return match
+	return entityTags(strings.Join(lines, ","))
+}
+
+// RFC 7232 Section 3.1: If-Match = "*" / 1#entity-tag
+func entityTags(field string) []string {
+	var tags []string
+	for field = strings.TrimLeft(field, " \t,"); field != ""; field = strings.TrimLeft(field, " \t,") {
+		end := tagEnd(field)
+		tags = append(tags, field[:end])
+		field = field[end:]
+	}
+	return tags
+}
+
+func tagEnd(field string) int {
+	opaque := strings.TrimPrefix(field, "W/")
+	if strings.HasPrefix(opaque, `"`) {
+		if end := strings.IndexByte(opaque[1:], '"'); end >= 0 {
+			return len(field) - len(opaque) + end + 2
+		}
+	}
+	if end := strings.IndexByte(field, ','); end >= 0 {
+		return end
+	}
+	return len(field)
 }

@@ -9,7 +9,7 @@ import (
 // ReplaceRequest is the body of a PUT request, per RFC 7644, Section 3.5.1.
 type ReplaceRequest struct {
 	ID         string
-	Version    string
+	Versions   []string
 	Attributes core.Object
 }
 

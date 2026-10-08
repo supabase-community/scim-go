@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 
 	"github.com/supabase-community/scim-go/internal/decode"
 	"github.com/supabase-community/scim-go/internal/value"
@@ -76,28 +77,28 @@ func (s *service[T]) Create(ctx context.Context, document core.Object) (T, error
 }
 
 func (s *service[T]) Replace(ctx context.Context, req *protocol.ReplaceRequest) (T, error) {
-	return s.write(ctx, req.ID, req.Version, func(before snapshot[T]) (revision[T], error) {
+	return s.write(ctx, req.ID, req.Versions, func(before snapshot[T]) (revision[T], error) {
 		return s.replaced(before.object, req)
 	})
 }
 
 func (s *service[T]) Delete(ctx context.Context, req *protocol.DeleteRequest) error {
-	current, err := s.current(ctx, req.ID, req.Version)
+	current, err := s.current(ctx, req.ID, req.Versions)
 	if err != nil {
 		return err
 	}
-	return conflict(req.Version, s.repo.Delete(ctx, current))
+	return conflict(req.Versions, s.repo.Delete(ctx, current))
 }
 
 func (s *service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, error) {
-	return s.write(ctx, req.ID, req.Version, func(before snapshot[T]) (revision[T], error) {
+	return s.write(ctx, req.ID, req.Versions, func(before snapshot[T]) (revision[T], error) {
 		return s.patched(before, req)
 	})
 }
 
-func (s *service[T]) write(ctx context.Context, id, version string, apply change[T]) (T, error) {
+func (s *service[T]) write(ctx context.Context, id string, versions []string, apply change[T]) (T, error) {
 	var zero T
-	current, err := s.current(ctx, id, version)
+	current, err := s.current(ctx, id, versions)
 	if err != nil {
 		return zero, err
 	}
@@ -112,10 +113,10 @@ func (s *service[T]) write(ctx context.Context, id, version string, apply change
 	if err != nil {
 		return zero, err
 	}
-	return s.save(ctx, version, current, next)
+	return s.save(ctx, versions, current, next)
 }
 
-func (s *service[T]) save(ctx context.Context, version string, current T, next revision[T]) (T, error) {
+func (s *service[T]) save(ctx context.Context, versions []string, current T, next revision[T]) (T, error) {
 	var zero T
 	if err := s.admit(ctx, next); err != nil {
 		return zero, err
@@ -123,16 +124,16 @@ func (s *service[T]) save(ctx context.Context, version string, current T, next r
 	common := next.resource.Common()
 	common.ID, common.Meta = current.Common().ID, current.Common().Meta
 	saved, err := s.repo.Update(ctx, next.resource)
-	return saved, conflict(version, err)
+	return saved, conflict(versions, err)
 }
 
 // RFC 7644 Section 3.14: a stale If-Match fails before any work; the repository rechecks the version on write.
-func (s *service[T]) current(ctx context.Context, id, version string) (T, error) {
+func (s *service[T]) current(ctx context.Context, id string, versions []string) (T, error) {
 	current, err := s.repo.Read(ctx, id)
 	if err != nil {
 		return current, err
 	}
-	if version != "" && current.Common().Meta.Version != version {
+	if len(versions) > 0 && !slices.Contains(versions, current.Common().Meta.Version) {
 		var zero T
 		return zero, scimerrors.ErrPreconditionFailed("resource has changed on the server")
 	}
@@ -192,8 +193,8 @@ func schemaURIsToAny(uris []core.SchemaURI) []any {
 	return ids
 }
 
-func conflict(version string, err error) error {
-	if version == "" && errors.Is(err, scimerrors.ErrPreconditionFailed("")) {
+func conflict(versions []string, err error) error {
+	if len(versions) == 0 && errors.Is(err, scimerrors.ErrPreconditionFailed("")) {
 		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
 	}
 	return err

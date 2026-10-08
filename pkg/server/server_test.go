@@ -2613,6 +2613,39 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 	})
 
+	// RFC 7232 Section 3.1: the condition holds if any entity-tag in the If-Match list matches.
+	t.Run("matches any ETag in an If-Match list", func(t *testing.T) {
+		for _, test := range []struct {
+			name   string
+			lines  func(etag string) []string
+			status int
+		}{
+			{"one line", func(etag string) []string { return []string{`W/"stale", ` + etag} }, http.StatusOK},
+			{"two lines", func(etag string) []string { return []string{`W/"stale"`, etag} }, http.StatusOK},
+			{"all stale", func(string) []string { return []string{`W/"a,b", W/"stale"`} }, http.StatusPreconditionFailed},
+			{"malformed", func(string) []string { return []string{`"open, bare`} }, http.StatusPreconditionFailed},
+		} {
+			srv := newTestServer(t)
+			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+			ifMatch := func(r *http.Request) *http.Request {
+				for _, line := range test.lines(etag) {
+					r.Header.Add("If-Match", line)
+				}
+				return r
+			}
+
+			request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				ifMatch,
+				WithRequestBody([]byte(`{"userName":"bjensen2"}`)),
+			)
+			response := Response(t, srv, request)
+
+			assert.Equal(t, test.status, response.StatusCode, test.name)
+		}
+	})
+
 	// RFC 7644 Section 3.12: 404 when the specified resource does not exist.
 	t.Run("replacing an unknown id returns 404", func(t *testing.T) {
 		srv := newTestServer(t)
