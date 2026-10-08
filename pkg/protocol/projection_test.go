@@ -173,6 +173,17 @@ func TestZeroProjection(t *testing.T) {
 	assert.JSONEq(t, `{"id":"2819c223","userName":"bjensen"}`, string(raw))
 }
 
+func TestProjectionWithEmptySchemas(t *testing.T) {
+	projection, err := protocol.ParseProjection(url.Values{}, core.Schemas{})
+	require.NoError(t, err)
+
+	raw, err := json.Marshal(projection.Of(map[string]any{"userName": "bjensen", "meta": map[string]any{}}))
+
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"meta":{},"userName":"bjensen"}`, string(raw))
+	assert.True(t, projection.Returns("userName"))
+}
+
 func TestProjectionReturns(t *testing.T) {
 	schemas := core.Schemas{core.NewSchema(core.SchemaGroup).With(core.GroupAttributes()...)}
 	group := map[string]any{"members": []any{map[string]any{"value": "2819c223", "type": "User"}}}

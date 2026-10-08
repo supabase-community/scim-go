@@ -57,7 +57,7 @@ func newProjection(schemas core.Schemas, attributes, excluded []string) (Project
 // Returns reports whether any part of an attribute, named as in RFC 7644 Section 3.10, can appear in a response.
 func (p Projection) Returns(name string) bool {
 	path, err := filter.NewAttrPath(name)
-	if err != nil || p.schemas == nil {
+	if err != nil || len(p.schemas) == 0 {
 		return true
 	}
 	uri := core.SchemaURI(path.URI)
@@ -97,7 +97,7 @@ func (p Projection) All[T any](resources []T) []json.Marshaler {
 }
 
 func (p Projection) fillResourceType(document map[string]any) {
-	if meta, ok := document["meta"].(map[string]any); ok && p.schemas != nil {
+	if meta, ok := document["meta"].(map[string]any); ok && len(p.schemas) > 0 {
 		if name, _ := meta["resourceType"].(string); name == "" {
 			meta["resourceType"] = p.schemas.Base().Name
 		}
@@ -106,7 +106,7 @@ func (p Projection) fillResourceType(document map[string]any) {
 
 // RFC 7643 Section 3: "schemas" is required and lists the base schema and each extension present.
 func (p Projection) fillSchemas(out map[string]any) {
-	if list, _ := out["schemas"].([]any); len(list) > 0 || p.schemas == nil {
+	if list, _ := out["schemas"].([]any); len(list) > 0 || len(p.schemas) == 0 {
 		return
 	}
 	uris := []any{string(p.schemas.Base().ID)}
@@ -119,7 +119,7 @@ func (p Projection) fillSchemas(out map[string]any) {
 }
 
 func (p Projection) project(key string, value any) (any, bool) {
-	if p.schemas == nil || key == "schemas" {
+	if len(p.schemas) == 0 || key == "schemas" {
 		return value, true
 	}
 	base := p.schemas.Base()
