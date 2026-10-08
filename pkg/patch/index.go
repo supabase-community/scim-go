@@ -34,8 +34,30 @@ func newIndex(attr *core.Attribute, existing []any) *index {
 	return ix
 }
 
-func (ix *index) fresh(candidates []any) []any {
-	return slices.DeleteFunc(slices.Clone(candidates), ix.contains)
+func (ix *index) fresh(stored, candidates []any) []any {
+	return slices.DeleteFunc(slices.Clone(candidates), func(candidate any) bool {
+		if !ix.contains(candidate) {
+			return false
+		}
+		if value.Primary(candidate) {
+			ix.promote(stored, candidate)
+		}
+		return true
+	})
+}
+
+// RFC 7644 Section 3.5.2: setting "primary" to "true" sets it to "false" for every other value of the attribute.
+func (ix *index) promote(stored []any, candidate any) {
+	id := value.Identity(ix.attr, asMember(candidate))
+	ix.primaries = ix.primaries[:0]
+	for _, element := range stored {
+		if value.Identity(ix.attr, asMember(element)) != id {
+			setPrimaryFalse(element)
+			continue
+		}
+		core.Object(asMember(element)).Set("primary", true)
+		ix.primaries = append(ix.primaries, element)
+	}
 }
 
 func (ix *index) add(stored []any) {

@@ -3783,6 +3783,40 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.True(t, *patched.Emails[1].Primary)
 	})
 
+	// RFC 7644 Section 3.5.2: setting a value's "primary" to "true" SHALL cause the server to set "primary" to "false" for any other values.
+	t.Run("makes a stored value primary when it is added again as primary", func(t *testing.T) {
+		primaries := func(emails []core.Email) []string {
+			values := []string{}
+			for _, email := range emails {
+				if email.Primary != nil && *email.Primary {
+					values = append(values, email.Value)
+				}
+			}
+			return values
+		}
+		stored := patch.Operation{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"c@example.com","type":"home","primary":true}]`)}
+		for _, test := range []struct {
+			name       string
+			operations []patch.Operation
+			want       string
+		}{
+			{"with a path", []patch.Operation{stored}, "c@example.com"},
+			{"without a path", []patch.Operation{{Op: patch.OpAdd, Value: json.RawMessage(`{"emails":[{"value":"c@example.com","type":"home","primary":true}]}`)}}, "c@example.com"},
+			{"then a new primary", []patch.Operation{stored, {Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"e@example.com","type":"other","primary":true}]`)}}, "e@example.com"},
+		} {
+			srv := newTestServer(t)
+			primary := true
+			id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{
+				{Value: "a@example.com", Type: "work", Primary: &primary},
+				{Value: "c@example.com", Type: "home"},
+			}})
+
+			patched := patchUser(t, srv, id, test.operations...)
+
+			assert.Equal(t, []string{test.want}, primaries(patched.Emails), test.name)
+		}
+	})
+
 	// RFC 7644 Section 3.5.2: the body of each request MAY contain multiple operations and SHALL be treated as atomic.
 	t.Run("leaves the resource unchanged when a later operation fails", func(t *testing.T) {
 		srv := newTestServer(t)

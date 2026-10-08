@@ -198,7 +198,7 @@ func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) any {
 	if kind != OpAdd || !t.attr.MultiValued || !ok || t.isListAdd(kind) {
 		return shapedValue
 	}
-	return newIndex(t.attr, existing).fresh(shapedValue.([]any))
+	return newIndex(t.attr, existing).fresh(existing, shapedValue.([]any))
 }
 
 // RFC 7644 Section 3.5.2: an operation that is not compatible with an attribute's mutability SHALL return an error.
@@ -364,7 +364,8 @@ func (t *target) isListAdd(kind Op) bool {
 }
 
 func (t *target) fresh(candidate any) []any {
-	return t.index(t.elements()).fresh(shaped(candidate, true).([]any))
+	elements := t.elements()
+	return t.index(elements).fresh(elements, shaped(candidate, true).([]any))
 }
 
 func (t *target) record(kind Op, added any) {
