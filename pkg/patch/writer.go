@@ -81,28 +81,28 @@ func errImmutable(attr *core.Attribute) error {
 }
 
 // RFC 7643 Section 2.5: the null value or an empty array SHALL be considered equivalent for a multi-valued attribute.
-func shaped(value any, multiValued bool) any {
+func shaped(incoming any, multiValued bool) any {
 	if !multiValued {
-		return value
+		return incoming
 	}
-	if value == nil {
+	if incoming == nil {
 		return []any{}
 	}
-	if list, ok := value.([]any); ok {
+	if list, ok := incoming.([]any); ok {
 		return list
 	}
-	return []any{value}
+	return []any{incoming}
 }
 
-func set(o core.Object, name string, value any, kind Op) {
-	o.Set(name, appended(o.Get(name), value, kind))
+func set(o core.Object, name string, incoming any, kind Op) {
+	o.Set(name, appended(o.Get(name), incoming, kind))
 }
 
-func appended(before, value any, kind Op) any {
+func appended(before, incoming any, kind Op) any {
 	if list, ok := before.([]any); kind == OpAdd && ok {
-		return append(list, shaped(value, true).([]any)...)
+		return append(list, shaped(incoming, true).([]any)...)
 	}
-	return value
+	return incoming
 }
 
 func child(o core.Object, name string) (core.Object, error) {

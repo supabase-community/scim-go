@@ -139,9 +139,9 @@ func (t *target) keeps(elements []any, matched []bool, incoming any) bool {
 	return false
 }
 
-func (t *target) demoteIfPromoted(kind Op, before []any, written func(int) bool, value any) {
+func (t *target) demoteIfPromoted(kind Op, before []any, written func(int) bool, incoming any) {
 	switch {
-	case !promotes(t.key(), value):
+	case !promotes(t.key(), incoming):
 		return
 	case t.isListAdd(kind):
 		t.demotePrimaries(before)
@@ -164,16 +164,16 @@ func (t *target) demotePrimaries(before []any) {
 	}
 }
 
-func (t *target) chargeOutput(count int, value any) error {
-	encoded, err := json.Marshal(value)
+func (t *target) chargeOutput(count int, incoming any) error {
+	encoded, err := json.Marshal(incoming)
 	if err != nil {
 		return scimerrors.ErrInternal("could not encode the request body")
 	}
 	return t.budget.chargeBytes(count * len(encoded))
 }
 
-func (t *target) put(holder core.Object, kind Op, value any) error {
-	values, isObject := value.(map[string]any)
+func (t *target) put(holder core.Object, kind Op, incoming any) error {
+	values, isObject := incoming.(map[string]any)
 	switch {
 	case t.key() == "":
 		return newMerger(holder, t.parent, kind).merge(values)
@@ -184,7 +184,7 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 		}
 		return newMerger(nested, t.attr, kind).merge(values)
 	}
-	shapedValue := t.dedupedAdd(holder, kind, shaped(value, t.attr.MultiValued))
+	shapedValue := t.dedupedAdd(holder, kind, shaped(incoming, t.attr.MultiValued))
 	if err := t.overwritable(holder, kind, shapedValue); err != nil {
 		return err
 	}
@@ -416,8 +416,8 @@ func (t *target) key() string {
 	return t.path.Name
 }
 
-func isObject(value any) bool {
-	_, ok := value.(map[string]any)
+func isObject(candidate any) bool {
+	_, ok := candidate.(map[string]any)
 	return ok
 }
 
@@ -444,8 +444,8 @@ func members(elements []any, matched []bool) ([]core.Object, error) {
 	return holders, nil
 }
 
-func eachSub(attr *core.Attribute, value any, visit func(sub *core.Attribute, held any) error) error {
-	switch v := value.(type) {
+func eachSub(attr *core.Attribute, held any, visit func(sub *core.Attribute, held any) error) error {
+	switch v := held.(type) {
 	case map[string]any:
 		return eachSubField(attr, v, visit)
 	case []any:

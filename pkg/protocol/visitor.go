@@ -18,40 +18,40 @@ func newVisitor[Output any](schemas core.Schemas, inner Evaluator[Output], inURI
 	return &visitor[Output]{schemas: schemas, inner: inner, inURI: inURI}
 }
 
-func (r *visitor[Output]) VisitEquals(path filter.AttrPath, value any) (Output, error) {
-	return r.compare(path, filter.OpEquals, value)
+func (r *visitor[Output]) VisitEquals(path filter.AttrPath, literal any) (Output, error) {
+	return r.compare(path, filter.OpEquals, literal)
 }
 
-func (r *visitor[Output]) VisitNotEquals(path filter.AttrPath, value any) (Output, error) {
-	return r.compare(path, filter.OpNotEquals, value)
+func (r *visitor[Output]) VisitNotEquals(path filter.AttrPath, literal any) (Output, error) {
+	return r.compare(path, filter.OpNotEquals, literal)
 }
 
-func (r *visitor[Output]) VisitContains(path filter.AttrPath, value any) (Output, error) {
-	return r.compare(path, filter.OpContains, value)
+func (r *visitor[Output]) VisitContains(path filter.AttrPath, literal any) (Output, error) {
+	return r.compare(path, filter.OpContains, literal)
 }
 
-func (r *visitor[Output]) VisitStartsWith(path filter.AttrPath, value any) (Output, error) {
-	return r.compare(path, filter.OpStartsWith, value)
+func (r *visitor[Output]) VisitStartsWith(path filter.AttrPath, literal any) (Output, error) {
+	return r.compare(path, filter.OpStartsWith, literal)
 }
 
-func (r *visitor[Output]) VisitEndsWith(path filter.AttrPath, value any) (Output, error) {
-	return r.compare(path, filter.OpEndsWith, value)
+func (r *visitor[Output]) VisitEndsWith(path filter.AttrPath, literal any) (Output, error) {
+	return r.compare(path, filter.OpEndsWith, literal)
 }
 
-func (r *visitor[Output]) VisitGreaterThan(path filter.AttrPath, value any) (Output, error) {
-	return r.compare(path, filter.OpGreaterThan, value)
+func (r *visitor[Output]) VisitGreaterThan(path filter.AttrPath, literal any) (Output, error) {
+	return r.compare(path, filter.OpGreaterThan, literal)
 }
 
-func (r *visitor[Output]) VisitGreaterThanEquals(path filter.AttrPath, value any) (Output, error) {
-	return r.compare(path, filter.OpGreaterThanEquals, value)
+func (r *visitor[Output]) VisitGreaterThanEquals(path filter.AttrPath, literal any) (Output, error) {
+	return r.compare(path, filter.OpGreaterThanEquals, literal)
 }
 
-func (r *visitor[Output]) VisitLessThan(path filter.AttrPath, value any) (Output, error) {
-	return r.compare(path, filter.OpLessThan, value)
+func (r *visitor[Output]) VisitLessThan(path filter.AttrPath, literal any) (Output, error) {
+	return r.compare(path, filter.OpLessThan, literal)
 }
 
-func (r *visitor[Output]) VisitLessThanEquals(path filter.AttrPath, value any) (Output, error) {
-	return r.compare(path, filter.OpLessThanEquals, value)
+func (r *visitor[Output]) VisitLessThanEquals(path filter.AttrPath, literal any) (Output, error) {
+	return r.compare(path, filter.OpLessThanEquals, literal)
 }
 
 func (r *visitor[Output]) VisitPresence(path filter.AttrPath) (Output, error) {

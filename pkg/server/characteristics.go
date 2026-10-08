@@ -79,8 +79,8 @@ func isMissing(attribute *core.Attribute, raw any) bool {
 
 func count(values []any, target any) int {
 	n := 0
-	for _, value := range values {
-		if value == target {
+	for _, item := range values {
+		if item == target {
 			n++
 		}
 	}

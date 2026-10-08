@@ -33,26 +33,26 @@ func writable(document, existing core.Object, schemas core.Schemas) core.Object 
 }
 
 func writableObject(lookup func(string) *core.Attribute, body, existing map[string]any) {
-	prune(body, func(key string, value any) (any, bool) {
+	prune(body, func(key string, item any) (any, bool) {
 		attribute := lookup(key)
 		switch {
 		case attribute == nil:
-			return value, true
+			return item, true
 		case attribute.Mutability == core.MutabilityReadOnly:
 			return nil, false
 		}
-		return writableValue(attribute, value, core.Object(existing).Get(key)), true
+		return writableValue(attribute, item, core.Object(existing).Get(key)), true
 	})
 	// RFC 7644 Section 3.5.1: readOnly values SHALL be ignored.
-	for key, value := range existing {
+	for key, item := range existing {
 		switch attribute := lookup(key); {
 		case attribute == nil:
 			continue
 		case attribute.Mutability == core.MutabilityReadOnly:
-			body[key] = value
+			body[key] = item
 		case attribute.Mutability == core.MutabilityImmutable && !attribute.Required:
 			if !core.Object(body).Has(key) {
-				body[key] = value
+				body[key] = item
 			}
 		}
 	}

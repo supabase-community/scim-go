@@ -57,19 +57,19 @@ func (p *patcher) write(root core.Object, kind Op, op Operation) error {
 	if len(op.Value) == 0 {
 		return scimerrors.ErrInvalidValue(`"value" is required for "add" and "replace"`)
 	}
-	value, err := decode.Value(op.Value)
+	decoded, err := decode.Value(op.Value)
 	if err != nil {
 		return invalidValue(err, `"value" is not valid JSON`)
 	}
-	return p.writeAt(root, path, kind, value)
+	return p.writeAt(root, path, kind, decoded)
 }
 
-func (p *patcher) writeAt(root core.Object, path filter.Path, kind Op, value any) error {
+func (p *patcher) writeAt(root core.Object, path filter.Path, kind Op, incoming any) error {
 	target, err := p.target(root, path)
 	if err != nil {
 		return err
 	}
-	return target.write(kind, value)
+	return target.write(kind, incoming)
 }
 
 func (p *patcher) remove(root core.Object, op Operation) error {
@@ -92,23 +92,23 @@ func (p *patcher) remove(root core.Object, op Operation) error {
 
 // RFC 7644 Section 3.5.2.1: if "path" is omitted, the target location is assumed to be the resource itself.
 func (p *patcher) mergeRoot(root core.Object, values map[string]any, kind Op) error {
-	for key, value := range values {
-		if err := p.mergeKey(root, key, value, kind); err != nil {
+	for key, incoming := range values {
+		if err := p.mergeKey(root, key, incoming, kind); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *patcher) mergeKey(root core.Object, key string, value any, kind Op) error {
+func (p *patcher) mergeKey(root core.Object, key string, incoming any, kind Op) error {
 	if schema := p.schemas.Lookup(core.SchemaURI(key)); schema != nil {
-		return p.mergeSchema(root, schema, value, kind)
+		return p.mergeSchema(root, schema, incoming, kind)
 	}
 	path := p.keyPath(key)
-	if strings.EqualFold(key, "schemas") || p.repeatsReadOnly(root, path, value) {
+	if strings.EqualFold(key, "schemas") || p.repeatsReadOnly(root, path, incoming) {
 		return nil
 	}
-	return p.writeAt(root, path, kind, value)
+	return p.writeAt(root, path, kind, incoming)
 }
 
 // RFC 7643 Section 7: readOnly means "The attribute SHALL NOT be modified."
@@ -117,8 +117,8 @@ func (p *patcher) repeatsReadOnly(root core.Object, path filter.Path, incoming a
 	return err == nil && attr.Mutability == core.MutabilityReadOnly && root.Has(path.Name) && value.Equal(attr, root.Get(path.Name), incoming)
 }
 
-func (p *patcher) mergeSchema(root core.Object, schema *core.Schema, value any, kind Op) error {
-	values, ok := value.(map[string]any)
+func (p *patcher) mergeSchema(root core.Object, schema *core.Schema, incoming any, kind Op) error {
+	values, ok := incoming.(map[string]any)
 	if !ok {
 		return scimerrors.ErrInvalidValue(strconv.Quote(string(schema.ID)) + " must be an object")
 	}

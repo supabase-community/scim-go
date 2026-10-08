@@ -131,22 +131,22 @@ func (p Projection) fillSchemas(out map[string]any) {
 	out["schemas"] = uris
 }
 
-func (p Projection) project(key string, value any) (any, bool) {
+func (p Projection) project(key string, item any) (any, bool) {
 	if len(p.schemas) == 0 {
-		return value, true
+		return item, true
 	}
 	base := p.schemas.Base()
 	if attribute, ok := p.schemas.Resolve("", key, ""); ok {
-		return p.value(attribute, qualifiedKey(base.ID, attribute.Name), value)
+		return p.value(attribute, qualifiedKey(base.ID, attribute.Name), item)
 	}
 	if extension := p.schemas.Lookup(core.SchemaURI(key)); p.schemas.IsExtension(extension) {
-		return p.extension(extension, value)
+		return p.extension(extension, item)
 	}
 	return nil, false
 }
 
-func (p Projection) extension(schema *core.Schema, value any) (any, bool) {
-	object, ok := value.(map[string]any)
+func (p Projection) extension(schema *core.Schema, item any) (any, bool) {
+	object, ok := item.(map[string]any)
 	if !ok {
 		return nil, false
 	}
@@ -183,30 +183,30 @@ func (p Projection) requested(name string) bool {
 	return (p.written.covers(name) || p.written.within(name)) && !p.excluded.covers(name)
 }
 
-func (p Projection) value(attribute *core.Attribute, name string, value any) (any, bool) {
+func (p Projection) value(attribute *core.Attribute, name string, item any) (any, bool) {
 	if !p.returns(attribute, name) {
-		return always(attribute, value)
+		return always(attribute, item)
 	}
 	if len(attribute.SubAttributes) == 0 {
-		return value, true
+		return item, true
 	}
-	if list, ok := value.([]any); ok {
+	if list, ok := item.([]any); ok {
 		return keepEach(list, func(element any) (any, bool) { return p.object(attribute, name, element) })
 	}
-	return p.object(attribute, name, value)
+	return p.object(attribute, name, item)
 }
 
-func (p Projection) object(attribute *core.Attribute, parentName string, value any) (any, bool) {
-	object, ok := value.(map[string]any)
+func (p Projection) object(attribute *core.Attribute, parentName string, item any) (any, bool) {
+	object, ok := item.(map[string]any)
 	if !ok {
-		return value, true
+		return item, true
 	}
-	prune(object, func(key string, value any) (any, bool) {
+	prune(object, func(key string, item any) (any, bool) {
 		sub := attribute.SubAttribute(key)
 		if sub == nil {
 			return nil, false
 		}
-		return p.value(sub, parentName+"."+strings.ToLower(sub.Name), value)
+		return p.value(sub, parentName+"."+strings.ToLower(sub.Name), item)
 	})
 	return object, len(object) > 0
 }
@@ -216,12 +216,12 @@ func (p Projection) tracksWrites() bool {
 }
 
 func (p Projection) namesIn(document core.Object, written names) names {
-	for key, value := range document {
+	for key, item := range document {
 		if p.schemas.Lookup(core.SchemaURI(key)) == nil {
 			written = p.write(written, key)
 			continue
 		}
-		body, _ := value.(map[string]any)
+		body, _ := item.(map[string]any)
 		for sub := range body {
 			written = p.write(written, key+":"+sub)
 		}
@@ -310,8 +310,8 @@ func invalidName() error {
 func listParam(values url.Values, name string) []string {
 	var list []string
 
-	for _, value := range values[name] {
-		for item := range strings.SplitSeq(value, ",") {
+	for _, raw := range values[name] {
+		for item := range strings.SplitSeq(raw, ",") {
 			if item = strings.TrimSpace(item); item != "" {
 				list = append(list, item)
 			}
@@ -320,9 +320,9 @@ func listParam(values url.Values, name string) []string {
 	return list
 }
 
-func prune(object map[string]any, project func(key string, value any) (any, bool)) {
-	for key, value := range object {
-		if projected, ok := project(key, value); ok {
+func prune(object map[string]any, project func(key string, item any) (any, bool)) {
+	for key, item := range object {
+		if projected, ok := project(key, item); ok {
 			object[key] = projected
 		} else {
 			delete(object, key)

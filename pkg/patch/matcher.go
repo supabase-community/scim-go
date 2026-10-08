@@ -50,40 +50,40 @@ func (m matcher) VisitNot(operand predicate) (predicate, error) {
 	return func(element any) bool { return !operand(element) }, nil
 }
 
-func (m matcher) VisitEquals(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpEquals, value)
+func (m matcher) VisitEquals(attr filter.AttrPath, literal any) (predicate, error) {
+	return m.leaf(attr, filter.OpEquals, literal)
 }
 
-func (m matcher) VisitNotEquals(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpNotEquals, value)
+func (m matcher) VisitNotEquals(attr filter.AttrPath, literal any) (predicate, error) {
+	return m.leaf(attr, filter.OpNotEquals, literal)
 }
 
-func (m matcher) VisitContains(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpContains, value)
+func (m matcher) VisitContains(attr filter.AttrPath, literal any) (predicate, error) {
+	return m.leaf(attr, filter.OpContains, literal)
 }
 
-func (m matcher) VisitStartsWith(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpStartsWith, value)
+func (m matcher) VisitStartsWith(attr filter.AttrPath, literal any) (predicate, error) {
+	return m.leaf(attr, filter.OpStartsWith, literal)
 }
 
-func (m matcher) VisitEndsWith(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpEndsWith, value)
+func (m matcher) VisitEndsWith(attr filter.AttrPath, literal any) (predicate, error) {
+	return m.leaf(attr, filter.OpEndsWith, literal)
 }
 
-func (m matcher) VisitGreaterThan(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpGreaterThan, value)
+func (m matcher) VisitGreaterThan(attr filter.AttrPath, literal any) (predicate, error) {
+	return m.leaf(attr, filter.OpGreaterThan, literal)
 }
 
-func (m matcher) VisitGreaterThanEquals(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpGreaterThanEquals, value)
+func (m matcher) VisitGreaterThanEquals(attr filter.AttrPath, literal any) (predicate, error) {
+	return m.leaf(attr, filter.OpGreaterThanEquals, literal)
 }
 
-func (m matcher) VisitLessThan(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpLessThan, value)
+func (m matcher) VisitLessThan(attr filter.AttrPath, literal any) (predicate, error) {
+	return m.leaf(attr, filter.OpLessThan, literal)
 }
 
-func (m matcher) VisitLessThanEquals(attr filter.AttrPath, value any) (predicate, error) {
-	return m.leaf(attr, filter.OpLessThanEquals, value)
+func (m matcher) VisitLessThanEquals(attr filter.AttrPath, literal any) (predicate, error) {
+	return m.leaf(attr, filter.OpLessThanEquals, literal)
 }
 
 func (m matcher) VisitPresence(path filter.AttrPath) (predicate, error) {
