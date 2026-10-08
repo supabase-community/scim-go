@@ -224,6 +224,27 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 
+	// RFC 7643 Section 7: "required" specifies whether or not the attribute is required.
+	t.Run("requires a sub-attribute only when its optional parent is present", func(t *testing.T) {
+		srv := newTestServer(t, withOption(server.WithResource(server.NewResource[*kit]("Crate", "/Crates", "urn:test:crate",
+			core.NewAttribute("name", core.TypeComplex).With(core.NewAttribute("givenName", core.TypeString).AsRequired()),
+		))))
+
+		for body, status := range map[string]int{
+			`{"schemas":["urn:test:crate"]}`:             http.StatusCreated,
+			`{"schemas":["urn:test:crate"],"name":{}}`:   http.StatusBadRequest,
+			`{"schemas":["urn:test:crate"],"name":null}`: http.StatusCreated,
+		} {
+			response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Crates",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBody([]byte(body)),
+			))
+
+			assert.Equal(t, status, response.StatusCode, body)
+		}
+	})
+
 	// RFC 7643 Section 7: "canonicalValues" is a collection of suggested canonical values that MAY be used.
 	t.Run("rejects a value outside the declared canonical values", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -644,6 +665,27 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		resourceType := ReadBodyAs[core.ResourceType](t, response)
 		assert.Equal(t, []core.SchemaExtension{{Schema: core.SchemaEnterpriseUser}}, resourceType.SchemaExtensions)
+	})
+
+	// RFC 7643 Section 6: if "required" is false, a resource of this type MAY omit this schema extension.
+	t.Run("requires an extension attribute only when the optional extension is present", func(t *testing.T) {
+		srv := newTestServer(t, withOption(server.WithResource(server.NewResource[*kit]("Box", "/Boxes", "urn:test:box").
+			WithExtension("urn:test:label", core.NewAttribute("number", core.TypeString).AsRequired(), core.NewAttribute("color", core.TypeString)),
+		)))
+
+		for body, status := range map[string]int{
+			`{"schemas":["urn:test:box"]}`:                                                   http.StatusCreated,
+			`{"schemas":["urn:test:box","urn:test:label"],"urn:test:label":{}}`:              http.StatusCreated,
+			`{"schemas":["urn:test:box","urn:test:label"],"urn:test:label":{"color":"red"}}`: http.StatusBadRequest,
+		} {
+			response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Boxes",
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBody([]byte(body)),
+			))
+
+			assert.Equal(t, status, response.StatusCode, body)
+		}
 	})
 
 	// RFC 7644 Section 4: an HTTP GET to "/Schemas" SHALL return all supported schemas.

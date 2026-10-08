@@ -29,7 +29,7 @@ func newCharacteristics(schemas core.Schemas) func(existing, candidate core.Obje
 func conforms(field field, candidate core.Object) error {
 	raw := field.value(candidate)
 	values := valuesOf(raw)
-	if field.Required && isMissing(field.Attribute, raw) {
+	if field.Required && field.holder(candidate) != nil && isMissing(field.Attribute, raw) {
 		return scimerrors.ErrInvalidValue(strconv.Quote(field.Name) + " is required")
 	}
 	if isPrimaryField(field.Attribute) && count(values, true) > 1 {

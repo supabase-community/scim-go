@@ -10,6 +10,7 @@ type field struct {
 	*core.Attribute
 	parent *core.Attribute
 	raw    func(core.Object) any
+	holder func(core.Object) any
 }
 
 type fields []field
@@ -30,7 +31,7 @@ func newFields(schemas core.Schemas) fields {
 
 func (f fields) with(parent func(core.Object) any, attributes ...*core.Attribute) fields {
 	for _, attribute := range attributes {
-		top := field{Attribute: attribute, raw: func(d core.Object) any { return asObject(parent(d)).Get(attribute.Name) }}
+		top := field{Attribute: attribute, holder: parent, raw: func(d core.Object) any { return asObject(parent(d)).Get(attribute.Name) }}
 		f = append(f, top)
 		for _, sub := range attribute.SubAttributes {
 			f = append(f, top.sub(sub))
@@ -67,9 +68,9 @@ func (f field) isList() bool {
 // RFC 7644 Section 3.4.2.2: outside a value path, a sub-attribute holds the values of every element.
 func (f field) sub(sub *core.Attribute) field {
 	if !f.MultiValued {
-		return field{Attribute: sub, parent: f.Attribute, raw: func(d core.Object) any { return asObject(f.raw(d)).Get(sub.Name) }}
+		return field{Attribute: sub, parent: f.Attribute, holder: f.raw, raw: func(d core.Object) any { return asObject(f.raw(d)).Get(sub.Name) }}
 	}
-	return field{Attribute: sub, parent: f.Attribute, raw: func(d core.Object) any {
+	return field{Attribute: sub, parent: f.Attribute, holder: f.raw, raw: func(d core.Object) any {
 		list := f.elements(d)
 		values := make([]any, len(list))
 		for i, element := range list {
