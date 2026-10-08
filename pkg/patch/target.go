@@ -45,8 +45,8 @@ func (t *target) write(kind Op, incoming any) error {
 	if err := t.chargeOutput(len(holders), incoming); err != nil {
 		return err
 	}
-	if t.isListAdd(kind) {
-		incoming = t.fresh(incoming)
+	if incoming, err = t.fresh(kind, incoming); err != nil {
+		return err
 	}
 	before := t.elements()
 	written := t.written(before, kind)
@@ -184,7 +184,10 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 		}
 		return newMerger(nested, t.attr, kind).merge(values)
 	}
-	shapedValue := t.dedupedAdd(holder, kind, shaped(value, t.attr.MultiValued))
+	shapedValue, err := t.dedupedAdd(holder, kind, shaped(value, t.attr.MultiValued))
+	if err != nil {
+		return err
+	}
 	if err := t.overwritable(holder, kind, shapedValue); err != nil {
 		return err
 	}
@@ -193,10 +196,10 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 }
 
 // RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
-func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) any {
+func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) (any, error) {
 	existing, ok := holder.Get(t.key()).([]any)
 	if kind != OpAdd || !t.attr.MultiValued || !ok || t.isListAdd(kind) {
-		return shapedValue
+		return shapedValue, nil
 	}
 	return newIndex(t.attr, existing).fresh(existing, shapedValue.([]any))
 }
@@ -363,7 +366,10 @@ func (t *target) isListAdd(kind Op) bool {
 	return kind == OpAdd && t.filter.match == nil && t.path.Name != "" && t.path.SubAttribute == "" && t.attr.MultiValued
 }
 
-func (t *target) fresh(candidate any) []any {
+func (t *target) fresh(kind Op, candidate any) (any, error) {
+	if !t.isListAdd(kind) {
+		return candidate, nil
+	}
 	elements := t.elements()
 	return t.index(elements).fresh(elements, shaped(candidate, true).([]any))
 }

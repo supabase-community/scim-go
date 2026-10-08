@@ -124,6 +124,30 @@ func TestApplyAddOfADuplicatedValueAsPrimaryPromotesOneCopy(t *testing.T) {
 	assert.Equal(t, []any{map[string]any{"value": "a", "type": "work", "primary": true}, map[string]any{"value": "a", "type": "work"}}, item["emails"])
 }
 
+// RFC 7643 Section 7: an immutable attribute SHALL NOT be updated, including by promoting a stored value to primary.
+func TestApplyAddPromotingAStoredValueOfAnImmutableAttribute(t *testing.T) {
+	schemas := []*core.Schema{(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
+		core.NewAttribute("badges", core.TypeComplex).AsMultiValued().AsImmutable().With(
+			core.NewAttribute("value", core.TypeString),
+			core.NewAttribute("primary", core.TypeBoolean),
+		),
+	)}
+	for _, op := range []patch.Operation{
+		operation(patch.OpAdd, "badges", `[{"value":"y","primary":true}]`),
+		{Op: patch.OpAdd, Value: json.RawMessage(`{"badges":[{"value":"y","primary":true}]}`)},
+	} {
+		item := core.Object{"badges": []any{map[string]any{"value": "x", "primary": true}, map[string]any{"value": "y"}}}
+
+		requireMutability(t, apply(item, schemas, op))
+		assert.Equal(t, []any{map[string]any{"value": "x", "primary": true}, map[string]any{"value": "y"}}, item["badges"])
+
+		item = core.Object{"badges": []any{map[string]any{"value": "x"}, map[string]any{"value": "y", "primary": true}}}
+
+		require.NoError(t, apply(item, schemas, op))
+		assert.Equal(t, []any{map[string]any{"value": "x"}, map[string]any{"value": "y", "primary": true}}, item["badges"])
+	}
+}
+
 // RFC 7643 Section 2.4: the same "value" MAY repeat under a different "type", so adding one is not a no-op.
 func TestApplyAddDoesNotSkipTheSameValueUnderADifferentType(t *testing.T) {
 	item := core.Object{"emails": []any{map[string]any{"value": "a@b.com", "type": "work"}}}

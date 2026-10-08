@@ -34,32 +34,52 @@ func newIndex(attr *core.Attribute, existing []any) *index {
 	return ix
 }
 
-func (ix *index) fresh(stored, candidates []any) []any {
-	return slices.DeleteFunc(slices.Clone(candidates), func(candidate any) bool {
-		if !ix.contains(candidate) {
+func (ix *index) fresh(stored, candidates []any) ([]any, error) {
+	var err error
+	kept := slices.DeleteFunc(slices.Clone(candidates), func(candidate any) bool {
+		if err != nil || !ix.contains(candidate) {
 			return false
 		}
 		if value.Primary(candidate) && ix.attr.SubAttribute("primary") != nil {
-			ix.promote(stored, candidate)
+			err = ix.promote(stored, candidate)
 		}
 		return true
 	})
+	return kept, err
 }
 
 // RFC 7644 Section 3.5.2: setting "primary" to "true" sets it to "false" for every other value of the attribute.
-func (ix *index) promote(stored []any, candidate any) {
-	id := value.Identity(ix.attr, asMember(candidate))
-	ix.primaries = ix.primaries[:0]
-	for _, element := range stored {
-		if len(ix.primaries) > 0 || value.Identity(ix.attr, asMember(element)) != id {
-			if value.Primary(element) {
-				setPrimaryFalse(element)
-			}
-			continue
-		}
-		core.Object(asMember(element)).Set("primary", true)
-		ix.primaries = append(ix.primaries, element)
+func (ix *index) promote(stored []any, candidate any) error {
+	promoted, flips := ix.flips(stored, value.Identity(ix.attr, asMember(candidate)))
+	if len(flips) > 0 && ix.attr.Mutability == core.MutabilityImmutable {
+		return errImmutable(ix.attr)
 	}
+	ix.primaries = ix.primaries[:0]
+	for _, i := range flips {
+		if i == promoted {
+			core.Object(asMember(stored[i])).Set("primary", true)
+		} else {
+			setPrimaryFalse(stored[i])
+		}
+	}
+	if promoted >= 0 {
+		ix.primaries = append(ix.primaries, stored[promoted])
+	}
+	return nil
+}
+
+func (ix *index) flips(stored []any, id string) (promoted int, flips []int) {
+	promoted = -1
+	for i, element := range stored {
+		primary := promoted < 0 && value.Identity(ix.attr, asMember(element)) == id
+		if primary {
+			promoted = i
+		}
+		if value.Primary(element) != primary {
+			flips = append(flips, i)
+		}
+	}
+	return promoted, flips
 }
 
 func (ix *index) add(stored []any) {
