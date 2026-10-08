@@ -10,25 +10,55 @@ import (
 
 type Set struct {
 	attribute *core.Attribute
+	objects   map[string]core.Object
 	buckets   map[string][]any
 }
 
 func NewSet(attribute *core.Attribute, elements []any) *Set {
-	s := &Set{attribute: attribute, buckets: make(map[string][]any, len(elements))}
+	s := &Set{attribute: attribute}
+	if KeyedByIdentity(attribute) {
+		s.objects = make(map[string]core.Object, len(elements))
+	} else {
+		s.buckets = make(map[string][]any, len(elements))
+	}
 	s.Add(elements...)
 	return s
 }
 
+func KeyedByIdentity(attribute *core.Attribute) bool {
+	return len(attribute.SubAttributes) > 0
+}
+
 func (s *Set) Add(elements ...any) {
 	for _, element := range elements {
+		if s.objects != nil {
+			s.addObject(AsObject(element))
+			continue
+		}
 		key := bucketKey(s.attribute, element)
 		s.buckets[key] = append(s.buckets[key], element)
 	}
 }
 
 func (s *Set) Contains(want any) bool {
+	if s.objects != nil {
+		return s.Find(AsObject(want)) != nil
+	}
 	bucket := s.buckets[bucketKey(s.attribute, want)]
 	return slices.ContainsFunc(bucket, func(element any) bool { return Equal(s.attribute, element, want) })
+}
+
+func (s *Set) Find(element core.Object) core.Object {
+	return s.objects[Identity(s.attribute, element)]
+}
+
+func (s *Set) addObject(object core.Object) {
+	if object == nil {
+		return
+	}
+	if id := Identity(s.attribute, object); id != "" && s.objects[id] == nil {
+		s.objects[id] = object
+	}
 }
 
 func bucketKey(attribute *core.Attribute, v any) string {

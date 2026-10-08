@@ -30,18 +30,6 @@ func Identity(attribute *core.Attribute, element core.Object) string {
 	return identityKey([]any{folded, typ})
 }
 
-func ByIdentity(attribute *core.Attribute, existing any) map[string]core.Object {
-	elements, _ := existing.([]any)
-	stored := make(map[string]core.Object, len(elements))
-	for _, element := range elements {
-		object := AsObject(element)
-		if id := Identity(attribute, object); object != nil && id != "" && stored[id] == nil {
-			stored[id] = object
-		}
-	}
-	return stored
-}
-
 func compositeIdentity(attribute *core.Attribute, element core.Object) string {
 	folded := make([]any, 0, len(attribute.SubAttributes))
 	for _, sub := range attribute.SubAttributes {

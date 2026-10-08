@@ -67,10 +67,11 @@ func writableValue(attribute *core.Attribute, candidate, existing any) any {
 		return candidate
 	}
 	if list, ok := candidate.([]any); ok {
-		stored := value.ByIdentity(attribute, existing)
+		elements, _ := existing.([]any)
+		stored := value.NewSet(attribute, elements)
 		for _, element := range list {
 			if object := value.AsObject(element); object != nil {
-				writableObject(attribute.SubAttribute, object, stored[value.Identity(attribute, object)])
+				writableObject(attribute.SubAttribute, object, stored.Find(object))
 			}
 		}
 	}

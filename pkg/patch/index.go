@@ -9,9 +9,7 @@ import (
 
 // RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
 type index struct {
-	attr      *core.Attribute
 	set       *value.Set
-	ids       map[string]bool
 	size      int
 	primaries []any
 }
@@ -19,13 +17,7 @@ type index struct {
 type indexCache map[string]*index
 
 func newIndex(attr *core.Attribute, existing []any) *index {
-	ix := &index{attr: attr}
-	if keyedByIdentity(attr) {
-		ix.ids = make(map[string]bool, len(existing))
-	} else {
-		ix.set = value.NewSet(attr, nil)
-	}
-	ix.add(existing)
+	ix := &index{set: value.NewSet(attr, existing), size: len(existing)}
 	for _, element := range existing {
 		if value.Primary(element) {
 			ix.primaries = append(ix.primaries, element)
@@ -35,28 +27,12 @@ func newIndex(attr *core.Attribute, existing []any) *index {
 }
 
 func (ix *index) fresh(candidates []any) []any {
-	return slices.DeleteFunc(slices.Clone(candidates), ix.contains)
+	return slices.DeleteFunc(slices.Clone(candidates), ix.set.Contains)
 }
 
 func (ix *index) add(stored []any) {
 	ix.size += len(stored)
-	if ix.set != nil {
-		ix.set.Add(stored...)
-		return
-	}
-	for _, element := range stored {
-		if member := value.AsObject(element); member != nil {
-			ix.ids[value.Identity(ix.attr, member)] = true
-		}
-	}
-}
-
-func (ix *index) contains(candidate any) bool {
-	if ix.set != nil {
-		return ix.set.Contains(candidate)
-	}
-	id := value.Identity(ix.attr, value.AsObject(candidate))
-	return id != "" && ix.ids[id]
+	ix.set.Add(stored...)
 }
 
 func (c indexCache) lookup(extension, name string, attr *core.Attribute, elements []any) *index {
@@ -66,8 +42,4 @@ func (c indexCache) lookup(extension, name string, attr *core.Attribute, element
 	}
 	c[key] = newIndex(attr, elements)
 	return c[key]
-}
-
-func keyedByIdentity(attr *core.Attribute) bool {
-	return len(attr.SubAttributes) > 0
 }

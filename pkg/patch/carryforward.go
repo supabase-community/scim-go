@@ -17,18 +17,18 @@ func carryImmutable(attr *core.Attribute, kind Op, stored []any, candidate any) 
 	if len(subs) == 0 {
 		return candidate
 	}
-	byIdentity := value.ByIdentity(attr, stored)
+	set := value.NewSet(attr, stored)
 	for _, element := range elements {
-		fillOmitted(attr, value.AsObject(element), subs, byIdentity)
+		fillOmitted(value.AsObject(element), subs, set)
 	}
 	return candidate
 }
 
-func fillOmitted(attr *core.Attribute, member core.Object, subs []*core.Attribute, stored map[string]core.Object) {
+func fillOmitted(member core.Object, subs []*core.Attribute, stored *value.Set) {
 	if member == nil {
 		return
 	}
-	existing := stored[value.Identity(attr, member)]
+	existing := stored.Find(member)
 	if existing == nil {
 		return
 	}
