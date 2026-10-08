@@ -126,7 +126,7 @@ func (p Projection) fillSchemas(out map[string]any) {
 }
 
 func (p Projection) project(key string, value any) (any, bool) {
-	if len(p.schemas) == 0 || key == "schemas" {
+	if len(p.schemas) == 0 {
 		return value, true
 	}
 	base := p.schemas.Base()
