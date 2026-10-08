@@ -74,7 +74,7 @@ func (p Projection) Returns(name string) bool {
 
 // Written marks the attributes a POST or PUT body specified, per RFC 7643, Section 7.
 func (p Projection) Written(document core.Object) Projection {
-	if !returnsOnRequest(p.schemas) {
+	if !p.tracksWrites() {
 		return p
 	}
 	p.written = p.namesIn(document, p.written)
@@ -83,7 +83,7 @@ func (p Projection) Written(document core.Object) Projection {
 
 // Patched marks the attributes PATCH operations specified, per RFC 7643, Section 7.
 func (p Projection) Patched(operations []patch.Operation) Projection {
-	if !returnsOnRequest(p.schemas) {
+	if !p.tracksWrites() {
 		return p
 	}
 	for _, op := range operations {
@@ -209,6 +209,10 @@ func (p Projection) object(attribute *core.Attribute, parentName string, value a
 		return p.value(sub, parentName+"."+strings.ToLower(sub.Name), value)
 	})
 	return object, len(object) > 0
+}
+
+func (p Projection) tracksWrites() bool {
+	return p.included == nil && returnsOnRequest(p.schemas)
 }
 
 func (p Projection) namesIn(document core.Object, written names) names {
