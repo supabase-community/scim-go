@@ -4958,6 +4958,19 @@ func TestRFC7644Schemas(t *testing.T) {
 		assert.Equal(t, core.SchemaUser, schema.ID)
 	})
 
+	// RFC 7643 Section 8.7.2: the schema "id" has "caseExact" false.
+	t.Run("fetches a schema by id in another case", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/Schemas/"+strings.ToUpper(string(core.SchemaUser)), WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		schema := ReadBodyAs[core.Schema](t, response)
+		assert.Equal(t, core.SchemaUser, schema.ID)
+		assert.Equal(t, basePath+"/Schemas/"+string(core.SchemaUser), schema.Meta.Location)
+	})
+
 	// RFC 7644 Section 3.12: 404 when the specified resource or endpoint does not exist.
 	t.Run("returns 404 for an unknown schema id", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -5029,6 +5042,17 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 		assert.Equal(t, core.ResourceTypeName("User"), resourceType.ID)
 		assert.Equal(t, "/Users", resourceType.Endpoint)
 		assert.Equal(t, core.SchemaUser, resourceType.Schema)
+	})
+
+	// RFC 7643 Section 8.7.2: the resource type "id" has "caseExact" false.
+	t.Run("fetches a resource type by id in another case", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		request := Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/user", WithBearerToken(validToken))
+		response := Response(t, srv, request)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, core.ResourceTypeName("User"), ReadBodyAs[core.ResourceType](t, response).ID)
 	})
 
 	// RFC 7643 Section 6: "description" is the resource type's human-readable description.

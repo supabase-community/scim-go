@@ -3,6 +3,7 @@ package server
 import (
 	"cmp"
 	"net/http"
+	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -115,7 +116,7 @@ func (s *Server) listResourceTypes(w http.ResponseWriter, r *http.Request) error
 
 func (s *Server) resourceTypeByID(w http.ResponseWriter, r *http.Request) error {
 	for _, resourceType := range s.resourceTypes {
-		if r.PathValue("id") == string(resourceType.ID) {
+		if strings.EqualFold(r.PathValue("id"), string(resourceType.ID)) {
 			return protocol.Send(w, http.StatusOK, resourceType)
 		}
 	}
@@ -131,7 +132,7 @@ func (s *Server) listSchemas(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) schemaByID(w http.ResponseWriter, r *http.Request) error {
 	for _, schema := range s.schemas {
-		if r.PathValue("id") == string(schema.ID) {
+		if strings.EqualFold(r.PathValue("id"), string(schema.ID)) {
 			setLocation(w, schema.Meta)
 			return protocol.Send(w, http.StatusOK, schema)
 		}
