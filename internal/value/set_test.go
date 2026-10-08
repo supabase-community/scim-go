@@ -23,6 +23,7 @@ func TestSetContainsAgreesWithContains(t *testing.T) {
 		{"a scalar string element, folded", core.NewAttribute("schemas", core.TypeString).AsMultiValued(), []any{"Foo"}, "foo"},
 		{"a float64 zero and negative zero", core.NewAttribute("n", core.TypeDecimal).AsMultiValued(), []any{0.0}, math.Copysign(0, -1)},
 		{"a complex element's float64 zero and negative zero sub-attribute", measurementsLike(), []any{map[string]any{"n": 0.0}}, map[string]any{"n": math.Copysign(0, -1)}},
+		{"a dateTime string by instant regardless of offset", core.NewAttribute("when", core.TypeDateTime).AsMultiValued(), []any{"2026-01-01T12:00:00Z"}, "2026-01-01T13:00:00+01:00"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
