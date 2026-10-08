@@ -88,7 +88,7 @@ func (t *target) replaceValues(kind Op, incoming any) error {
 	if count == 0 {
 		return scimerrors.ErrNoTarget(`"path" matched no elements`)
 	}
-	if err := t.chargeOutput(count, incoming); err != nil {
+	if err := t.chargeOutput(1, incoming); err != nil {
 		return err
 	}
 	return t.rewrite(elements, matched, incoming)

@@ -1451,6 +1451,8 @@ func TestApplyValueFilterOnSimpleMultiValued(t *testing.T) {
 		replace := []patch.Operation{operation(patch.OpReplace, `tags[value eq "red"]`, `"green"`)}
 		require.ErrorIs(t, patch.Apply(item(), replace, schemas, patch.MaxFilterEvaluations(1)), scimerrors.ErrTooLarge(""))
 		require.ErrorIs(t, patch.Apply(item(), replace, schemas, patch.MaxWriteBytes(2)), scimerrors.ErrTooLarge(""))
+		every := []patch.Operation{operation(patch.OpReplace, `tags[value pr]`, `"green"`)}
+		require.NoError(t, patch.Apply(item(), every, schemas, patch.MaxWriteBytes(len(`"green"`))))
 	})
 }
 
