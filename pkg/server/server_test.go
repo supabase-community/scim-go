@@ -1359,6 +1359,19 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
+	// RFC 7644 Section 3.4.2.2: for complex attributes, a fully qualified sub-attribute MUST be specified.
+	t.Run("rejects a comparison on a complex attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		for _, filter := range []string{`name eq "x"`, `addresses eq "x"`} {
+			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
+			response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, filter)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType, filter)
+		}
+	})
+
 	// RFC 7644 Section 3.4.2.2: the expression within square brackets MUST be a valid filter expression based upon sub-attributes of the parent attribute.
 	t.Run("rejects a value path filter whose inner expression is invalid", func(t *testing.T) {
 		srv := newTestServer(t)

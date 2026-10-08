@@ -15,7 +15,7 @@ import (
 func Allowed(t core.AttributeType, op filter.Operator) bool {
 	switch op {
 	case filter.OpEquals, filter.OpNotEquals:
-		return true
+		return t != core.TypeComplex
 	case filter.OpContains, filter.OpStartsWith, filter.OpEndsWith:
 		return t == core.TypeString || t == core.TypeReference
 	case filter.OpGreaterThan, filter.OpGreaterThanEquals, filter.OpLessThan, filter.OpLessThanEquals:
