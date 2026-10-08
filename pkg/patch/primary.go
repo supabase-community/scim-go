@@ -14,16 +14,16 @@ func demote(elements []any, written func(int) bool) {
 		if written(i) || !value.Primary(element) {
 			continue
 		}
-		setPrimaryFalse(element)
+		setPrimary(element, false)
 	}
 }
 
-func setPrimaryFalse(element any) {
+func setPrimary(element any, primary bool) {
 	switch e := element.(type) {
 	case map[string]any:
-		core.Object(e).Set("primary", false)
+		core.Object(e).Set("primary", primary)
 	case core.Object:
-		e.Set("primary", false)
+		e.Set("primary", primary)
 	}
 }
 

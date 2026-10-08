@@ -153,7 +153,7 @@ func (t *target) demoteIfPromoted(kind Op, before []any, written func(int) bool,
 func (t *target) demotePrimaries(before []any) {
 	ix := t.index(before)
 	for _, held := range ix.primaries {
-		setPrimaryFalse(held)
+		setPrimary(held, false)
 	}
 	after := t.elements()
 	ix.primaries = ix.primaries[:0]
