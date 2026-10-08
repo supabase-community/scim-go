@@ -34,7 +34,7 @@ func (s *Set) Contains(want any) bool {
 func bucketKey(attribute *core.Attribute, v any) string {
 	v = typed(attribute, v)
 	switch value := v.(type) {
-	case map[string]any, []any:
+	case map[string]any, core.Object, []any:
 		raw, _ := json.Marshal(normalizeZeros(value))
 		return string(raw)
 	case time.Time:

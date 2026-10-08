@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/supabase-community/scim-go/internal/decode"
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -29,7 +30,7 @@ func ResourceFrom[T any](document, existing core.Object, schemas core.Schemas) (
 	return fromDocument[T](writable(document, existing, schemas))
 }
 
-func objectOf(raw []byte) (map[string]any, error) {
+func objectOf(raw []byte) (core.Object, error) {
 	document, err := decode.Object(raw)
 	if errors.Is(err, decode.ErrNotObject) {
 		return nil, scimerrors.ErrInvalidSyntax("request body is not a JSON object")
@@ -47,17 +48,17 @@ func objectOf(raw []byte) (map[string]any, error) {
 }
 
 // RFC 7643 Section 2.1: attribute names are case insensitive and the character set is US-ASCII.
-func wellFormedNames(value any) bool {
-	switch v := value.(type) {
-	case map[string]any:
-		return wellFormedFields(v)
-	case []any:
-		return wellFormedElements(v)
+func wellFormedNames(node any) bool {
+	if object := value.AsObject(node); object != nil {
+		return wellFormedFields(object)
+	}
+	if list, ok := node.([]any); ok {
+		return wellFormedElements(list)
 	}
 	return true
 }
 
-func wellFormedFields(fields map[string]any) bool {
+func wellFormedFields(fields core.Object) bool {
 	seen := make(map[string]struct{}, len(fields))
 	for name, element := range fields {
 		folded := strings.ToLower(name)
@@ -87,7 +88,7 @@ func ascii(name string) bool {
 	return true
 }
 
-func fromDocument[T any](document map[string]any) (T, error) {
+func fromDocument[T any](document core.Object) (T, error) {
 	var item T
 	raw, err := json.Marshal(document)
 	if err != nil {

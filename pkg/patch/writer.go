@@ -32,7 +32,7 @@ func newParentGate(attr *core.Attribute, holder core.Object) parentGate {
 }
 
 // RFC 7644 Section 3.5.2.3: sub-attributes that are not specified in the "value" parameter are left unchanged.
-func (m merger) merge(values map[string]any) error {
+func (m merger) merge(values core.Object) error {
 	keys := newKeys(m.holder)
 	for name, incoming := range values {
 		key := keys.resolve(name)
@@ -112,8 +112,8 @@ func child(o core.Object, name string) (core.Object, error) {
 		o.Set(name, fresh)
 		return fresh, nil
 	}
-	nested, ok := existing.(map[string]any)
-	if !ok {
+	nested := value.AsObject(existing)
+	if nested == nil {
 		return nil, scimerrors.ErrInvalidPath(`"path" targets a non-complex attribute`)
 	}
 	return nested, nil

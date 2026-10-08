@@ -91,7 +91,7 @@ func (p *patcher) remove(root core.Object, op Operation) error {
 }
 
 // RFC 7644 Section 3.5.2.1: if "path" is omitted, the target location is assumed to be the resource itself.
-func (p *patcher) mergeRoot(root core.Object, values map[string]any, kind Op) error {
+func (p *patcher) mergeRoot(root, values core.Object, kind Op) error {
 	for key, incoming := range values {
 		if err := p.mergeKey(root, key, incoming, kind); err != nil {
 			return err
@@ -118,8 +118,8 @@ func (p *patcher) repeatsReadOnly(root core.Object, path filter.Path, incoming a
 }
 
 func (p *patcher) mergeSchema(root core.Object, schema *core.Schema, incoming any, kind Op) error {
-	values, ok := incoming.(map[string]any)
-	if !ok {
+	values := value.AsObject(incoming)
+	if values == nil {
 		return scimerrors.ErrInvalidValue(strconv.Quote(string(schema.ID)) + " must be an object")
 	}
 	for name, item := range values {

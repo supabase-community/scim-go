@@ -109,8 +109,8 @@ func (p Projection) All[T any](resources []T) []json.Marshaler {
 	return out
 }
 
-func (p Projection) fillResourceType(document map[string]any) {
-	if meta, ok := document["meta"].(map[string]any); ok && len(p.schemas) > 0 {
+func (p Projection) fillResourceType(document core.Object) {
+	if meta := value.AsObject(document["meta"]); meta != nil && len(p.schemas) > 0 {
 		if name, _ := meta["resourceType"].(string); name == "" {
 			meta["resourceType"] = p.schemas.Base().Name
 		}
@@ -118,7 +118,7 @@ func (p Projection) fillResourceType(document map[string]any) {
 }
 
 // RFC 7643 Section 3: "schemas" is required and lists the base schema and each extension present.
-func (p Projection) fillSchemas(out map[string]any) {
+func (p Projection) fillSchemas(out core.Object) {
 	if list, _ := out["schemas"].([]any); len(list) > 0 || len(p.schemas) == 0 {
 		return
 	}
@@ -146,8 +146,8 @@ func (p Projection) project(key string, item any) (any, bool) {
 }
 
 func (p Projection) extension(schema *core.Schema, item any) (any, bool) {
-	object, ok := item.(map[string]any)
-	if !ok {
+	object := value.AsObject(item)
+	if object == nil {
 		return nil, false
 	}
 	prune(object, func(key string, item any) (any, bool) {
@@ -157,7 +157,7 @@ func (p Projection) extension(schema *core.Schema, item any) (any, bool) {
 		}
 		return p.value(attribute, qualifiedKey(schema.ID, attribute.Name), item)
 	})
-	return object, len(object) > 0
+	return map[string]any(object), len(object) > 0
 }
 
 // RFC 7643 Section 7: "returned" decides whether an attribute can appear in a response.
@@ -197,8 +197,8 @@ func (p Projection) value(attribute *core.Attribute, name string, item any) (any
 }
 
 func (p Projection) object(attribute *core.Attribute, parentName string, item any) (any, bool) {
-	object, ok := item.(map[string]any)
-	if !ok {
+	object := value.AsObject(item)
+	if object == nil {
 		return item, true
 	}
 	prune(object, func(key string, item any) (any, bool) {
@@ -208,7 +208,7 @@ func (p Projection) object(attribute *core.Attribute, parentName string, item an
 		}
 		return p.value(sub, parentName+"."+strings.ToLower(sub.Name), item)
 	})
-	return object, len(object) > 0
+	return map[string]any(object), len(object) > 0
 }
 
 func (p Projection) tracksWrites() bool {
@@ -221,7 +221,7 @@ func (p Projection) namesIn(document core.Object, written names) names {
 			written = p.write(written, key)
 			continue
 		}
-		body, _ := item.(map[string]any)
+		body := value.AsObject(item)
 		for sub := range body {
 			written = p.write(written, key+":"+sub)
 		}
@@ -320,7 +320,7 @@ func listParam(values url.Values, name string) []string {
 	return list
 }
 
-func prune(object map[string]any, project func(key string, item any) (any, bool)) {
+func prune(object core.Object, project func(key string, item any) (any, bool)) {
 	for key, item := range object {
 		if projected, ok := project(key, item); ok {
 			object[key] = projected
@@ -352,15 +352,15 @@ func always(attribute *core.Attribute, v any) (any, bool) {
 }
 
 func alwaysIn(attribute *core.Attribute, v any) (any, bool) {
-	object, ok := v.(map[string]any)
-	if !ok {
+	object := value.AsObject(v)
+	if object == nil {
 		return nil, false
 	}
 	prune(object, func(key string, item any) (any, bool) {
 		sub := attribute.SubAttribute(key)
 		return item, sub != nil && sub.Returned == core.ReturnedAlways
 	})
-	return object, len(object) > 0
+	return map[string]any(object), len(object) > 0
 }
 
 func returnsAlways(attribute *core.Attribute) bool {

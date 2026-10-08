@@ -13,14 +13,16 @@ func IsUnassigned(value any) bool {
 		return len(v) == 0
 	case map[string]any:
 		return len(v) == 0
+	case core.Object:
+		return len(v) == 0
 	}
 	return false
 }
 
 // AllUnassigned reports an object whose every value is unassigned, which RFC 7643 Section 2.5 treats as holding no data.
-func AllUnassigned(object map[string]any) bool {
+func AllUnassigned(object core.Object) bool {
 	for _, held := range object {
-		if nested, ok := held.(map[string]any); ok && AllUnassigned(nested) {
+		if nested := AsObject(held); nested != nil && AllUnassigned(nested) {
 			continue
 		}
 		if !IsUnassigned(held) {
@@ -64,16 +66,16 @@ func hides(attribute *core.Attribute) bool {
 }
 
 func transform(v any, leaf func(any) any) any {
-	switch node := v.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(node))
-		for key, element := range node {
+	if object := AsObject(v); object != nil {
+		out := make(map[string]any, len(object))
+		for key, element := range object {
 			out[key] = transform(element, leaf)
 		}
 		return out
-	case []any:
-		out := make([]any, len(node))
-		for i, element := range node {
+	}
+	if list, ok := v.([]any); ok {
+		out := make([]any, len(list))
+		for i, element := range list {
 			out[i] = transform(element, leaf)
 		}
 		return out

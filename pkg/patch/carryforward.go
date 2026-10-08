@@ -24,7 +24,7 @@ func carryImmutable(attr *core.Attribute, kind Op, stored []any, candidate any) 
 	return candidate
 }
 
-func fillOmitted(attr *core.Attribute, member map[string]any, subs []*core.Attribute, stored map[string]map[string]any) {
+func fillOmitted(attr *core.Attribute, member core.Object, subs []*core.Attribute, stored map[string]core.Object) {
 	if member == nil {
 		return
 	}
@@ -32,10 +32,9 @@ func fillOmitted(attr *core.Attribute, member map[string]any, subs []*core.Attri
 	if existing == nil {
 		return
 	}
-	candidate, held := core.Object(member), core.Object(existing)
 	for _, sub := range subs {
-		if !candidate.Has(sub.Name) && held.Has(sub.Name) {
-			candidate.Set(sub.Name, held.Get(sub.Name))
+		if !member.Has(sub.Name) && existing.Has(sub.Name) {
+			member.Set(sub.Name, existing.Get(sub.Name))
 		}
 	}
 }

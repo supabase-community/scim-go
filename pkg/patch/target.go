@@ -173,7 +173,8 @@ func (t *target) chargeOutput(count int, incoming any) error {
 }
 
 func (t *target) put(holder core.Object, kind Op, incoming any) error {
-	values, isObject := incoming.(map[string]any)
+	values := value.AsObject(incoming)
+	isObject := values != nil
 	switch {
 	case t.key() == "":
 		return newMerger(holder, t.parent, kind).merge(values)
@@ -330,11 +331,12 @@ func (t *target) matchedHolders(container core.Object) ([]core.Object, error) {
 }
 
 func (t *target) typedHolders(container core.Object) ([]core.Object, error) {
-	switch value := container.Get(t.path.Name).(type) {
-	case map[string]any:
-		return []core.Object{value}, nil
-	case []any:
-		return members(value, nil)
+	held := container.Get(t.path.Name)
+	if object := value.AsObject(held); object != nil {
+		return []core.Object{object}, nil
+	}
+	if list, ok := held.([]any); ok {
+		return members(list, nil)
 	}
 	return nil, nil
 }
@@ -357,8 +359,7 @@ func (t *target) container(create bool) (core.Object, error) {
 	case create:
 		return child(t.root, t.extension)
 	}
-	nested, _ := t.root.Get(t.extension).(map[string]any)
-	return nested, nil
+	return value.AsObject(t.root.Get(t.extension)), nil
 }
 
 func (t *target) elements() []any {
@@ -417,8 +418,7 @@ func (t *target) key() string {
 }
 
 func isObject(candidate any) bool {
-	_, ok := candidate.(map[string]any)
-	return ok
+	return value.AsObject(candidate) != nil
 }
 
 func tally(matched []bool) int {
@@ -434,7 +434,7 @@ func tally(matched []bool) int {
 func members(elements []any, matched []bool) ([]core.Object, error) {
 	holders := []core.Object{}
 	for i, element := range elements {
-		if member, ok := element.(map[string]any); ok && (matched == nil || matched[i]) {
+		if member := value.AsObject(element); member != nil && (matched == nil || matched[i]) {
 			holders = append(holders, member)
 		}
 	}
@@ -445,16 +445,16 @@ func members(elements []any, matched []bool) ([]core.Object, error) {
 }
 
 func eachSub(attr *core.Attribute, held any, visit func(sub *core.Attribute, held any) error) error {
-	switch v := held.(type) {
-	case map[string]any:
-		return eachSubField(attr, v, visit)
-	case []any:
-		return eachSubElement(attr, v, visit)
+	if object := value.AsObject(held); object != nil {
+		return eachSubField(attr, object, visit)
+	}
+	if list, ok := held.([]any); ok {
+		return eachSubElement(attr, list, visit)
 	}
 	return nil
 }
 
-func eachSubField(attr *core.Attribute, fields map[string]any, visit func(sub *core.Attribute, held any) error) error {
+func eachSubField(attr *core.Attribute, fields core.Object, visit func(sub *core.Attribute, held any) error) error {
 	for name, held := range fields {
 		if err := visit(subAttr(attr, name), held); err != nil {
 			return err

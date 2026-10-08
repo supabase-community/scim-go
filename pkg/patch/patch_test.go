@@ -643,6 +643,19 @@ func TestApplyValuePathNotEqualsMatchesUnassignedWithoutSchemas(t *testing.T) {
 	assert.Equal(t, "work", emails[0].(map[string]any)["type"])
 }
 
+func TestApplyValuePathMatchesNestedObjects(t *testing.T) {
+	item := core.Object{"emails": []any{
+		core.Object{"type": "work", "value": "w@x"},
+		core.Object{"type": "home", "value": "h@x"},
+	}}
+
+	require.NoError(t, apply(item, userSchemas(), operation(patch.OpRemove, `emails[type eq "work"]`, "")))
+
+	emails := item["emails"].([]any)
+	require.Len(t, emails, 1)
+	assert.Equal(t, "home", emails[0].(core.Object)["type"])
+}
+
 func TestApplyValuePathNumericFilterNativeInt(t *testing.T) {
 	item := map[string]any{"scores": []any{
 		map[string]any{"kind": "a", "n": 10},

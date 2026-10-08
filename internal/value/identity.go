@@ -30,12 +30,12 @@ func Identity(attribute *core.Attribute, element core.Object) string {
 	return identityKey([]any{folded, typ})
 }
 
-func ByIdentity(attribute *core.Attribute, existing any) map[string]map[string]any {
+func ByIdentity(attribute *core.Attribute, existing any) map[string]core.Object {
 	elements, _ := existing.([]any)
-	stored := make(map[string]map[string]any, len(elements))
+	stored := make(map[string]core.Object, len(elements))
 	for _, element := range elements {
-		object, ok := element.(map[string]any)
-		if id := Identity(attribute, object); ok && id != "" && stored[id] == nil {
+		object := AsObject(element)
+		if id := Identity(attribute, object); object != nil && id != "" && stored[id] == nil {
 			stored[id] = object
 		}
 	}

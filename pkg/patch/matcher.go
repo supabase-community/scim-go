@@ -167,8 +167,8 @@ func isSimple(attr *core.Attribute) bool {
 
 // RFC 7644 Section 3.5.2.2: a filter comparing "value" matches the values of a simple multi-valued attribute.
 func field(element any, name string) any {
-	if member, ok := element.(map[string]any); ok {
-		return core.Object(member).Get(name)
+	if member := value.AsObject(element); member != nil {
+		return member.Get(name)
 	}
 	if strings.EqualFold(name, "value") {
 		return element

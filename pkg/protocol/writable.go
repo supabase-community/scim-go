@@ -18,13 +18,13 @@ func writable(document, existing core.Object, schemas core.Schemas) core.Object 
 		uri := string(extension.ID)
 		raw := document.Get(uri)
 		document.Remove(uri)
-		body, isObject := raw.(map[string]any)
+		body := value.AsObject(raw)
+		isObject := body != nil
 		if !isObject {
-			body = map[string]any{}
+			body = core.Object{}
 		}
-		previous, _ := existing.Get(uri).(map[string]any)
-		if writableObject(extension.Attributes.Lookup, body, previous); !value.AllUnassigned(body) {
-			document[uri] = body
+		if writableObject(extension.Attributes.Lookup, body, value.AsObject(existing.Get(uri))); !value.AllUnassigned(body) {
+			document[uri] = map[string]any(body)
 		} else if raw != nil && !isObject {
 			document[uri] = raw
 		}
@@ -32,7 +32,7 @@ func writable(document, existing core.Object, schemas core.Schemas) core.Object 
 	return document
 }
 
-func writableObject(lookup func(string) *core.Attribute, body, existing map[string]any) {
+func writableObject(lookup func(string) *core.Attribute, body, existing core.Object) {
 	prune(body, func(key string, item any) (any, bool) {
 		attribute := lookup(key)
 		switch {
@@ -41,7 +41,7 @@ func writableObject(lookup func(string) *core.Attribute, body, existing map[stri
 		case attribute.Mutability == core.MutabilityReadOnly:
 			return nil, false
 		}
-		return writableValue(attribute, item, core.Object(existing).Get(key)), true
+		return writableValue(attribute, item, existing.Get(key)), true
 	})
 	// RFC 7644 Section 3.5.1: readOnly values SHALL be ignored.
 	for key, item := range existing {
@@ -51,7 +51,7 @@ func writableObject(lookup func(string) *core.Attribute, body, existing map[stri
 		case attribute.Mutability == core.MutabilityReadOnly:
 			body[key] = item
 		case attribute.Mutability == core.MutabilityImmutable && !attribute.Required:
-			if !core.Object(body).Has(key) {
+			if !body.Has(key) {
 				body[key] = item
 			}
 		}
@@ -62,14 +62,14 @@ func writableValue(attribute *core.Attribute, candidate, existing any) any {
 	if len(attribute.SubAttributes) == 0 {
 		return candidate
 	}
-	switch v := candidate.(type) {
-	case map[string]any:
-		previous, _ := existing.(map[string]any)
-		writableObject(attribute.SubAttribute, v, previous)
-	case []any:
+	if object := value.AsObject(candidate); object != nil {
+		writableObject(attribute.SubAttribute, object, value.AsObject(existing))
+		return candidate
+	}
+	if list, ok := candidate.([]any); ok {
 		stored := value.ByIdentity(attribute, existing)
-		for _, element := range v {
-			if object, ok := element.(map[string]any); ok {
+		for _, element := range list {
+			if object := value.AsObject(element); object != nil {
 				writableObject(attribute.SubAttribute, object, stored[value.Identity(attribute, object)])
 			}
 		}

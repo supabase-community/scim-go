@@ -45,7 +45,7 @@ func (ix *index) add(stored []any) {
 		return
 	}
 	for _, element := range stored {
-		if member, ok := element.(map[string]any); ok {
+		if member := value.AsObject(element); member != nil {
 			ix.ids[value.Identity(ix.attr, member)] = true
 		}
 	}
