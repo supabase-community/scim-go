@@ -29,7 +29,10 @@ type filterState struct {
 }
 
 func (t *target) write(kind Op, incoming any) error {
-	if _, ok := incoming.(map[string]any); t.key() == "" && !ok {
+	if t.selectsValues(incoming) {
+		return t.replaceValues(kind, incoming)
+	}
+	if t.key() == "" && !isObject(incoming) {
 		return scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
 	}
 	if err := eachSub(t.owner(), incoming, gateWrite); err != nil {
@@ -39,7 +42,7 @@ func (t *target) write(kind Op, incoming any) error {
 	if err != nil {
 		return err
 	}
-	if err := t.chargeOutput(holders, incoming); err != nil {
+	if err := t.chargeOutput(len(holders), incoming); err != nil {
 		return err
 	}
 	if t.isListAdd(kind) {
@@ -55,6 +58,85 @@ func (t *target) write(kind Op, incoming any) error {
 	t.demoteIfPromoted(kind, before, written, incoming)
 	t.record(kind, incoming)
 	return nil
+}
+
+func (t *target) selectsValues(incoming any) bool {
+	switch {
+	case t.filter.match == nil || t.path.SubAttribute != "":
+		return false
+	case t.parent != permissiveAttr:
+		return isSimple(t.parent)
+	}
+	elements := t.elements()
+	return len(elements) > 0 && !isObject(elements[0]) && !isObject(incoming)
+}
+
+// RFC 7644 Section 3.5.2.3: all matching record values SHALL be replaced.
+func (t *target) replaceValues(kind Op, incoming any) error {
+	if kind != OpReplace {
+		return scimerrors.ErrInvalidPath(`"add" cannot target values selected by a filter`)
+	}
+	if _, ok := t.typeOf(incoming).Coerce(incoming); !ok || incoming == nil {
+		return scimerrors.ErrInvalidValue(`"value" must be a single value of the attribute's type`)
+	}
+	elements := t.elements()
+	matched, err := t.matches(elements)
+	if err != nil {
+		return err
+	}
+	count := tally(matched)
+	if count == 0 {
+		return scimerrors.ErrNoTarget(`"path" matched no elements`)
+	}
+	if err := t.chargeOutput(count, incoming); err != nil {
+		return err
+	}
+	return t.rewrite(elements, matched, incoming)
+}
+
+func (t *target) typeOf(incoming any) *core.Attribute {
+	if t.attr == permissiveAttr {
+		return inferred(incoming)
+	}
+	return t.attr
+}
+
+func (t *target) rewrite(elements []any, matched []bool, incoming any) error {
+	after := t.substitute(elements, matched, incoming)
+	if err := gateImmutableWrite(t.attr, elements, after); err != nil {
+		return err
+	}
+	container, _ := t.container(false)
+	container.Set(t.path.Name, after)
+	clear(t.indexes)
+	return nil
+}
+
+func (t *target) substitute(elements []any, matched []bool, incoming any) []any {
+	after := elements[:0]
+	if t.attr.Mutability == core.MutabilityImmutable {
+		after = make([]any, 0, len(elements))
+	}
+	placed := incoming == nil || t.keeps(elements, matched, incoming)
+	for i, element := range elements {
+		switch {
+		case !matched[i]:
+			after = append(after, element)
+		case !placed:
+			after = append(after, incoming)
+			placed = true
+		}
+	}
+	return after
+}
+
+func (t *target) keeps(elements []any, matched []bool, incoming any) bool {
+	for i, element := range elements {
+		if !matched[i] && value.Equal(t.attr, element, incoming) {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *target) demoteIfPromoted(kind Op, before []any, written func(int) bool, value any) {
@@ -82,12 +164,12 @@ func (t *target) demotePrimaries(before []any) {
 	}
 }
 
-func (t *target) chargeOutput(holders []core.Object, value any) error {
+func (t *target) chargeOutput(count int, value any) error {
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		return scimerrors.ErrInternal("could not encode the request body")
 	}
-	return t.budget.chargeBytes(len(holders) * len(encoded))
+	return t.budget.chargeBytes(count * len(encoded))
 }
 
 func (t *target) put(holder core.Object, kind Op, value any) error {
@@ -187,30 +269,27 @@ func (t *target) unassignEmptyExtension() {
 }
 
 func (t *target) drop() error {
-	container, _ := t.container(false)
 	elements := t.elements()
 	matched, err := t.matches(elements)
 	if err != nil {
 		return err
 	}
-	kept := make([]any, 0, len(elements))
+	count := tally(matched)
+	if count == 0 {
+		return nil // RFC 7644 Section 3.5.2.2: a filter matching no value makes no change and still succeeds.
+	}
 	for i, element := range elements {
 		if !matched[i] {
-			kept = append(kept, element)
 			continue
 		}
 		if err := eachSub(t.attr, element, gateRemove); err != nil {
 			return err
 		}
 	}
-	if len(kept) == len(elements) {
-		return nil // RFC 7644 Section 3.5.2.2: a filter matching no value makes no change and still succeeds.
-	}
-	if err := gateRequired(t.attr, value.IsUnassigned(kept)); err != nil {
+	if err := gateRequired(t.attr, count == len(elements)); err != nil {
 		return err
 	}
-	container.Set(t.path.Name, kept)
-	return nil
+	return t.rewrite(elements, matched, nil)
 }
 
 func (t *target) holders(create bool) ([]core.Object, error) {
@@ -258,8 +337,7 @@ func (t *target) matches(elements []any) ([]bool, error) {
 	}
 	matched := make([]bool, len(elements))
 	for i, element := range elements {
-		member, ok := element.(map[string]any)
-		matched[i] = ok && t.filter.match(member)
+		matched[i] = (isObject(element) || t.parent.Type != core.TypeComplex) && t.filter.match(element)
 	}
 	return matched, nil
 }
@@ -325,6 +403,21 @@ func (t *target) key() string {
 		return t.path.SubAttribute
 	}
 	return t.path.Name
+}
+
+func isObject(value any) bool {
+	_, ok := value.(map[string]any)
+	return ok
+}
+
+func tally(matched []bool) int {
+	count := 0
+	for _, hit := range matched {
+		if hit {
+			count++
+		}
+	}
+	return count
 }
 
 func members(elements []any, matched []bool) ([]core.Object, error) {

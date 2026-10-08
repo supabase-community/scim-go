@@ -3,6 +3,7 @@ package patch
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -16,7 +17,7 @@ var (
 	inferredDecimal = core.NewAttribute("", core.TypeDecimal)
 )
 
-type predicate func(map[string]any) bool
+type predicate func(any) bool
 
 type matcher struct {
 	attr    *core.Attribute
@@ -37,16 +38,16 @@ func compile(attr *core.Attribute, node *filter.Node) (predicate, int, error) {
 }
 
 func (m matcher) VisitAnd(left, right predicate) (predicate, error) {
-	return func(member map[string]any) bool { return left(member) && right(member) }, nil
+	return func(element any) bool { return left(element) && right(element) }, nil
 }
 
 func (m matcher) VisitOr(left, right predicate) (predicate, error) {
-	return func(member map[string]any) bool { return left(member) || right(member) }, nil
+	return func(element any) bool { return left(element) || right(element) }, nil
 }
 
 func (m matcher) VisitNot(operand predicate) (predicate, error) {
 	*m.clauses++
-	return func(member map[string]any) bool { return !operand(member) }, nil
+	return func(element any) bool { return !operand(element) }, nil
 }
 
 func (m matcher) VisitEquals(attr filter.AttrPath, value any) (predicate, error) {
@@ -94,7 +95,7 @@ func (m matcher) VisitPresence(path filter.AttrPath) (predicate, error) {
 		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	*m.clauses++
-	return func(member map[string]any) bool { return !value.IsUnassigned(core.Object(member).Get(path.Name)) }, nil
+	return func(element any) bool { return !value.IsUnassigned(field(element, path.Name)) }, nil
 }
 
 // RFC 7644 3.4.2.2 - a value filter cannot itself contain a value path.
@@ -113,13 +114,13 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 	*m.clauses++
 	if attr != nil {
 		expected, ok := literal(attr, op, want)
-		return func(member map[string]any) bool {
-			actual, _ := attr.Coerce(core.Object(member).Get(path.Name))
+		return func(element any) bool {
+			actual, _ := attr.Coerce(field(element, path.Name))
 			return ok && value.Match(op, value.Fold(attr, actual), expected)
 		}, nil
 	}
-	return func(member map[string]any) bool {
-		got := core.Object(member).Get(path.Name)
+	return func(element any) bool {
+		got := field(element, path.Name)
 		typed := inferred(got)
 		expected, ok := literal(typed, op, want)
 		actual, _ := typed.Coerce(got)
@@ -129,8 +130,11 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 
 // RFC 7644 Section 3.4.2.2: a value filter MUST be a valid filter expression based upon sub-attributes of the parent attribute.
 func (m matcher) resolve(path filter.AttrPath) (*core.Attribute, error) {
+	if isSimple(m.attr) && path.URI == "" && path.SubAttribute == "" && strings.EqualFold(path.Name, "value") {
+		return m.attr, nil
+	}
 	sub := m.attr.SubAttribute(path.Name)
-	if m.attr != permissiveAttr && (sub == nil || path.SubAttribute != "") {
+	if m.attr != permissiveAttr && (sub == nil || path.URI != "" || path.SubAttribute != "") {
 		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	return sub, nil
@@ -152,6 +156,21 @@ func (m matcher) check(attr *core.Attribute, path filter.AttrPath, op filter.Ope
 func literal(attr *core.Attribute, op filter.Operator, want any) (any, bool) {
 	coerced, ok := attr.Coerce(want)
 	return value.Fold(attr, coerced), ok && value.Allowed(attr.Type, op)
+}
+
+func isSimple(attr *core.Attribute) bool {
+	return attr != permissiveAttr && attr.Type != core.TypeComplex
+}
+
+// RFC 7644 Section 3.5.2.2: a filter comparing "value" matches the values of a simple multi-valued attribute.
+func field(element any, name string) any {
+	if member, ok := element.(map[string]any); ok {
+		return core.Object(member).Get(name)
+	}
+	if strings.EqualFold(name, "value") {
+		return element
+	}
+	return nil
 }
 
 func inferred(got any) *core.Attribute {

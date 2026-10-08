@@ -116,6 +116,26 @@ func BenchmarkApplyValueFilterOnALargeGroup(b *testing.B) {
 	}
 }
 
+func BenchmarkApplyValueFilterOnASimpleMultiValued(b *testing.B) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("tags", core.TypeString).AsMultiValued()),
+	}
+	for _, n := range []int{1000, 100000} {
+		tags := make([]any, n)
+		for i := range tags {
+			tags[i] = fmt.Sprintf("t-%d", i)
+		}
+		for _, op := range []patch.Operation{
+			{Op: patch.OpRemove, Path: `tags[value eq "t-0"]`},
+			operation(patch.OpReplace, `tags[value eq "t-0"]`, `"x"`),
+		} {
+			b.Run(fmt.Sprintf("%s/tags=%d", op.Op, n), func(b *testing.B) {
+				benchApply(b, func() map[string]any { return map[string]any{"tags": slices.Clone(tags)} }, []patch.Operation{op}, schemas)
+			})
+		}
+	}
+}
+
 func BenchmarkApplyManyAddsWithoutAValueSubAttribute(b *testing.B) {
 	schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
 	for _, n := range []int{1000, 10000} {

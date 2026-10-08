@@ -1151,7 +1151,7 @@ func TestApplyValueFilterRecomputesLiteralPerElement(t *testing.T) {
 	small := run(base64.StdEncoding.EncodeToString([]byte("x")))
 	large := run(base64.StdEncoding.EncodeToString([]byte(strings.Repeat("x", 6000))))
 
-	assert.Less(t, large/small, 30.0, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
+	assert.Less(t, (large-small)/elementCount, 1000.0, "a value filter's per-element cost must not scale with the constant literal's size; it is re-decoded once per element instead of once per operation")
 }
 
 func TestApplyAddWithoutAValueSubAttributeDoesNotScaleQuadratically(t *testing.T) {
@@ -1341,6 +1341,99 @@ func TestApplyAddFirstValueOntoEmptyImmutableMultiValuedAttributeSucceeds(t *tes
 
 	require.NoError(t, apply(item, tagsSchema(), operation(patch.OpAdd, "tags", `["a"]`)))
 	assert.Equal(t, []any{"a"}, item["tags"])
+}
+
+// RFC 7644 Sections 3.5.2.2 and 3.5.2.3: a filter comparing "value" selects values of a simple multi-valued attribute.
+func TestApplyValueFilterOnSimpleMultiValued(t *testing.T) {
+	schemas := []*core.Schema{
+		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("tags", core.TypeString).AsMultiValued()),
+	}
+	item := func() core.Object { return core.Object{"tags": []any{"red", "blue"}} }
+
+	t.Run("removes the matched values", func(t *testing.T) {
+		resource := item()
+		require.NoError(t, apply(resource, schemas, operation(patch.OpRemove, `tags[VALUE eq "red"]`, "")))
+		assert.Equal(t, []any{"blue"}, resource["tags"])
+	})
+
+	t.Run("replaces the matched values", func(t *testing.T) {
+		resource := item()
+		require.NoError(t, apply(resource, schemas, operation(patch.OpReplace, `tags[value eq "red"]`, `"green"`)))
+		assert.Equal(t, []any{"green", "blue"}, resource["tags"])
+	})
+
+	t.Run("replaces without leaving a duplicate value", func(t *testing.T) {
+		for _, tc := range []struct {
+			tags  []any
+			path  string
+			value string
+			want  []any
+		}{
+			{[]any{"red", "blue"}, `tags[value eq "red"]`, `"blue"`, []any{"blue"}},
+			{[]any{"red", "blue"}, `tags[value pr]`, `"green"`, []any{"green"}},
+			{[]any{"blue", "blue", "red"}, `tags[value eq "red"]`, `"blue"`, []any{"blue", "blue"}},
+		} {
+			resource := core.Object{"tags": tc.tags}
+			require.NoError(t, apply(resource, schemas, operation(patch.OpReplace, tc.path, tc.value)), tc.path)
+			assert.Equal(t, tc.want, resource["tags"], tc.path)
+		}
+	})
+
+	t.Run("selects values without a schema", func(t *testing.T) {
+		resource := item()
+		require.NoError(t, apply(resource, nil, operation(patch.OpReplace, `tags[value eq "red"]`, `"green"`)))
+		assert.Equal(t, []any{"green", "blue"}, resource["tags"])
+	})
+
+	t.Run("rejects a filter that is not on value with invalidFilter", func(t *testing.T) {
+		complexSchemas := []*core.Schema{
+			(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(core.NewAttribute("tags", core.TypeComplex).AsMultiValued()),
+		}
+		for _, tc := range []struct {
+			schemas []*core.Schema
+			path    string
+		}{
+			{schemas, `tags[urn:ietf:params:scim:schemas:core:2.0:User:value eq "red"]`},
+			{complexSchemas, `tags[value pr]`},
+		} {
+			var err *scimerrors.Error
+			require.ErrorAs(t, apply(item(), tc.schemas, operation(patch.OpRemove, tc.path, "")), &err, tc.path)
+			assert.Equal(t, scimerrors.InvalidFilter, err.ScimType, tc.path)
+		}
+	})
+
+	t.Run("rejects a replace that matches nothing with noTarget", func(t *testing.T) {
+		var err *scimerrors.Error
+		require.ErrorAs(t, apply(item(), schemas, operation(patch.OpReplace, `tags[value eq "pink"]`, `"green"`)), &err)
+		assert.Equal(t, scimerrors.NoTarget, err.ScimType)
+	})
+
+	t.Run("rejects a replace value of the wrong type", func(t *testing.T) {
+		for _, value := range []string{`42`, `null`, `{"value":"green"}`, `["green"]`} {
+			var err *scimerrors.Error
+			require.ErrorAs(t, apply(item(), schemas, operation(patch.OpReplace, `tags[value eq "red"]`, value)), &err, value)
+			assert.Equal(t, scimerrors.InvalidValue, err.ScimType, value)
+		}
+	})
+
+	t.Run("rejects an add through a value filter with invalidPath", func(t *testing.T) {
+		for _, value := range []string{`"x"`, `{"value":"x"}`} {
+			var err *scimerrors.Error
+			require.ErrorAs(t, apply(item(), schemas, operation(patch.OpAdd, `tags[value eq "red"]`, value)), &err, value)
+			assert.Equal(t, scimerrors.InvalidPath, err.ScimType, value)
+		}
+	})
+
+	t.Run("rejects changing an immutable attribute", func(t *testing.T) {
+		requireMutability(t, apply(core.Object{"tags": []any{"a", "b"}}, tagsSchema(), operation(patch.OpRemove, `tags[value eq "a"]`, "")))
+		requireMutability(t, apply(core.Object{"tags": []any{"a"}}, tagsSchema(), operation(patch.OpReplace, `tags[value eq "a"]`, `"b"`)))
+	})
+
+	t.Run("charges the filter and write budgets", func(t *testing.T) {
+		replace := []patch.Operation{operation(patch.OpReplace, `tags[value eq "red"]`, `"green"`)}
+		require.ErrorIs(t, patch.Apply(item(), replace, schemas, patch.MaxFilterEvaluations(1)), scimerrors.ErrTooLarge(""))
+		require.ErrorIs(t, patch.Apply(item(), replace, schemas, patch.MaxWriteBytes(2)), scimerrors.ErrTooLarge(""))
+	})
 }
 
 // RFC 7643 Section 7: a value-filter-matched multi-valued immutable sub-attribute also rejects an "add" that changes its value.

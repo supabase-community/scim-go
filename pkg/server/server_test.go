@@ -3331,10 +3331,23 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			{Op: patch.OpAdd, Path: `name[givenName eq "alice"].familyName`, Value: json.RawMessage(`"x"`)},
 			{Op: patch.OpRemove, Path: `name[givenName eq "alice"]`},
 		} {
-			response := Response(t, srv, patchRequest(t, srv, id, op))
+			response := Response(t, srv, patchRequest(t, srv, "Users/"+id, op))
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode, op.Op)
 			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType, op.Op)
+		}
+	})
+
+	// RFC 7644 Section 3.4.2.2: a simple multi-valued attribute is filtered by "value" alone.
+	t.Run("rejects a value filter that is not on a sub-attribute or the value", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Tags: []any{"red"}, Parts: []part{{Serial: "s-1"}}})["id"].(string)
+
+		for _, path := range []string{`tags[type eq "x"]`, `tags[value.x eq "a"]`, `tags[urn:test:widget:value eq "red"]`, `parts[urn:test:widget:serial eq "s-1"]`} {
+			response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpRemove, Path: path}))
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, path)
+			assert.Equal(t, scimerrors.InvalidFilter, ReadBodyAs[scimerrors.Error](t, response).ScimType, path)
 		}
 	})
 
@@ -4132,6 +4145,28 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.NoTarget, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
+
+	// RFC 7644 Section 3.5.2.2: the values matched by a filter comparing "value" are removed.
+	t.Run("removes values of a simple multi-valued attribute matched by a value filter", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Tags: []any{"red", "blue"}})["id"].(string)
+
+		response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpRemove, Path: `tags[value eq "red"]`}))
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []any{"blue"}, ReadBodyAs[widget](t, response).Tags)
+	})
+
+	// RFC 7643 Section 7: an immutable attribute SHALL NOT be updated, including by removal.
+	t.Run("rejects removing a value of an immutable simple multi-valued attribute", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Labels: []any{"a", "b"}})["id"].(string)
+
+		response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpRemove, Path: `labels[value eq "a"]`}))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
 }
 
 // RFC 7644 3.5.2.3 Replace Operation
@@ -4243,6 +4278,44 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		response := rename(id, id)
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, "New", ReadBodyAs[core.Group](t, response).DisplayName)
+	})
+
+	// RFC 7644 Section 3.5.2.3: all matching record values SHALL be replaced, else "noTarget".
+	t.Run("replaces values of a simple multi-valued attribute matched by a value filter", func(t *testing.T) {
+		for _, tc := range []struct {
+			path, value string
+			status      int
+			scimType    scimerrors.ErrorType
+			tags        []any
+		}{
+			{`tags[value eq "red"]`, `"green"`, http.StatusOK, "", []any{"green", "blue"}},
+			{`tags[value eq "red"]`, `"blue"`, http.StatusOK, "", []any{"blue"}},
+			{`tags[value eq "pink"]`, `"green"`, http.StatusBadRequest, scimerrors.NoTarget, nil},
+			{`labels[value eq "a"]`, `"b"`, http.StatusBadRequest, scimerrors.Mutability, nil},
+		} {
+			srv := newTestServer(t)
+			id := createWidget(t, srv, &widget{Name: "gizmo", Tags: []any{"red", "blue"}, Labels: []any{"a"}})["id"].(string)
+
+			response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpReplace, Path: tc.path, Value: json.RawMessage(tc.value)}))
+
+			require.Equal(t, tc.status, response.StatusCode, tc.path)
+			if tc.status == http.StatusOK {
+				assert.Equal(t, tc.tags, ReadBodyAs[widget](t, response).Tags, tc.path)
+				continue
+			}
+			assert.Equal(t, tc.scimType, ReadBodyAs[scimerrors.Error](t, response).ScimType, tc.path)
+		}
+	})
+
+	// RFC 7644 Section 3.5.2.3: a complex multi-valued attribute holds objects, not a bare value.
+	t.Run("rejects a bare value for a complex multi-valued value filter", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com", Type: "work"}}})
+
+		response := Response(t, srv, patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: `emails[type eq "work"]`, Value: json.RawMessage(`"x"`)}))
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
 	})
 }
 
@@ -4575,7 +4648,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 					WithContentType(protocol.MediaType),
 					WithRequestBody([]byte(`{"userName":"bjensen"}`)),
 				),
-				patchRequest(t, srv, id, activate),
+				patchRequest(t, srv, "Users/"+id, activate),
 			)
 		}
 		for i, response := range ConcurrentResponses(t, srv, requests...) {
@@ -4593,8 +4666,8 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		statuses := statusCodes(ConcurrentResponses(t, srv,
-			patchRequest(t, srv, id, activate),
-			patchRequest(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}),
+			patchRequest(t, srv, "Users/"+id, activate),
+			patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}),
 		))
 
 		assert.ElementsMatch(t, []int{http.StatusOK, http.StatusConflict}, statuses)
@@ -4614,8 +4687,8 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
 
 		statuses := statusCodes(ConcurrentResponses(t, srv,
-			patchRequest(t, srv, id, activate, WithHeader("If-Match", etag)),
-			patchRequest(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}, WithHeader("If-Match", etag)),
+			patchRequest(t, srv, "Users/"+id, activate, WithHeader("If-Match", etag)),
+			patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: "title", Value: json.RawMessage(`"Tour Guide"`)}, WithHeader("If-Match", etag)),
 		))
 
 		assert.ElementsMatch(t, []int{http.StatusOK, http.StatusPreconditionFailed}, statuses)

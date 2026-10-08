@@ -68,6 +68,9 @@ func (g parentGate) check(sub *core.Attribute, before, final any) error {
 
 // RFC 7643 Section 7: an assigned immutable sub-attribute rejects any write that would change it.
 func gateImmutableWrite(sub *core.Attribute, before, candidate any) error {
+	if sub.Mutability != core.MutabilityImmutable {
+		return nil
+	}
 	return gateUnlessUnchanged(sub, !value.IsUnassigned(before), value.Equal(sub, before, candidate))
 }
 

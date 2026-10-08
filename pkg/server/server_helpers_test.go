@@ -89,6 +89,7 @@ type widget struct {
 	Secret string           `json:",omitempty"`
 	Keys   []map[string]any `json:",omitempty"`
 	Note   string           `json:",omitempty"`
+	Labels []any            `json:",omitempty"`
 }
 
 type kit struct {
@@ -281,6 +282,7 @@ func widgetAttributes() core.Attributes {
 		core.NewAttribute("secret", core.TypeString).AsWriteOnly(),
 		core.NewAttribute("keys", core.TypeComplex).AsMultiValued().AsWriteOnly().With(core.NewAttribute("value", core.TypeString)),
 		core.NewAttribute("note", core.TypeString).ReturnedAs(core.ReturnedRequest),
+		core.NewAttribute("labels", core.TypeString).AsMultiValued().AsImmutable(),
 	}
 }
 
@@ -361,10 +363,10 @@ func patchUser(t *testing.T, srv *httptest.Server, id string, operations ...patc
 	return ReadBodyAs[core.User](t, response)
 }
 
-func patchRequest(t *testing.T, srv *httptest.Server, id string, op patch.Operation, options ...Option[*http.Request]) *http.Request {
+func patchRequest(t *testing.T, srv *httptest.Server, resource string, op patch.Operation, options ...Option[*http.Request]) *http.Request {
 	t.Helper()
 
-	return Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, append(options,
+	return Request(t, srv, http.MethodPatch, basePath+"/"+resource, append(options,
 		WithBearerToken(validToken),
 		WithContentType(protocol.MediaType),
 		WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{op}}),
