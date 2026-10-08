@@ -90,6 +90,7 @@ type widget struct {
 	Keys   []map[string]any `json:",omitempty"`
 	Note   string           `json:",omitempty"`
 	Labels []any            `json:",omitempty"`
+	Weight float64          `json:",omitempty"`
 }
 
 type kit struct {
@@ -283,6 +284,7 @@ func widgetAttributes() core.Attributes {
 		core.NewAttribute("keys", core.TypeComplex).AsMultiValued().AsWriteOnly().With(core.NewAttribute("value", core.TypeString)),
 		core.NewAttribute("note", core.TypeString).ReturnedAs(core.ReturnedRequest),
 		core.NewAttribute("labels", core.TypeString).AsMultiValued().AsImmutable(),
+		core.NewAttribute("weight", core.TypeDecimal).AsImmutable(),
 	}
 }
 

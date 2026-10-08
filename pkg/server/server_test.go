@@ -282,6 +282,26 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 	})
 }
 
+// RFC 7643 2.3.3 Decimal
+func TestRFC7643Decimal(t *testing.T) {
+	// RFC 7643 Section 2.3.3: a decimal is a real number, so 1.5 and 1.50 are the same value.
+	t.Run("keeps an immutable value written with a different number of digits", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createWidget(t, srv, &widget{Name: "gizmo", Weight: 1.5})["id"].(string)
+
+		request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Path: "weight", Value: json.RawMessage(`1.50`)}},
+			}),
+		)
+
+		assert.Equal(t, http.StatusOK, Response(t, srv, request).StatusCode)
+	})
+}
+
 // RFC 7643 2.3.5 DateTime
 func TestRFC7643DateTime(t *testing.T) {
 	// RFC 7643 Section 2.3.5: a valid xsd:dateTime MUST include both a date and a time; its time zone offset is optional.

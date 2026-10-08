@@ -37,7 +37,7 @@ func Fold(attribute *core.Attribute, value any) any {
 }
 
 func Equal(attribute *core.Attribute, a, b any) bool {
-	if order, ok := Compare(Fold(attribute, a), Fold(attribute, b)); ok {
+	if order, ok := Compare(Fold(attribute, typed(attribute, a)), Fold(attribute, typed(attribute, b))); ok {
 		return order == 0
 	}
 	return reflect.DeepEqual(a, b)
@@ -81,6 +81,13 @@ func Compare(a, b any) (int, bool) {
 		return x.Compare(y), true
 	}
 	return 0, false
+}
+
+func typed(attribute *core.Attribute, value any) any {
+	if coerced, ok := attribute.Coerce(value); ok {
+		return coerced
+	}
+	return value
 }
 
 func compare[T cmp.Ordered](x T, b any) (int, bool) {
