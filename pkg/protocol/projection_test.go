@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -280,6 +281,20 @@ func TestProjectionReturnsAWrittenRequestSubAttribute(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, string(written), `"hint":"h1"`)
+}
+
+// RFC 7643 Section 7: a "request" attribute a PATCH writes under the base schema URI is returned.
+func TestProjectionReturnsARequestAttributePatchedUnderTheBaseSchemaURI(t *testing.T) {
+	schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(core.NewAttribute("secret", core.TypeString).ReturnedAs(core.ReturnedRequest))}
+	document := core.Object{"secret": "s1"}
+	projection, err := protocol.ParseProjection(url.Values{}, schemas)
+	require.NoError(t, err)
+
+	patched := projection.Patched([]patch.Operation{{Op: patch.OpAdd, Value: json.RawMessage(`{"` + string(core.SchemaUser) + `":{"secret":"s1"}}`)}})
+	written, err := json.Marshal(patched.Of(document))
+	require.NoError(t, err)
+
+	assert.Contains(t, string(written), `"secret":"s1"`)
 }
 
 func TestProjectionFillsSchemasAndResourceType(t *testing.T) {

@@ -217,14 +217,13 @@ func (p Projection) tracksWrites() bool {
 
 func (p Projection) namesIn(document core.Object, written names) names {
 	for key, value := range document {
-		switch extension := p.schemas.Lookup(core.SchemaURI(key)); {
-		case extension == nil:
+		if p.schemas.Lookup(core.SchemaURI(key)) == nil {
 			written = p.write(written, key)
-		case p.schemas.IsExtension(extension):
-			body, _ := value.(map[string]any)
-			for sub := range body {
-				written = p.write(written, key+":"+sub)
-			}
+			continue
+		}
+		body, _ := value.(map[string]any)
+		for sub := range body {
+			written = p.write(written, key+":"+sub)
 		}
 	}
 	return written
