@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.14.0](https://github.com/supabase-community/scim-go/compare/v0.13.0...v0.14.0) (2026-10-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* **server:** match any ETag in an If-Match list
+* **filter:** drop unused DefaultGrammar var
+
+### Features
+
+* **server:** add Resource.WithValidators for custom validation ([e02cda5](https://github.com/supabase-community/scim-go/commit/e02cda5acfa8c2b755b9844570cecc316970a9d4))
+
+
+### Bug Fixes
+
+* **core:** accept dateTime without a time zone offset ([51d7c81](https://github.com/supabase-community/scim-go/commit/51d7c81db1969cb9e6d0baea6a7eda375f3a583d))
+* **core:** resolve schemas as a common attribute ([eeb1421](https://github.com/supabase-community/scim-go/commit/eeb1421c13d5a18a4964d5c372eb4551a8e42a89))
+* **patch:** charge one write when replacing filtered values ([b4caf10](https://github.com/supabase-community/scim-go/commit/b4caf10b78f5b083225d8a8f1e4301d9e21a36c3))
+* **patch:** dedup complex values by identity, ignoring primary ([9c9cf74](https://github.com/supabase-community/scim-go/commit/9c9cf747fece597dd3f56d2170a1969a35a55f45))
+* **patch:** demote only primary values when promoting a stored value ([f7b0baa](https://github.com/supabase-community/scim-go/commit/f7b0baa25ab51733a2a09c877316f4de8085f7b8))
+* **patch:** ignore schemas in a no-path value ([3bf3098](https://github.com/supabase-community/scim-go/commit/3bf30984a6c1cec0b81bacafe8ef3fb20a5d6871))
+* **patch:** match value filters on simple multi-valued attributes ([17e0f8b](https://github.com/supabase-community/scim-go/commit/17e0f8b40c59d3f09cf132bb463c7cec55d42a23))
+* **patch:** promote a stored value added again as primary ([b9889d4](https://github.com/supabase-community/scim-go/commit/b9889d49666d13edf32e5893ad147ca60bb320f8))
+* **patch:** promote one copy of a duplicated value ([28d49f8](https://github.com/supabase-community/scim-go/commit/28d49f813a1db8eb717e1828f8530428381cc9e2))
+* **patch:** promote only attributes with a primary sub-attribute ([c5bb76e](https://github.com/supabase-community/scim-go/commit/c5bb76e5b82960561b8530aadcfc637290089541))
+* **patch:** reject promoting a stored value of an immutable attribute ([86535c4](https://github.com/supabase-community/scim-go/commit/86535c40a1c9311681191cf99ef4dbe7dd28a715))
+* **patch:** reject value filters on single-valued attributes ([65edfde](https://github.com/supabase-community/scim-go/commit/65edfde2cde60d8e695be2d5d3ac0bf3b3123546))
+* **patch:** treat a stored value re-added as primary as already present ([803c78a](https://github.com/supabase-community/scim-go/commit/803c78a17fae3d2005ff39ab3ab4629124d140d9))
+* **protocol:** allow sensitive filters in POST .search bodies ([bad7fa0](https://github.com/supabase-community/scim-go/commit/bad7fa01617708f2f1f491235b3de1384ffd0c0b))
+* **protocol:** clamp the start index before computing the offset ([8a6dac0](https://github.com/supabase-community/scim-go/commit/8a6dac0c4641a37d004ad674767222ffbc7e689f))
+* **protocol:** mark request attributes patched under the base schema URI ([be4ac7f](https://github.com/supabase-community/scim-go/commit/be4ac7fcac402d5de44c089dfe2207718f965fbe))
+* **protocol:** omit list elements left empty by projection ([62ddc41](https://github.com/supabase-community/scim-go/commit/62ddc415883c772d93258b6960355610d328b620))
+* **protocol:** return always sub-attributes of a parent left out ([e38bb19](https://github.com/supabase-community/scim-go/commit/e38bb19ad658705bc99ad7aa152a9ecfff34879f))
+* **protocol:** return request attributes the client wrote ([82e0442](https://github.com/supabase-community/scim-go/commit/82e04425a3fc977f1550b4fa67ff2639b6876eda))
+* **protocol:** treat empty schemas like nil in projection ([9534e0c](https://github.com/supabase-community/scim-go/commit/9534e0c0aa2eec12f725e8ee1d1dda79ef77aa3f))
+* **server:** fail an If-Match that lists no entity-tag ([240cf4c](https://github.com/supabase-community/scim-go/commit/240cf4ceefb2fbed4f066282fd5d5d6126c95d44))
+* **server:** match any ETag in an If-Match list ([80b71b6](https://github.com/supabase-community/scim-go/commit/80b71b66a780f330f14e958f8a185d5f319fbf0c))
+* **server:** match schema and resource type ids in any case ([f82bc8f](https://github.com/supabase-community/scim-go/commit/f82bc8fc69252d1393988dc6b1d42dcdfbb21827))
+* **server:** require attributes only when their parent is present ([8cd490c](https://github.com/supabase-community/scim-go/commit/8cd490cdcdb8eef1a5848af85ee5254289a3f8b5))
+* **value:** bucket set values by their coerced type ([a725aa6](https://github.com/supabase-community/scim-go/commit/a725aa6acc078c49886294ea90bcad1c9ff87b1e))
+* **value:** compare typed values in Equal ([9189c37](https://github.com/supabase-community/scim-go/commit/9189c378520e2fb085e3887b2973137a4dd0105e))
+* **value:** reject eq and ne on complex attributes ([5f829ee](https://github.com/supabase-community/scim-go/commit/5f829ee0a7e51cb04cab357faf20dbdf64d3e305))
+
+
+### Performance Improvements
+
+* **patch:** check parent mutability before comparing values ([bfff53c](https://github.com/supabase-community/scim-go/commit/bfff53cca4ba400e1070ca96785786d1dfbf341d))
+* **protocol:** skip written names when attributes are requested ([73e4b50](https://github.com/supabase-community/scim-go/commit/73e4b500c6f3357e3b7186024dbae0ff11948574))
+* **protocol:** skip written names when no attribute is returned on request ([ed84d8f](https://github.com/supabase-community/scim-go/commit/ed84d8f951d568574d0f973b5a6e69de5f2b439a))
+
+
+### Code Refactoring
+
+* **filter:** drop unused DefaultGrammar var ([f2f5dd9](https://github.com/supabase-community/scim-go/commit/f2f5dd9d928b2720f242aa4862fc31f3f109116f))
+
 ## [0.13.0](https://github.com/supabase-community/scim-go/compare/v0.12.0...v0.13.0) (2026-10-07)
 
 
