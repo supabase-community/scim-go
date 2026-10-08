@@ -60,7 +60,7 @@ func (m merger) field(key, name string, incoming any) error {
 }
 
 func (g parentGate) check(sub *core.Attribute, before, final any) error {
-	if g.attr == nil || g.attr.MultiValued {
+	if g.attr == nil || g.attr.MultiValued || g.attr.Mutability != core.MutabilityImmutable {
 		return nil
 	}
 	return gateUnlessUnchanged(g.attr, g.assigned, value.Equal(sub, before, final))
