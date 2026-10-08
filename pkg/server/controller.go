@@ -117,7 +117,11 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	req.ID, req.Versions = r.PathValue("id"), c.ifMatch(r)
+	versions, err := c.ifMatch(r)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	req.ID, req.Versions = r.PathValue("id"), versions
 	projection = projection.Written(req.Attributes)
 	replaced, err := c.service.Replace(r.Context(), req)
 	if err != nil {
@@ -139,7 +143,11 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
-	req.ID, req.Versions = r.PathValue("id"), c.ifMatch(r)
+	versions, err := c.ifMatch(r)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	req.ID, req.Versions = r.PathValue("id"), versions
 	projection = projection.Patched(req.Operations)
 	patched, err := c.service.Patch(r.Context(), req)
 	if err != nil {
@@ -159,7 +167,11 @@ func (c *controller[T]) sendPatched(w http.ResponseWriter, patched T, projection
 }
 
 func (c *controller[T]) Delete(w http.ResponseWriter, r *http.Request) error {
-	if err := c.service.Delete(r.Context(), &protocol.DeleteRequest{ID: r.PathValue("id"), Versions: c.ifMatch(r)}); err != nil {
+	versions, err := c.ifMatch(r)
+	if err != nil {
+		return protocol.SendError(w, err)
+	}
+	if err := c.service.Delete(r.Context(), &protocol.DeleteRequest{ID: r.PathValue("id"), Versions: versions}); err != nil {
 		return protocol.SendError(w, err)
 	}
 	return protocol.Send(w, http.StatusNoContent, nil)
@@ -192,12 +204,17 @@ func (c *controller[T]) setVersion(w http.ResponseWriter, resource T) {
 	}
 }
 
-func (c *controller[T]) ifMatch(r *http.Request) []string {
+// RFC 9110 Section 13.1.1: an If-Match list with no entity-tag never matches, so the condition is false.
+func (c *controller[T]) ifMatch(r *http.Request) ([]string, error) {
 	lines := r.Header.Values("If-Match")
 	if !c.config.SupportsVersioning() || slices.Equal(lines, []string{"*"}) {
-		return nil
+		return nil, nil
 	}
-	return entityTags(strings.Join(lines, ","))
+	tags := entityTags(strings.Join(lines, ","))
+	if len(lines) > 0 && len(tags) == 0 {
+		return nil, scimerrors.ErrPreconditionFailed("If-Match lists no entity-tag")
+	}
+	return tags, nil
 }
 
 // RFC 7232 Section 3.1: If-Match = "*" / 1#entity-tag

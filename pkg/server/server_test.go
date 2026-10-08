@@ -2712,6 +2712,8 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 			{"two lines", func(etag string) []string { return []string{`W/"stale"`, etag} }, http.StatusOK},
 			{"all stale", func(string) []string { return []string{`W/"a,b", W/"stale"`} }, http.StatusPreconditionFailed},
 			{"malformed", func(string) []string { return []string{`"open, bare`} }, http.StatusPreconditionFailed},
+			{"only separators", func(string) []string { return []string{` , `} }, http.StatusPreconditionFailed},
+			{"empty lines", func(string) []string { return []string{"", ""} }, http.StatusPreconditionFailed},
 		} {
 			srv := newTestServer(t)
 			id, etag := create(t, srv, &core.User{UserName: "bjensen"})
@@ -3720,28 +3722,30 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	})
 
 	// RFC 7644 Section 3.12: 412 when the update failed because the resource has changed on the server.
-	t.Run("rejects a patch with a stale If-Match", func(t *testing.T) {
-		srv := newTestServer(t)
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+	t.Run("rejects a patch with a stale or empty If-Match", func(t *testing.T) {
+		for _, ifMatch := range []string{`W/"stale"`, ","} {
+			srv := newTestServer(t)
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
-		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithHeader("If-Match", `W/"stale"`),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{
-					{
-						Op:    patch.OpReplace,
-						Path:  "active",
-						Value: json.RawMessage("true"),
+			request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", ifMatch),
+				WithRequestBodyAs(t, protocol.PatchRequest{
+					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+					Operations: []patch.Operation{
+						{
+							Op:    patch.OpReplace,
+							Path:  "active",
+							Value: json.RawMessage("true"),
+						},
 					},
-				},
-			}),
-		)
-		response := Response(t, srv, request)
+				}),
+			)
+			response := Response(t, srv, request)
 
-		assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
+			assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode, ifMatch)
+		}
 	})
 
 	// RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
@@ -4578,24 +4582,26 @@ func TestRFC7644DeletingResources(t *testing.T) {
 	})
 
 	// RFC 7644 Section 3.12: 412 when the update failed because the resource has changed on the server.
-	t.Run("rejects a delete with a stale If-Match and leaves the resource intact", func(t *testing.T) {
-		srv := newTestServer(t)
-		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+	t.Run("rejects a delete with a stale or empty If-Match and leaves the resource intact", func(t *testing.T) {
+		for _, ifMatch := range []string{`W/"stale"`, ","} {
+			srv := newTestServer(t)
+			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
-		request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithHeader("If-Match", `W/"stale"`),
-		)
-		response := Response(t, srv, request)
-		assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
+			request := Request(t, srv, http.MethodDelete, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithHeader("If-Match", ifMatch),
+			)
+			response := Response(t, srv, request)
+			assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode, ifMatch)
 
-		request = Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-		)
-		response = Response(t, srv, request)
-		assert.Equal(t, http.StatusOK, response.StatusCode)
+			request = Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+			)
+			response = Response(t, srv, request)
+			assert.Equal(t, http.StatusOK, response.StatusCode, ifMatch)
+		}
 	})
 
 	// RFC 7644 Section 3.12: 404 when the specified resource does not exist.
