@@ -3091,8 +3091,8 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 			return elapsed
 		}
 
-		small := grow(200)
-		large := grow(800)
+		small := min(grow(200), grow(200), grow(200))
+		large := min(grow(800), grow(800), grow(800))
 
 		assert.Less(t, float64(large)/float64(small), 8.0, "immutable member validation must not be quadratic in duplicate values")
 	})
