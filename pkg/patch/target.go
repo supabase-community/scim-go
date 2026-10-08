@@ -2,6 +2,7 @@ package patch
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 
 	"github.com/supabase-community/scim-go/internal/value"
@@ -227,6 +228,14 @@ func (t *target) subParent() *core.Attribute {
 
 func (t *target) remove() error {
 	clear(t.indexes)
+	err := t.removeValues()
+	if t.filter.match != nil && errors.Is(err, scimerrors.ErrNoTarget("")) {
+		return nil // RFC 7644 Section 3.5.2.2: if nothing matched, no changes should be made and a success response should be returned.
+	}
+	return err
+}
+
+func (t *target) removeValues() error {
 	if t.filter.match != nil && t.path.SubAttribute == "" {
 		return t.drop()
 	}
@@ -275,7 +284,7 @@ func (t *target) drop() error {
 	}
 	count := tally(matched)
 	if count == 0 {
-		return nil // RFC 7644 Section 3.5.2.2: a filter matching no value makes no change and still succeeds.
+		return scimerrors.ErrNoTarget(`"path" matched no elements`)
 	}
 	for i, element := range elements {
 		if !matched[i] {

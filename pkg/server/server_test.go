@@ -4229,6 +4229,16 @@ func TestRFC7644AddOperation(t *testing.T) {
 
 // RFC 7644 3.5.2.2 Remove Operation
 func TestRFC7644RemoveOperation(t *testing.T) {
+	// RFC 7644 Section 3.5.2.2: if the user was not a member of this group, no changes should be made and a success response should be returned.
+	t.Run("removing a sub-attribute behind a filter that matches nothing changes nothing", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@example.com", Type: "work"}}})
+
+		patched := patchUser(t, srv, id, patch.Operation{Op: patch.OpRemove, Path: `emails[type eq "home"].value`})
+
+		assert.Equal(t, []core.Email{{Value: "a@example.com", Type: "work"}}, patched.Emails)
+	})
+
 	// RFC 7644 Section 3.5.2.2: the attribute at the target location and its associated value is removed.
 	t.Run("removes a value with a remove operation", func(t *testing.T) {
 		srv := newTestServer(t)
