@@ -2,6 +2,7 @@ package value
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -26,8 +27,7 @@ func Identity(attribute *core.Attribute, element core.Object) string {
 	if IsUnassigned(typ) {
 		typ = nil
 	}
-	raw, _ := json.Marshal([]any{folded, typ})
-	return string(raw)
+	return identityKey([]any{folded, typ})
 }
 
 func ByIdentity(attribute *core.Attribute, existing any) map[string]map[string]any {
@@ -52,6 +52,26 @@ func compositeIdentity(attribute *core.Attribute, element core.Object) string {
 	if len(folded) == 0 {
 		return ""
 	}
-	raw, _ := json.Marshal(folded)
+	return identityKey(folded)
+}
+
+func identityKey(values []any) string {
+	raw := make([]byte, 0, 64)
+	for _, v := range values {
+		switch item := v.(type) {
+		case string:
+			raw = strconv.AppendQuote(raw, item)
+		case nil:
+			raw = append(raw, "null"...)
+		case bool:
+			raw = strconv.AppendBool(raw, item)
+		case json.Number:
+			raw = append(raw, item...)
+		default:
+			encoded, _ := json.Marshal(item)
+			raw = append(raw, encoded...)
+		}
+		raw = append(raw, ',')
+	}
 	return string(raw)
 }
