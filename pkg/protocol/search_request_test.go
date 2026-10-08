@@ -2,6 +2,7 @@ package protocol_test
 
 import (
 	"encoding/json"
+	"math"
 	"net/url"
 	"strings"
 	"testing"
@@ -195,6 +196,7 @@ func TestSearchRequest(t *testing.T) {
 
 	t.Run("reads a start index it was never given as the first", func(t *testing.T) {
 		assert.Equal(t, 0, (&protocol.SearchRequest{}).Offset())
+		assert.Equal(t, 0, (&protocol.SearchRequest{StartIndex: math.MinInt}).Offset())
 	})
 
 	t.Run("reports the direction of the sort", func(t *testing.T) {

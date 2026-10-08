@@ -30,7 +30,7 @@ type SearchRequest struct {
 
 // Offset is the zero-based start index, per Table 6 of RFC 7644, Section 3.4.2.4.
 func (s *SearchRequest) Offset() int {
-	return max(s.StartIndex-1, 0)
+	return max(s.StartIndex, 1) - 1
 }
 
 func (s *SearchRequest) Descending() bool {
