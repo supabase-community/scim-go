@@ -2701,7 +2701,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		assert.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 	})
 
-	// RFC 7232 Section 3.1: the condition holds if any entity-tag in the If-Match list matches.
+	// RFC 9110 Section 13.1.1: the condition holds if any entity-tag in the If-Match list matches.
 	t.Run("matches any ETag in an If-Match list", func(t *testing.T) {
 		for _, test := range []struct {
 			name   string
@@ -4811,7 +4811,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, response.Header.Get("ETag"), replaced.Meta.Version)
 	})
 
-	// RFC 7232 Section 3.1: If-Match "*" matches any current representation of the target resource.
+	// RFC 9110 Section 13.1.1: If-Match "*" matches any current representation of the target resource.
 	t.Run("If-Match * matches any version", func(t *testing.T) {
 		srv := newTestServer(t)
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})

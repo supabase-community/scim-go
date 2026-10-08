@@ -217,7 +217,7 @@ func (c *controller[T]) ifMatch(r *http.Request) ([]string, error) {
 	return tags, nil
 }
 
-// RFC 7232 Section 3.1: If-Match = "*" / 1#entity-tag
+// RFC 9110 Section 13.1.1: If-Match = "*" / #entity-tag
 func entityTags(field string) []string {
 	var tags []string
 	for field = strings.TrimLeft(field, " \t,"); field != ""; field = strings.TrimLeft(field, " \t,") {
