@@ -52,7 +52,9 @@ func (ix *index) promote(stored []any, candidate any) {
 	ix.primaries = ix.primaries[:0]
 	for _, element := range stored {
 		if len(ix.primaries) > 0 || value.Identity(ix.attr, asMember(element)) != id {
-			setPrimaryFalse(element)
+			if value.Primary(element) {
+				setPrimaryFalse(element)
+			}
 			continue
 		}
 		core.Object(asMember(element)).Set("primary", true)

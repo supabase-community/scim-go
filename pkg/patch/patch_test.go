@@ -121,7 +121,7 @@ func TestApplyAddOfADuplicatedValueAsPrimaryPromotesOneCopy(t *testing.T) {
 
 	require.NoError(t, apply(item, []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}, operation(patch.OpAdd, "emails", `[{"value":"a","type":"work","primary":true}]`)))
 
-	assert.Equal(t, []any{map[string]any{"value": "a", "type": "work", "primary": true}, map[string]any{"value": "a", "type": "work", "primary": false}}, item["emails"])
+	assert.Equal(t, []any{map[string]any{"value": "a", "type": "work", "primary": true}, map[string]any{"value": "a", "type": "work"}}, item["emails"])
 }
 
 // RFC 7643 Section 2.4: the same "value" MAY repeat under a different "type", so adding one is not a no-op.
@@ -298,6 +298,18 @@ func TestApplyPrimaryDemotesTheOtherValues(t *testing.T) {
 		require.NoError(t, apply(item, userSchemas(), operation(patch.OpAdd, "emails", `[{"type":"work","value":"a@b.com","primary":true}]`)))
 
 		assert.Equal(t, []any{true}, primaries(item))
+	})
+
+	t.Run("when an added value is already stored, without touching values that were never primary", func(t *testing.T) {
+		item := core.Object{"emails": []any{
+			map[string]any{"type": "work", "value": "a@b.com", "primary": true},
+			map[string]any{"type": "home", "value": "b@b.com"},
+			map[string]any{"type": "other", "value": "c@b.com"},
+		}}
+
+		require.NoError(t, apply(item, []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}, operation(patch.OpAdd, "emails", `[{"type":"home","value":"b@b.com","primary":true}]`)))
+
+		assert.Equal(t, []any{false, true, nil}, primaries(item))
 	})
 }
 
