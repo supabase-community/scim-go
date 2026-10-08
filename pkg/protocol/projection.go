@@ -62,7 +62,7 @@ func (p Projection) Returns(name string) bool {
 	}
 	uri := core.SchemaURI(path.URI)
 	attribute, ok := p.schemas.Resolve(uri, path.Name, "")
-	return !ok || p.returns(attribute, qualifiedKey(p.schemas.Lookup(uri).ID, attribute.Name))
+	return !ok || p.returns(attribute, qualifiedKey(p.schemas.Lookup(uri).ID, attribute.Name)) || returnsAlways(attribute)
 }
 
 // Written marks the attributes a POST or PUT body specified, per RFC 7643, Section 7.
@@ -172,7 +172,7 @@ func (p Projection) requested(name string) bool {
 
 func (p Projection) value(attribute *core.Attribute, name string, value any) (any, bool) {
 	if !p.returns(attribute, name) {
-		return nil, false
+		return always(attribute, value)
 	}
 	if len(attribute.SubAttributes) == 0 {
 		return value, true
@@ -323,6 +323,39 @@ func prune(object map[string]any, project func(key string, value any) (any, bool
 			delete(object, key)
 		}
 	}
+}
+
+// RFC 7643 Section 7: an "always" sub-attribute is returned even when its parent is left out.
+func always(attribute *core.Attribute, v any) (any, bool) {
+	list, ok := v.([]any)
+	if !returnsAlways(attribute) || !ok {
+		return alwaysIn(attribute, v)
+	}
+	elements := list[:0]
+	for _, element := range list {
+		if object, ok := alwaysIn(attribute, element); ok {
+			elements = append(elements, object)
+		}
+	}
+	return elements, len(elements) > 0
+}
+
+func alwaysIn(attribute *core.Attribute, v any) (any, bool) {
+	object, ok := v.(map[string]any)
+	if !ok || !returnsAlways(attribute) {
+		return nil, false
+	}
+	prune(object, func(key string, item any) (any, bool) {
+		sub := attribute.SubAttribute(key)
+		return item, sub != nil && sub.Returned == core.ReturnedAlways
+	})
+	return object, len(object) > 0
+}
+
+func returnsAlways(attribute *core.Attribute) bool {
+	return !value.Hidden(nil, attribute) && slices.ContainsFunc(attribute.SubAttributes, func(sub *core.Attribute) bool {
+		return sub.Returned == core.ReturnedAlways
+	})
 }
 
 func qualifiedKey(uri core.SchemaURI, name string) string {

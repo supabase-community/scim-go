@@ -88,7 +88,7 @@ func TestProjection(t *testing.T) {
 
 	// RFC 7644 Section 3.9: the minimum set plus the requested attributes.
 	t.Run("returns only the minimum set and the requested attributes", func(t *testing.T) {
-		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keys(apply(t, "attributes=userName")))
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName", "credential"}, keys(apply(t, "attributes=userName")))
 	})
 
 	t.Run("matches attribute names case-insensitively", func(t *testing.T) {
@@ -102,7 +102,7 @@ func TestProjection(t *testing.T) {
 	})
 
 	t.Run("removes excluded attributes from the default set", func(t *testing.T) {
-		assert.ElementsMatch(t, []string{"schemas", "id", "userName", "name", string(core.SchemaEnterpriseUser)}, keys(apply(t, "excludedAttributes=emails,meta,credential")))
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName", "name", "credential", string(core.SchemaEnterpriseUser)}, keys(apply(t, "excludedAttributes=emails,meta,credential")))
 	})
 
 	t.Run("does not exclude a returned:always attribute", func(t *testing.T) {
@@ -200,6 +200,25 @@ func TestProjectionReturns(t *testing.T) {
 		assert.Equal(t, want, strings.Contains(string(raw), `"members"`), query)
 	}
 	assert.True(t, protocol.ProjectionFrom(context.Background()).Returns("members"))
+}
+
+// RFC 7643 Section 7: an "always" sub-attribute is returned regardless of the "attributes" parameter.
+func TestProjectionReturnsAnAlwaysSubAttribute(t *testing.T) {
+	schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(
+		core.NewAttribute("userName", core.TypeString),
+		core.NewAttribute("keys", core.TypeComplex).AsMultiValued().With(
+			core.NewAttribute("id", core.TypeString).ReturnedAs(core.ReturnedAlways),
+			core.NewAttribute("label", core.TypeString),
+		),
+	)}
+	user := map[string]any{"userName": "bjensen", "keys": []any{map[string]any{"id": "k-1", "label": "a"}, map[string]any{"label": "b"}}}
+	projection, err := protocol.ParseProjection(url.Values{"attributes": {"userName"}}, schemas)
+	require.NoError(t, err)
+	raw, err := json.Marshal(projection.Of(user))
+	require.NoError(t, err)
+
+	assert.True(t, projection.Returns("keys"))
+	assert.JSONEq(t, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"bjensen","keys":[{"id":"k-1"}]}`, string(raw))
 }
 
 func TestProjectionReturnsAnExtensionAttribute(t *testing.T) {

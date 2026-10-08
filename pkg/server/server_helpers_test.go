@@ -299,7 +299,7 @@ func kitAttributes() core.Attributes {
 func gadgetAttributes() core.Attributes {
 	return core.Attributes{
 		core.NewAttribute("parts", core.TypeComplex).AsMultiValued().With(
-			core.NewAttribute("serial", core.TypeString).AsRequired(),
+			core.NewAttribute("serial", core.TypeString).AsRequired().ReturnedAs(core.ReturnedAlways),
 			core.NewAttribute("code", core.TypeString).AsImmutable(),
 		),
 	}

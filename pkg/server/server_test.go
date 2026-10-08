@@ -2392,6 +2392,23 @@ func TestRFC7644Attributes(t *testing.T) {
 		assert.Equal(t, id, body["id"])
 	})
 
+	// RFC 7643 Section 7: an "always" attribute is returned regardless of the "attributes" parameter.
+	t.Run("returns an always sub-attribute of a parent left out", func(t *testing.T) {
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Gadgets",
+			WithBearerToken(validToken), WithContentType(protocol.MediaType),
+			WithRequestBody([]byte(`{"parts":[{"serial":"s-1","code":"A"}]}`)),
+		))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		gadget, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
+
+		for _, query := range []string{"excludedAttributes=parts", "attributes=id"} {
+			status, body := get(t, "/Gadgets/"+gadget+"?"+query)
+
+			require.Equal(t, http.StatusOK, status, query)
+			assert.Equal(t, []any{map[string]any{"Serial": "s-1"}}, body["Parts"], query)
+		}
+	})
+
 	// RFC 7644 Section 3.9: clients MAY request a partial representation on any operation that returns a resource.
 	t.Run("shapes the resource returned by a replace", func(t *testing.T) {
 		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id+"?attributes=userName",
