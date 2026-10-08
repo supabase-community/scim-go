@@ -63,17 +63,17 @@ func (e *evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() 
 		return nil, err
 	}
 	return func(row any) bool {
-		return slices.ContainsFunc(list.elements(asObject(row)), inner)
+		return slices.ContainsFunc(list.elements(value.AsObject(row)), inner)
 	}, nil
 }
 
 func (e *evaluator) reader(attribute *protocol.Attribute) (func(row any) any, error) {
 	definition := attribute.Definition
 	if attribute.Parent != nil {
-		return func(row any) any { return coerce(definition, asObject(row).Get(definition.Name)) }, nil
+		return func(row any) any { return coerce(definition, value.AsObject(row).Get(definition.Name)) }, nil
 	}
 	if field, ok := e.lookup(definition); ok {
-		return func(row any) any { return field.value(asObject(row)) }, nil
+		return func(row any) any { return field.value(value.AsObject(row)) }, nil
 	}
 	return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 }

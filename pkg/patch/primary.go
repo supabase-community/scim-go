@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/supabase-community/scim-go/internal/value"
-	"github.com/supabase-community/scim-go/pkg/core"
 )
 
 // RFC 7644 Section 3.5.2: setting "primary" to true sets it to false for every other value of the attribute.
@@ -19,11 +18,8 @@ func demote(elements []any, written func(int) bool) {
 }
 
 func setPrimary(element any, primary bool) {
-	switch e := element.(type) {
-	case map[string]any:
-		core.Object(e).Set("primary", primary)
-	case core.Object:
-		e.Set("primary", primary)
+	if object := value.AsObject(element); object != nil {
+		object.Set("primary", primary)
 	}
 }
 

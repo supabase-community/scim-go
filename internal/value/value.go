@@ -55,14 +55,18 @@ func Clone(value any) any {
 	}
 }
 
-func Primary(element any) bool {
-	switch e := element.(type) {
+func AsObject(element any) core.Object {
+	switch object := element.(type) {
 	case core.Object:
-		return e.Get("primary") == true
+		return object
 	case map[string]any:
-		return core.Object(e).Get("primary") == true
+		return object
 	}
-	return false
+	return nil
+}
+
+func Primary(element any) bool {
+	return AsObject(element).Get("primary") == true
 }
 
 // Hidden reports an attribute, or the parent it belongs to, whose values SHALL NOT be returned, per RFC 7643, Section 7.

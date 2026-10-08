@@ -55,7 +55,7 @@ func (ix *index) contains(candidate any) bool {
 	if ix.set != nil {
 		return ix.set.Contains(candidate)
 	}
-	id := value.Identity(ix.attr, asMember(candidate))
+	id := value.Identity(ix.attr, value.AsObject(candidate))
 	return id != "" && ix.ids[id]
 }
 

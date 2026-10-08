@@ -19,7 +19,7 @@ func carryImmutable(attr *core.Attribute, kind Op, stored []any, candidate any) 
 	}
 	byIdentity := value.ByIdentity(attr, stored)
 	for _, element := range elements {
-		fillOmitted(attr, asMember(element), subs, byIdentity)
+		fillOmitted(attr, value.AsObject(element), subs, byIdentity)
 	}
 	return candidate
 }
@@ -38,9 +38,4 @@ func fillOmitted(attr *core.Attribute, member map[string]any, subs []*core.Attri
 			candidate.Set(sub.Name, held.Get(sub.Name))
 		}
 	}
-}
-
-func asMember(element any) map[string]any {
-	member, _ := element.(map[string]any)
-	return member
 }

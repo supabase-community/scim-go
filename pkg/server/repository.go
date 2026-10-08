@@ -8,6 +8,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -246,7 +247,7 @@ func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (func(core.Ob
 		if !ok {
 			return nil
 		}
-		return coerce(attribute, asObject(element).Get(attribute.Name))
+		return coerce(attribute, value.AsObject(element).Get(attribute.Name))
 	}, true
 }
 

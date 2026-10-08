@@ -3,6 +3,7 @@ package server
 import (
 	"slices"
 
+	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
@@ -31,7 +32,7 @@ func newFields(schemas core.Schemas) fields {
 
 func (f fields) with(parent func(core.Object) any, attributes ...*core.Attribute) fields {
 	for _, attribute := range attributes {
-		top := field{Attribute: attribute, holder: parent, raw: func(d core.Object) any { return asObject(parent(d)).Get(attribute.Name) }}
+		top := field{Attribute: attribute, holder: parent, raw: func(d core.Object) any { return value.AsObject(parent(d)).Get(attribute.Name) }}
 		f = append(f, top)
 		for _, sub := range attribute.SubAttributes {
 			f = append(f, top.sub(sub))
@@ -68,26 +69,16 @@ func (f field) isList() bool {
 // RFC 7644 Section 3.4.2.2: outside a value path, a sub-attribute holds the values of every element.
 func (f field) sub(sub *core.Attribute) field {
 	if !f.MultiValued {
-		return field{Attribute: sub, parent: f.Attribute, holder: f.raw, raw: func(d core.Object) any { return asObject(f.raw(d)).Get(sub.Name) }}
+		return field{Attribute: sub, parent: f.Attribute, holder: f.raw, raw: func(d core.Object) any { return value.AsObject(f.raw(d)).Get(sub.Name) }}
 	}
 	return field{Attribute: sub, parent: f.Attribute, holder: f.raw, raw: func(d core.Object) any {
 		list := f.elements(d)
 		values := make([]any, len(list))
 		for i, element := range list {
-			values[i] = asObject(element).Get(sub.Name)
+			values[i] = value.AsObject(element).Get(sub.Name)
 		}
 		return values
 	}}
-}
-
-func asObject(value any) core.Object {
-	switch v := value.(type) {
-	case core.Object:
-		return v
-	case map[string]any:
-		return v
-	}
-	return nil
 }
 
 func valuesOf(raw any) []any {
@@ -97,13 +88,13 @@ func valuesOf(raw any) []any {
 	return []any{raw}
 }
 
-func coerce(attribute *core.Attribute, value any) any {
+func coerce(attribute *core.Attribute, raw any) any {
 	if attribute.Type == core.TypeComplex {
-		return value
+		return raw
 	}
-	list, ok := value.([]any)
+	list, ok := raw.([]any)
 	if !ok {
-		return coerced(attribute, value)
+		return coerced(attribute, raw)
 	}
 	values := make([]any, len(list))
 	for i, element := range list {
@@ -112,8 +103,8 @@ func coerce(attribute *core.Attribute, value any) any {
 	return values
 }
 
-func coerced(attribute *core.Attribute, value any) any {
-	if typed, ok := attribute.Coerce(value); ok {
+func coerced(attribute *core.Attribute, raw any) any {
+	if typed, ok := attribute.Coerce(raw); ok {
 		return typed
 	}
 	return nil
