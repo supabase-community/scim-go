@@ -333,16 +333,18 @@ func keepEach(list []any, project func(element any) (any, bool)) ([]any, bool) {
 
 // RFC 7643 Section 7: an "always" sub-attribute is returned even when its parent is left out.
 func always(attribute *core.Attribute, v any) (any, bool) {
-	list, ok := v.([]any)
-	if !returnsAlways(attribute) || !ok {
-		return alwaysIn(attribute, v)
+	if !returnsAlways(attribute) {
+		return nil, false
 	}
-	return keepEach(list, func(element any) (any, bool) { return alwaysIn(attribute, element) })
+	if list, ok := v.([]any); ok {
+		return keepEach(list, func(element any) (any, bool) { return alwaysIn(attribute, element) })
+	}
+	return alwaysIn(attribute, v)
 }
 
 func alwaysIn(attribute *core.Attribute, v any) (any, bool) {
 	object, ok := v.(map[string]any)
-	if !ok || !returnsAlways(attribute) {
+	if !ok {
 		return nil, false
 	}
 	prune(object, func(key string, item any) (any, bool) {
