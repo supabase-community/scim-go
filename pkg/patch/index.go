@@ -1,6 +1,8 @@
 package patch
 
 import (
+	"slices"
+
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 )
@@ -32,53 +34,8 @@ func newIndex(attr *core.Attribute, existing []any) *index {
 	return ix
 }
 
-func (ix *index) fresh(stored, candidates []any) ([]any, error) {
-	kept := make([]any, 0, len(candidates))
-	for _, candidate := range candidates {
-		switch {
-		case !ix.contains(candidate):
-			kept = append(kept, candidate)
-		case value.Primary(candidate) && ix.attr.SubAttribute("primary") != nil:
-			if err := ix.promote(stored, candidate); err != nil {
-				return nil, err
-			}
-		}
-	}
-	return kept, nil
-}
-
-// RFC 7644 Section 3.5.2: setting "primary" to "true" sets it to "false" for every other value of the attribute.
-func (ix *index) promote(stored []any, candidate any) error {
-	promoted, flips := ix.flips(stored, value.Identity(ix.attr, asMember(candidate)))
-	if len(flips) > 0 && ix.attr.Mutability == core.MutabilityImmutable {
-		return errImmutable(ix.attr)
-	}
-	ix.flip(stored, promoted, flips)
-	return nil
-}
-
-func (ix *index) flip(stored []any, promoted int, flips []int) {
-	for _, i := range flips {
-		setPrimary(stored[i], i == promoted)
-	}
-	ix.primaries = ix.primaries[:0]
-	if promoted >= 0 {
-		ix.primaries = append(ix.primaries, stored[promoted])
-	}
-}
-
-func (ix *index) flips(stored []any, id string) (promoted int, flips []int) {
-	promoted = -1
-	for i, element := range stored {
-		primary := promoted < 0 && value.Identity(ix.attr, asMember(element)) == id
-		if primary {
-			promoted = i
-		}
-		if value.Primary(element) != primary {
-			flips = append(flips, i)
-		}
-	}
-	return promoted, flips
+func (ix *index) fresh(candidates []any) []any {
+	return slices.DeleteFunc(slices.Clone(candidates), ix.contains)
 }
 
 func (ix *index) add(stored []any) {

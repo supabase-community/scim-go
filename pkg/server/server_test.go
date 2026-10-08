@@ -3830,7 +3830,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	})
 
 	// RFC 7644 Section 3.5.2: setting a value's "primary" to "true" SHALL cause the server to set "primary" to "false" for any other values.
-	t.Run("makes a stored value primary when it is added again as primary", func(t *testing.T) {
+	t.Run("makes a stored value primary through a value path", func(t *testing.T) {
 		primaries := func(emails []core.Email) []string {
 			values := []string{}
 			for _, email := range emails {
@@ -3840,14 +3840,13 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			}
 			return values
 		}
-		stored := patch.Operation{Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"c@example.com","type":"home","primary":true}]`)}
+		stored := patch.Operation{Op: patch.OpReplace, Path: `emails[value eq "c@example.com"].primary`, Value: json.RawMessage(`true`)}
 		for _, test := range []struct {
 			name       string
 			operations []patch.Operation
 			want       string
 		}{
-			{"with a path", []patch.Operation{stored}, "c@example.com"},
-			{"without a path", []patch.Operation{{Op: patch.OpAdd, Value: json.RawMessage(`{"emails":[{"value":"c@example.com","type":"home","primary":true}]}`)}}, "c@example.com"},
+			{"alone", []patch.Operation{stored}, "c@example.com"},
 			{"then a new primary", []patch.Operation{stored, {Op: patch.OpAdd, Path: "emails", Value: json.RawMessage(`[{"value":"e@example.com","type":"other","primary":true}]`)}}, "e@example.com"},
 		} {
 			srv := newTestServer(t)

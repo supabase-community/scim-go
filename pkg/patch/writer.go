@@ -48,11 +48,7 @@ func (m merger) field(key, name string, incoming any) error {
 	sub := subAttr(m.parent, name)
 	v := shaped(incoming, sub.MultiValued)
 	if existing, ok := m.holder[key].([]any); m.kind == OpAdd && sub.MultiValued && ok {
-		fresh, err := newIndex(sub, existing).fresh(existing, v.([]any))
-		if err != nil {
-			return err
-		}
-		v = fresh
+		v = newIndex(sub, existing).fresh(v.([]any))
 	}
 	before, final := m.holder[key], appended(m.holder[key], v, m.kind)
 	if err := gateImmutableWrite(sub, before, final); err != nil {

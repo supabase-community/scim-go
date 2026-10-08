@@ -45,9 +45,7 @@ func (t *target) write(kind Op, incoming any) error {
 	if err := t.chargeOutput(len(holders), incoming); err != nil {
 		return err
 	}
-	if incoming, err = t.fresh(kind, incoming); err != nil {
-		return err
-	}
+	incoming = t.fresh(kind, incoming)
 	before := t.elements()
 	written := t.written(before, kind)
 	for _, holder := range holders {
@@ -184,10 +182,7 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 		}
 		return newMerger(nested, t.attr, kind).merge(values)
 	}
-	shapedValue, err := t.dedupedAdd(holder, kind, shaped(value, t.attr.MultiValued))
-	if err != nil {
-		return err
-	}
+	shapedValue := t.dedupedAdd(holder, kind, shaped(value, t.attr.MultiValued))
 	if err := t.overwritable(holder, kind, shapedValue); err != nil {
 		return err
 	}
@@ -196,12 +191,12 @@ func (t *target) put(holder core.Object, kind Op, value any) error {
 }
 
 // RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
-func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) (any, error) {
+func (t *target) dedupedAdd(holder core.Object, kind Op, shapedValue any) any {
 	existing, ok := holder.Get(t.key()).([]any)
 	if kind != OpAdd || !t.attr.MultiValued || !ok || t.isListAdd(kind) {
-		return shapedValue, nil
+		return shapedValue
 	}
-	return newIndex(t.attr, existing).fresh(existing, shapedValue.([]any))
+	return newIndex(t.attr, existing).fresh(shapedValue.([]any))
 }
 
 // RFC 7644 Section 3.5.2: an operation that is not compatible with an attribute's mutability SHALL return an error.
@@ -366,12 +361,11 @@ func (t *target) isListAdd(kind Op) bool {
 	return kind == OpAdd && t.filter.match == nil && t.path.Name != "" && t.path.SubAttribute == "" && t.attr.MultiValued
 }
 
-func (t *target) fresh(kind Op, candidate any) (any, error) {
+func (t *target) fresh(kind Op, candidate any) any {
 	if !t.isListAdd(kind) {
-		return candidate, nil
+		return candidate
 	}
-	elements := t.elements()
-	return t.index(elements).fresh(elements, shaped(candidate, true).([]any))
+	return t.index(t.elements()).fresh(shaped(candidate, true).([]any))
 }
 
 func (t *target) record(kind Op, added any) {
