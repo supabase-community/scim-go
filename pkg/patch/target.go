@@ -55,6 +55,7 @@ func (t *target) write(kind Op, incoming any) error {
 	}
 	t.demoteIfPromoted(kind, before, written, incoming)
 	t.record(kind, incoming)
+	t.unassignEmptyExtension()
 	return nil
 }
 
@@ -261,7 +262,7 @@ func (t *target) gateHolderRemoval(holder core.Object) error {
 }
 
 func (t *target) unassignEmptyExtension() {
-	if container, _ := t.container(false); t.extension != "" && len(container) == 0 {
+	if container, _ := t.container(false); t.extension != "" && value.AllUnassigned(container) {
 		t.root.Remove(t.extension)
 	}
 }

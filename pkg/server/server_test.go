@@ -635,6 +635,23 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 		assert.Equal(t, []core.SchemaURI{core.SchemaUser}, ReadBodyAs[core.User](t, response).Schemas)
 	})
 
+	// RFC 7643 Section 2.5: an attribute holding null is unassigned, so an extension holding only nulls is not present.
+	t.Run("omits the extension from schemas when a PUT sends only null extension values", func(t *testing.T) {
+		for i, extension := range []string{`{"department":null}`, `{"manager":{"value":null}}`} {
+			userName := "nulled-" + strconv.Itoa(i)
+			nullID, _ := create(t, srv, &core.User{UserName: userName})
+
+			response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+nullID,
+				WithBearerToken(validToken),
+				WithContentType(protocol.MediaType),
+				WithRequestBody([]byte(`{"userName":"`+userName+`","urn:ietf:params:scim:schemas:extension:enterprise:2.0:User":`+extension+`}`)),
+			))
+
+			require.Equal(t, http.StatusOK, response.StatusCode, extension)
+			assert.Equal(t, []core.SchemaURI{core.SchemaUser}, ReadBodyAs[core.User](t, response).Schemas, extension)
+		}
+	})
+
 	// RFC 7643 Section 3: "schemas" indicates the schemas that define the attributes present in the current JSON structure.
 	t.Run("stamps schemas from the data regardless of the schemas a client sends", func(t *testing.T) {
 		for i, schemas := range []string{
@@ -4374,6 +4391,17 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		patched := patchUser(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: "name", Value: json.RawMessage(`{"givenName":"Babs"}`)})
 
 		assert.Equal(t, core.Name{GivenName: "Babs", FamilyName: "Jensen"}, patched.Name)
+	})
+
+	// RFC 7644 Section 3.5.2.3: replacing a value the target already holds SHALL NOT change the modify timestamp; RFC 7643 Section 2.5: null equals unassigned.
+	t.Run("a null replace of an absent extension attribute changes nothing", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+		patched := patchUser(t, srv, id, patch.Operation{Op: patch.OpReplace, Path: string(core.SchemaEnterpriseUser) + ":department", Value: json.RawMessage(`null`)})
+
+		assert.Equal(t, etag, patched.Meta.Version)
+		assert.Equal(t, []core.SchemaURI{core.SchemaUser}, patched.Schemas)
 	})
 
 	// RFC 7644 Section 3.5.2.3: if no record match was made, the service provider SHALL indicate failure with "noTarget".

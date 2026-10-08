@@ -23,7 +23,7 @@ func writable(document, existing core.Object, schemas core.Schemas) core.Object 
 			body = map[string]any{}
 		}
 		previous, _ := existing.Get(uri).(map[string]any)
-		if writableObject(extension.Attributes.Lookup, body, previous); len(body) > 0 {
+		if writableObject(extension.Attributes.Lookup, body, previous); !value.AllUnassigned(body) {
 			document[uri] = body
 		} else if raw != nil && !isObject {
 			document[uri] = raw

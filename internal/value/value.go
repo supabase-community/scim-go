@@ -17,6 +17,19 @@ func IsUnassigned(value any) bool {
 	return false
 }
 
+// AllUnassigned reports an object whose every value is unassigned, which RFC 7643 Section 2.5 treats as holding no data.
+func AllUnassigned(object map[string]any) bool {
+	for _, held := range object {
+		if nested, ok := held.(map[string]any); ok && AllUnassigned(nested) {
+			continue
+		}
+		if !IsUnassigned(held) {
+			return false
+		}
+	}
+	return true
+}
+
 // Key returns the "value" sub-attribute that identifies an element of a multi-valued attribute, per RFC 7643, Section 2.4.
 func Key(element core.Object) (string, bool) {
 	key, ok := element.Get("value").(string)
