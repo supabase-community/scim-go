@@ -2512,9 +2512,9 @@ func TestRFC7644Attributes(t *testing.T) {
 	})
 
 	// RFC 7644 Section 3.9: attributes and excludedAttributes shape the resource representation that is returned.
-	t.Run("hands the repository the projection of a read but never of a write", func(t *testing.T) {
+	t.Run("hands the repository the projection of a read and of a write's result", func(t *testing.T) {
 		schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
-		repository := &projectingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas)}
+		repository := &projectingRepository[*core.User]{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), attribute: "emails"}
 		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
 		))
@@ -2522,7 +2522,7 @@ func TestRFC7644Attributes(t *testing.T) {
 
 		Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id+"?excludedAttributes=emails"))
 		Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?excludedAttributes=emails"))
-		require.Equal(t, []bool{false, false}, repository.returned)
+		require.Equal(t, []bool{false, false}, repository.reads)
 
 		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id+"?excludedAttributes=emails",
 			WithContentType(protocol.MediaType),
@@ -2533,8 +2533,32 @@ func TestRFC7644Attributes(t *testing.T) {
 		))
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
-		require.NotEmpty(t, repository.returned[2:])
-		assert.NotContains(t, repository.returned[2:], false)
+		assert.Equal(t, []bool{false, false, true}, repository.reads)
+		assert.Equal(t, []bool{true, false}, repository.writes)
+	})
+
+	// RFC 7644 Section 3.5.2: the server MAY return 204 (No Content) and the appropriate response headers.
+	t.Run("hands the repository a write projection without members when a group patch answers 204", func(t *testing.T) {
+		repository := &projectingRepository[*core.Group]{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas()), attribute: "members"}
+		srv := Server(t, newGroupHandler(t, repository))
+		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups", WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, core.Group{DisplayName: "eng"})))
+		require.Equal(t, http.StatusCreated, created.StatusCode)
+		id := ReadBodyAs[core.Group](t, created).ID
+
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
+			WithBearerToken(validToken),
+			WithContentType(protocol.MediaType),
+			WithRequestBodyAs(t, protocol.PatchRequest{
+				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"User"}]`)}},
+			}),
+		))
+
+		require.Equal(t, http.StatusNoContent, response.StatusCode)
+		assert.Equal(t, []bool{true}, repository.reads)
+		assert.Equal(t, []bool{true, false}, repository.writes)
+		assert.True(t, repository.updated.Returns("id"))
+		assert.True(t, repository.updated.Returns("meta"))
 	})
 }
 

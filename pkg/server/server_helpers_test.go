@@ -121,9 +121,12 @@ type inspectingRepository struct {
 	server.Repository[*widget]
 }
 
-type projectingRepository struct {
-	server.Repository[*core.User]
-	returned []bool
+type projectingRepository[T core.Resource] struct {
+	server.Repository[T]
+	attribute string
+	reads     []bool
+	writes    []bool
+	updated   protocol.Projection
 }
 
 type countingRepository struct {
@@ -213,23 +216,29 @@ func (r inspectingRepository) Create(ctx context.Context, w *widget) (*widget, e
 	return r.Repository.Create(ctx, w)
 }
 
-func (r *projectingRepository) Read(ctx context.Context, id string) (*core.User, error) {
-	r.record(ctx)
+func (r *projectingRepository[T]) Read(ctx context.Context, id string) (T, error) {
+	r.reads = r.record(ctx, r.reads)
 	return r.Repository.Read(ctx, id)
 }
 
-func (r *projectingRepository) List(ctx context.Context, query *protocol.SearchRequest) ([]*core.User, int, error) {
-	r.record(ctx)
+func (r *projectingRepository[T]) List(ctx context.Context, query *protocol.SearchRequest) ([]T, int, error) {
+	r.reads = r.record(ctx, r.reads)
 	return r.Repository.List(ctx, query)
 }
 
-func (r *projectingRepository) Update(ctx context.Context, user *core.User) (*core.User, error) {
-	r.record(ctx)
-	return r.Repository.Update(ctx, user)
+func (r *projectingRepository[T]) Create(ctx context.Context, item T) (T, error) {
+	r.writes = r.record(ctx, r.writes)
+	return r.Repository.Create(ctx, item)
 }
 
-func (r *projectingRepository) record(ctx context.Context) {
-	r.returned = append(r.returned, protocol.ProjectionFrom(ctx).Returns("emails"))
+func (r *projectingRepository[T]) Update(ctx context.Context, item T) (T, error) {
+	r.writes = r.record(ctx, r.writes)
+	r.updated = protocol.ProjectionFrom(ctx)
+	return r.Repository.Update(ctx, item)
+}
+
+func (r *projectingRepository[T]) record(ctx context.Context, seen []bool) []bool {
+	return append(seen, protocol.ProjectionFrom(ctx).Returns(r.attribute))
 }
 
 func (r *countingRepository) Read(ctx context.Context, id string) (*core.User, error) {

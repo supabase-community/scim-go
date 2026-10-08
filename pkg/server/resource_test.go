@@ -2,12 +2,14 @@ package server_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
@@ -50,4 +52,30 @@ func TestResourceWithValidators(t *testing.T) {
 	))
 	assert.Equal(t, http.StatusBadRequest, response.StatusCode)
 	assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+}
+
+func TestResourceValidatorsSeeTheFullProjection(t *testing.T) {
+	var returned []bool
+	record := func(ctx context.Context, _ *core.Group) error {
+		returned = append(returned, protocol.ProjectionFrom(ctx).Returns("members"))
+		return nil
+	}
+	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
+		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
+			WithValidators(record)),
+	))
+	created := createGroup(t, srv, &core.Group{DisplayName: "eng"})
+
+	response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+created.ID,
+		WithBearerToken(validToken),
+		WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, protocol.PatchRequest{
+			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"User"}]`)}},
+		}),
+	))
+
+	require.Equal(t, http.StatusNoContent, response.StatusCode)
+	assert.Equal(t, []bool{true, true}, returned)
 }

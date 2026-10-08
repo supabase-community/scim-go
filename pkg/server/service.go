@@ -129,7 +129,7 @@ func (s *service[T]) save(ctx context.Context, versions []string, current T, nex
 
 // RFC 7644 Section 3.14: a stale If-Match fails before any work; the repository rechecks the version on write.
 func (s *service[T]) current(ctx context.Context, id string, versions []string) (T, error) {
-	current, err := s.repo.Read(ctx, id)
+	current, err := s.repo.Read(protocol.WithProjection(ctx, protocol.Projection{}), id)
 	if err != nil {
 		return current, err
 	}
@@ -165,6 +165,7 @@ func (s *service[T]) admit(ctx context.Context, next revision[T]) error {
 	if err := s.characteristics(next.existing, next.candidate); err != nil {
 		return err
 	}
+	ctx = protocol.WithProjection(ctx, protocol.Projection{})
 	for _, validate := range s.validators {
 		if err := validate(ctx, next.resource); err != nil {
 			return err

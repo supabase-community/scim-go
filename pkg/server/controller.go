@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -99,7 +100,7 @@ func (c *controller[T]) Create(w http.ResponseWriter, r *http.Request) error {
 		return protocol.SendError(w, err)
 	}
 	projection = projection.Written(document)
-	created, err := c.service.Create(r.Context(), document)
+	created, err := c.service.Create(protocol.WithProjection(r.Context(), projection), document)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -123,7 +124,7 @@ func (c *controller[T]) Replace(w http.ResponseWriter, r *http.Request) error {
 	}
 	req.ID, req.Versions = r.PathValue("id"), versions
 	projection = projection.Written(req.Attributes)
-	replaced, err := c.service.Replace(r.Context(), req)
+	replaced, err := c.service.Replace(protocol.WithProjection(r.Context(), projection), req)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
@@ -149,12 +150,16 @@ func (c *controller[T]) Patch(w http.ResponseWriter, r *http.Request) error {
 	}
 	req.ID, req.Versions = r.PathValue("id"), versions
 	projection = projection.Patched(req.Operations)
-	patched, err := c.service.Patch(r.Context(), req)
+	noContent := noContentEligible(r, c.schemas, req.Operations)
+	if noContent {
+		projection = c.minimal()
+	}
+	patched, err := c.service.Patch(protocol.WithProjection(r.Context(), projection), req)
 	if err != nil {
 		return protocol.SendError(w, err)
 	}
 	c.setVersion(w, patched)
-	return c.sendPatched(w, patched, projection, noContentEligible(r, c.schemas, req.Operations))
+	return c.sendPatched(w, patched, projection, noContent)
 }
 
 // sendPatched returns 204 for a Group PATCH eligible under noContentEligible, or 200 with the resource otherwise, per RFC 7644 Section 3.5.2.
@@ -183,6 +188,11 @@ func (c *controller[T]) projectionFor(w http.ResponseWriter, r *http.Request) (p
 		return projection, false, protocol.SendError(w, err)
 	}
 	return projection, true, nil
+}
+
+func (c *controller[T]) minimal() protocol.Projection {
+	projection, _ := protocol.ParseProjection(url.Values{"attributes": {"id,meta"}}, c.schemas)
+	return projection
 }
 
 func (c *controller[T]) existing(w http.ResponseWriter, r *http.Request) (resource T, ok bool, err error) {
