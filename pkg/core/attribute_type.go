@@ -43,10 +43,18 @@ func (a AttributeType) coerce(value any) (any, bool) {
 		if !ok {
 			return nil, false
 		}
-		t, err := time.Parse(time.RFC3339, s)
-		return t, err == nil
+		return dateTime(s)
 	}
 	return nil, false
+}
+
+// RFC 7643 Section 2.3.5: an xsd:dateTime time zone offset is optional, absent is read as UTC.
+func dateTime(s string) (any, bool) {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t, err = time.Parse("2006-01-02T15:04:05.999999999", s)
+	}
+	return t, err == nil
 }
 
 func text(value any) (any, bool) {

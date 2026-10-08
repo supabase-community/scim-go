@@ -282,6 +282,30 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 	})
 }
 
+// RFC 7643 2.3.5 DateTime
+func TestRFC7643DateTime(t *testing.T) {
+	// RFC 7643 Section 2.3.5: a valid xsd:dateTime MUST include both a date and a time; its time zone offset is optional.
+	t.Run("accepts a value without a time zone offset", func(t *testing.T) {
+		srv := newTestServer(t)
+		createWidget(t, srv, &widget{Name: "early", When: time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC)})
+		createWidget(t, srv, &widget{Name: "late", When: time.Date(2021, 6, 1, 0, 0, 0, 0, time.UTC)})
+		search := func(filter string) *http.Response {
+			path := basePath + "/Widgets?" + url.Values{"filter": {filter}}.Encode()
+			return Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+		}
+
+		response := search(`when gt "2020-12-31T00:00:00"`)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := ReadBodyAs[protocol.ListResponse[map[string]any]](t, response)
+		require.Len(t, list.Resources, 1)
+		assert.Equal(t, "late", list.Resources[0]["Name"])
+
+		response = search(`when gt "2020-12-31"`)
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	})
+}
+
 // RFC 7643 2.3.6 Binary
 func TestRFC7643Binary(t *testing.T) {
 	// RFC 7643 Section 2.3.6: a binary value MUST be base64 encoded as specified in Section 4 of RFC 4648.
