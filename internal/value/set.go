@@ -55,22 +55,10 @@ func normalizeZero(f float64) float64 {
 }
 
 func normalizeZeros(v any) any {
-	switch value := v.(type) {
-	case map[string]any:
-		normalized := make(map[string]any, len(value))
-		for key, element := range value {
-			normalized[key] = normalizeZeros(element)
+	return transform(v, func(leaf any) any {
+		if f, ok := leaf.(float64); ok {
+			return normalizeZero(f)
 		}
-		return normalized
-	case []any:
-		normalized := make([]any, len(value))
-		for i, element := range value {
-			normalized[i] = normalizeZeros(element)
-		}
-		return normalized
-	case float64:
-		return normalizeZero(value)
-	default:
-		return value
-	}
+		return leaf
+	})
 }

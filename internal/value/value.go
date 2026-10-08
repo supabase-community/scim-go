@@ -36,23 +36,8 @@ func Key(element core.Object) (string, bool) {
 	return key, ok && key != ""
 }
 
-func Clone(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		cloned := make(map[string]any, len(typed))
-		for key, element := range typed {
-			cloned[key] = Clone(element)
-		}
-		return cloned
-	case []any:
-		cloned := make([]any, len(typed))
-		for i, element := range typed {
-			cloned[i] = Clone(element)
-		}
-		return cloned
-	default:
-		return typed
-	}
+func Clone(v any) any {
+	return transform(v, func(leaf any) any { return leaf })
 }
 
 func AsObject(element any) core.Object {
@@ -76,4 +61,22 @@ func Hidden(parent, attribute *core.Attribute) bool {
 
 func hides(attribute *core.Attribute) bool {
 	return attribute != nil && (attribute.Mutability == core.MutabilityWriteOnly || attribute.Returned == core.ReturnedNever)
+}
+
+func transform(v any, leaf func(any) any) any {
+	switch node := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(node))
+		for key, element := range node {
+			out[key] = transform(element, leaf)
+		}
+		return out
+	case []any:
+		out := make([]any, len(node))
+		for i, element := range node {
+			out[i] = transform(element, leaf)
+		}
+		return out
+	}
+	return leaf(v)
 }
