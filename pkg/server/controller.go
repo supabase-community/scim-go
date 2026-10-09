@@ -88,6 +88,7 @@ func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 	}
 	c.setVersion(w, resource)
 	if c.notModified(r, resource.Common().Meta.Version) {
+		setLocation(w, resource.Common().Meta)
 		w.WriteHeader(http.StatusNotModified)
 		return nil
 	}

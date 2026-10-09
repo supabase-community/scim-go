@@ -4910,6 +4910,7 @@ func TestRFC7644VersioningResources(t *testing.T) {
 
 			assert.Equal(t, status, response.StatusCode, ifNoneMatch)
 			assert.Equal(t, etag, response.Header.Get("ETag"), ifNoneMatch)
+			assert.True(t, strings.HasSuffix(response.Header.Get("Content-Location"), "/Users/"+id), ifNoneMatch)
 			assert.Equal(t, status == http.StatusOK, len(body) > 0, ifNoneMatch)
 		}
 	})
