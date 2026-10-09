@@ -19,7 +19,7 @@ func GroupAttributes() Attributes {
 	return Attributes{
 		NewAttribute("displayName", TypeString).AsRequired(),
 		NewAttribute("members", TypeComplex).AsMultiValued().With(
-			NewAttribute("value", TypeString).AsImmutable(),
+			NewAttribute("value", TypeString).AsImmutable().AsRequired(),
 			NewAttribute("$ref", TypeReference).Referencing("User", "Group").AsImmutable(),
 			NewAttribute("type", TypeString).Suggesting("User", "Group").AsImmutable(),
 		),

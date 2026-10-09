@@ -576,6 +576,25 @@ func TestRFC7643GroupResourceSchema(t *testing.T) {
 		assert.Equal(t, "Tour Guides", ReadBodyAs[core.Group](t, fetched).DisplayName)
 		assert.Equal(t, http.StatusBadRequest, post(core.Group{}).StatusCode)
 	})
+
+	// RFC 7643 Section 4.2: service providers MAY require clients to provide a non-empty member value.
+	t.Run("rejects a member without a value", func(t *testing.T) {
+		srv := newTestServer(t)
+		id := createGroup(t, srv, &core.Group{DisplayName: "Tour Guides"}).ID
+
+		for _, member := range []string{`{"type":"User"}`, `{"value":"","type":"User"}`} {
+			group := map[string]any{"displayName": "Tour Guides", "members": []json.RawMessage{json.RawMessage(member)}}
+			for _, request := range []*http.Request{
+				Request(t, srv, http.MethodPost, basePath+"/Groups", WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, group)),
+				Request(t, srv, http.MethodPut, basePath+"/Groups/"+id, WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, group)),
+				patchRequest(t, srv, "Groups/"+id, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage("[" + member + "]")}),
+			} {
+				response := Response(t, srv, request)
+				require.Equal(t, http.StatusBadRequest, response.StatusCode, request.Method+" "+member)
+				assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+			}
+		}
+	})
 }
 
 // RFC 7643 4.3 Enterprise User Schema Extension
