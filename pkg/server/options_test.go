@@ -25,7 +25,7 @@ func TestErrorHandlerOption(t *testing.T) {
 	var reported []error
 	srv := server.New(basePath, fullServiceProviderConfig(),
 		server.ErrorHandler(func(_ *http.Request, err error) { reported = append(reported, err) }),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
 	)
 
 	srv.ServeHTTP(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, basePath+"/Users/unknown", nil))
@@ -56,7 +56,7 @@ func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T)
 	var reported error
 	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 		server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(failingRepository{cause: cause})),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(failingRepository{cause: cause})),
 	))
 
 	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users"))
@@ -67,7 +67,7 @@ func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T)
 
 func TestDefaultCountAfterWithResource(t *testing.T) {
 	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
 		server.DefaultCount(1),
 	))
 	for _, name := range []string{"bjensen", "jsmith"} {
@@ -84,7 +84,7 @@ func TestDefaultCountAfterWithResource(t *testing.T) {
 func TestMaxBodySize(t *testing.T) {
 	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 		server.MaxBodySize(16),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
 	))
 
 	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
@@ -207,7 +207,7 @@ func TestMaxPatchWriteBytes(t *testing.T) {
 
 func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
 	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(failingRepository{cause: errors.New("unreachable")})),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(failingRepository{cause: errors.New("unreachable")})),
 	))
 
 	for query, status := range map[string]int{
@@ -225,7 +225,7 @@ func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
 }
 
 func TestWithRepository(t *testing.T) {
-	attributes := userAttributes()
+	attributes := core.UserAttributes()
 	repository := server.NewRepository[*core.User](basePath+"/Users", []*core.Schema{core.NewSchema(core.SchemaUser).With(attributes...)})
 	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
 	require.NoError(t, err)
@@ -296,10 +296,10 @@ func TestWithAuthentication(t *testing.T) {
 
 	t.Run("passes the validator's context to the repository", func(t *testing.T) {
 		var tenant string
-		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
+		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
 		repository := tenantRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), tenant: &tenant}
 		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
-			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(repository)),
 			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 				func(ctx context.Context, _ string) (context.Context, error) {
 					return context.WithValue(ctx, tenantKey{}, "acme"), nil
@@ -324,6 +324,6 @@ func newUserWithID(t *testing.T, user core.User, options ...server.Option[*serve
 
 func newUserServer(t *testing.T, options ...server.Option[*server.Server]) *httptest.Server {
 	t.Helper()
-	options = append(options, server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...)))
+	options = append(options, server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)))
 	return Server(t, server.New(basePath, fullServiceProviderConfig(), options...))
 }

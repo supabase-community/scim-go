@@ -52,6 +52,8 @@ type testServer struct {
 	options           []server.Option[*server.Server]
 	updateGate        *raceGate
 	writeBeforeDelete bool
+	user              core.Attributes
+	enterprise        core.Attributes
 }
 
 type raceGate struct {
@@ -141,7 +143,7 @@ type countingRepository struct {
 }
 
 func userSchemas() core.Schemas {
-	return core.Schemas{core.NewSchema(core.SchemaUser).WithName("User").With(userAttributes()...)}
+	return core.Schemas{core.NewSchema(core.SchemaUser).WithName("User").With(core.UserAttributes()...)}
 }
 
 func groupSchemas() core.Schemas {
@@ -165,12 +167,15 @@ func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
 func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 	tb.Helper()
 
-	s := &testServer{config: fullServiceProviderConfig()}
+	s := &testServer{config: fullServiceProviderConfig(), user: core.UserAttributes(), enterprise: core.EnterpriseUserAttributes()}
 	for _, option := range options {
 		option(s)
 	}
 	users := gatedRepository{
-		Repository:        server.NewRepository[*core.User](basePath+"/Users", append(userSchemas(), core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...))),
+		Repository: server.NewRepository[*core.User](basePath+"/Users", core.Schemas{
+			core.NewSchema(core.SchemaUser).WithName("User").With(s.user...),
+			core.NewSchema(core.SchemaEnterpriseUser).With(s.enterprise...),
+		}),
 		gate:              s.updateGate,
 		writeBeforeDelete: s.writeBeforeDelete,
 	}
@@ -180,8 +185,8 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 				tb.Errorf("%v\n", err)
 			}
 		}),
-		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).
-			WithExtension(core.SchemaEnterpriseUser, enterpriseAttributes()...).
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, s.user...).
+			WithExtension(core.SchemaEnterpriseUser, s.enterprise...).
 			WithRepository(users)),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...)),
 		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetAttributes()...).
@@ -209,6 +214,22 @@ func withUpdateGate(gate *raceGate) testOption {
 
 func withWriteBeforeDelete() testOption {
 	return func(s *testServer) { s.writeBeforeDelete = true }
+}
+
+func withUserAttributes(change func(user, enterprise core.Attributes)) testOption {
+	return func(s *testServer) { change(s.user, s.enterprise) }
+}
+
+func canonicalUserType(user, _ core.Attributes) {
+	user.Lookup("userType").Suggesting("employee", "contractor")
+}
+
+func immutableFamilyName(user, _ core.Attributes) {
+	user.Lookup("name").SubAttribute("familyName").AsImmutable()
+}
+
+func immutableEmployeeNumber(_, enterprise core.Attributes) {
+	enterprise.Lookup("employeeNumber").AsImmutable()
 }
 
 func (r gatedRepository) Update(ctx context.Context, user *core.User) (*core.User, error) {
@@ -278,27 +299,6 @@ func validate(ctx context.Context, token string) (context.Context, error) {
 
 func fullServiceProviderConfig() *core.ServiceProviderConfig {
 	return core.NewServiceProviderConfig().Sorting().Filtering(protocol.DefaultLimits.MaxCount).Patching().Versioning()
-}
-
-func userAttributes() core.Attributes {
-	attributes := core.UserAttributes()
-	attributes.Lookup("name").SubAttribute("familyName").AsImmutable()
-	attributes.Lookup("userType").Suggesting("employee", "contractor")
-	return attributes
-}
-
-func enterpriseAttributes() core.Attributes {
-	return core.Attributes{
-		core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
-		core.NewAttribute("costCenter", core.TypeString),
-		core.NewAttribute("organization", core.TypeString),
-		core.NewAttribute("division", core.TypeString),
-		core.NewAttribute("department", core.TypeString),
-		core.NewAttribute("manager", core.TypeComplex).With(
-			core.NewAttribute("value", core.TypeString),
-			core.NewAttribute("displayName", core.TypeString).AsReadOnly(),
-		),
-	}
 }
 
 func widgetAttributes() core.Attributes {

@@ -247,7 +247,7 @@ func TestRFC7643AttributeCharacteristics(t *testing.T) {
 
 	// RFC 7643 Section 7: "canonicalValues" is a collection of suggested canonical values that MAY be used.
 	t.Run("rejects a value outside the declared canonical values", func(t *testing.T) {
-		srv := newTestServer(t)
+		srv := newTestServer(t, withUserAttributes(canonicalUserType))
 
 		request := Request(t, srv, http.MethodPost, basePath+"/Users",
 			WithBearerToken(validToken),
@@ -2070,6 +2070,45 @@ func TestRFC7644Filtering(t *testing.T) {
 		assertFilterMatches(t, srv, `emails[primary eq true]`, "alice")
 		assertFilterMatches(t, srv, `phoneNumbers[primary eq true]`, "alice")
 	})
+
+	// RFC 7644 Section 3.4.2.2: every operator applies to each Group attribute, and ne includes a resource without the attribute.
+	t.Run("filters every group attribute with each string operator", func(t *testing.T) {
+		srv := newTestServer(t)
+		createGroup(t, srv, &core.Group{DisplayName: "Engineering", Members: []core.Member{{Value: "Alice-1865", Type: "User"}}})
+		createGroup(t, srv, &core.Group{DisplayName: "ops"})
+		matches := func(filter string) []string {
+			path := basePath + "/Groups?" + url.Values{"filter": {filter}}.Encode()
+			response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+			require.Equal(t, http.StatusOK, response.StatusCode, filter)
+			groups := ReadBodyAs[protocol.ListResponse[*core.Group]](t, response).Resources
+			names := make([]string, 0, len(groups))
+			for _, group := range groups {
+				names = append(names, group.DisplayName)
+			}
+			return names
+		}
+
+		for path, value := range map[string]string{
+			"displayName":   "Engineering",
+			"members.value": "Alice-1865",
+			"members.type":  "User",
+		} {
+			filters := map[string][]string{
+				path + ` eq "` + value + `"`:                 {"Engineering"},
+				path + ` eq "` + swapCase(value) + `"`:       {"Engineering"},
+				path + ` co "` + value[1:len(value)-1] + `"`: {"Engineering"},
+				path + ` sw "` + value[:2] + `"`:             {"Engineering"},
+				path + ` ew "` + value[len(value)-2:] + `"`:  {"Engineering"},
+			}
+			if path != "displayName" {
+				filters[path+` pr`] = []string{"Engineering"}
+				filters[path+` ne "`+value+`"`] = []string{"ops"}
+			}
+			for filter, want := range filters {
+				assert.Equal(t, want, matches(filter), filter)
+			}
+		}
+	})
 }
 
 // RFC 7644 3.4.2.3 Sorting
@@ -2483,7 +2522,10 @@ func TestRFC7644Pagination(t *testing.T) {
 
 // RFC 7644 3.4.2.5 Attributes
 func TestRFC7644Attributes(t *testing.T) {
-	srv := newTestServer(t)
+	srv := newTestServer(t, withUserAttributes(func(_, enterprise core.Attributes) {
+		manager := enterprise.Lookup("manager")
+		manager.With(manager.SubAttribute("value"), manager.SubAttribute("displayName"))
+	}))
 	id, _ := create(t, srv, &core.User{
 		UserName:       "bjensen",
 		Emails:         []core.Email{{Value: "bjensen@example.com", Type: "work"}},
@@ -2632,10 +2674,10 @@ func TestRFC7644Attributes(t *testing.T) {
 
 	// RFC 7644 Section 3.9: attributes and excludedAttributes shape the resource representation that is returned.
 	t.Run("hands the repository the projection of a read and of a write's result", func(t *testing.T) {
-		schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
+		schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
 		repository := &projectingRepository[*core.User]{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), attribute: "emails"}
 		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
-			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(repository)),
 		))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
@@ -2949,7 +2991,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 	// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match, or 400 SHOULD be returned with scimType "mutability".
 	t.Run("rejects a replace that changes an immutable attribute", func(t *testing.T) {
-		srv := newTestServer(t)
+		srv := newTestServer(t, withUserAttributes(immutableFamilyName))
 		id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
 
 		request := Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
@@ -3086,7 +3128,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 	// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match.
 	t.Run("keeps an omitted immutable sub-attribute", func(t *testing.T) {
-		srv := newTestServer(t)
+		srv := newTestServer(t, withUserAttributes(immutableFamilyName))
 		id, etag := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "Barbara", FamilyName: "Jensen"}})
 
 		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id,
@@ -3307,7 +3349,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match.
 	t.Run("concurrent versionless PUTs cannot both set an immutable value", func(t *testing.T) {
 		gate := newRaceGate(2)
-		srv := newTestServer(t, withUpdateGate(gate))
+		srv := newTestServer(t, withUpdateGate(gate), withUserAttributes(immutableEmployeeNumber))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		put := func(employeeNumber string) *http.Request {
@@ -3335,10 +3377,10 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	t.Run("replace and patch get the resource once", func(t *testing.T) {
 		newCountingUser := func(t *testing.T) (*httptest.Server, *countingRepository, string) {
 			t.Helper()
-			schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(userAttributes()...)}
+			schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
 			repository := &countingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas)}
 			srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
-				server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithRepository(repository)),
+				server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(repository)),
 			))
 			id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 			return srv, repository, id
@@ -3791,7 +3833,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 
 	// RFC 7644 Section 3.12: mutability when the modification is not compatible with the target attribute's mutability.
 	t.Run("rejects a patch that changes an immutable attribute", func(t *testing.T) {
-		srv := newTestServer(t)
+		srv := newTestServer(t, withUserAttributes(immutableFamilyName))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{FamilyName: "Jensen"}})
 
 		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
@@ -3939,7 +3981,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			{"rejects a changed immutable sub-attribute of a group member", "/Groups", team, patch.Operation{Op: patch.OpReplace, Path: `members[value eq "u-1"].type`, Value: json.RawMessage(`"Group"`)}, http.StatusBadRequest},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				srv := newTestServer(t)
+				srv := newTestServer(t, withUserAttributes(immutableEmployeeNumber))
 				created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+test.endpoint, WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, test.resource)))
 				require.Equal(t, http.StatusCreated, created.StatusCode)
 				id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
@@ -4889,7 +4931,7 @@ func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
 
 	// RFC 7644 Section 3.12: "detail" is an OPTIONAL human-readable message, and "scimType" is a Table 9 keyword.
 	t.Run("describes an error with RFC 7644 Table 9 instead of echoing the request", func(t *testing.T) {
-		srv := newTestServer(t)
+		srv := newTestServer(t, withUserAttributes(canonicalUserType))
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 		query := func(key, value string) string { return basePath + "/Users?" + url.Values{key: {value}}.Encode() }
 		patch := func(path string) Option[*http.Request] {
@@ -5386,7 +5428,7 @@ func TestRFC7644ResourceTypes(t *testing.T) {
 	// RFC 7643 Section 6: "description" is the resource type's human-readable description.
 	t.Run("describes a resource type", func(t *testing.T) {
 		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
-			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, userAttributes()...).WithDescription("User Account")),
+			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithDescription("User Account")),
 		))
 
 		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/ResourceTypes/User"))
