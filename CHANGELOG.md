@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.15.1](https://github.com/supabase-community/scim-go/compare/v0.15.0...v0.15.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **core:** require a value for each group member ([3265f93](https://github.com/supabase-community/scim-go/commit/3265f931b95c405b71bdd419b7e0c4ae42500194))
+* **patch:** let readOnly sub-attributes follow their parent ([5b52f7a](https://github.com/supabase-community/scim-go/commit/5b52f7a6d34bc8259be00a7feba43654a3d75bd3))
+* **server:** make DELETE without If-Match unconditional ([9f862e7](https://github.com/supabase-community/scim-go/commit/9f862e745e175c431dfb118cf33d3e82402d2341))
+
 ## [0.15.0](https://github.com/supabase-community/scim-go/compare/v0.14.0...v0.15.0) (2026-10-09)
 
 
