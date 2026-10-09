@@ -4889,6 +4889,44 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, response.StatusCode)
 	})
 
+	// RFC 7644 Section 3.14: if the resource has not changed, the service provider returns an empty body with a 304.
+	t.Run("If-None-Match returns 304 only when a listed ETag weakly matches", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+		for ifNoneMatch, status := range map[string]int{
+			etag:                           http.StatusNotModified,
+			strings.TrimPrefix(etag, "W/"): http.StatusNotModified,
+			`W/"stale", ` + etag:           http.StatusNotModified,
+			"*":                            http.StatusNotModified,
+			`W/"stale"`:                    http.StatusOK,
+		} {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
+				WithBearerToken(validToken),
+				WithHeader("If-None-Match", ifNoneMatch),
+			))
+			body, err := io.ReadAll(response.Body)
+			require.NoError(t, err)
+
+			assert.Equal(t, status, response.StatusCode, ifNoneMatch)
+			assert.Equal(t, etag, response.Header.Get("ETag"), ifNoneMatch)
+			assert.Equal(t, status == http.StatusOK, len(body) > 0, ifNoneMatch)
+		}
+	})
+
+	// RFC 7644 Section 3.14: If-None-Match is a versioning feature, so it is ignored when ETag.Supported is false.
+	t.Run("If-None-Match is ignored when ETag.Supported is false", func(t *testing.T) {
+		srv := newTestServer(t, withConfig(core.NewServiceProviderConfig().Patching()))
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id,
+			WithBearerToken(validToken),
+			WithHeader("If-None-Match", "*"),
+		))
+
+		assert.Equal(t, http.StatusOK, response.StatusCode)
+	})
+
 	// RFC 7644 Section 3.12: 409 when the specified version number does not match the resource's latest version number.
 	t.Run("serves concurrent reads and writes without losing a resource", func(t *testing.T) {
 		srv := newTestServer(t)

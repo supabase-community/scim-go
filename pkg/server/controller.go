@@ -87,6 +87,10 @@ func (c *controller[T]) ByID(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	c.setVersion(w, resource)
+	if c.notModified(r, resource.Common().Meta.Version) {
+		w.WriteHeader(http.StatusNotModified)
+		return nil
+	}
 	return c.send(w, http.StatusOK, resource, projection)
 }
 
@@ -227,7 +231,22 @@ func (c *controller[T]) ifMatch(r *http.Request) ([]string, error) {
 	return tags, nil
 }
 
-// RFC 9110 Section 13.1.1: If-Match = "*" / #entity-tag
+// RFC 9110 Section 13.1.2: If-None-Match uses the weak comparison function.
+func (c *controller[T]) notModified(r *http.Request, version string) bool {
+	if !c.config.SupportsVersioning() {
+		return false
+	}
+	lines := r.Header.Values("If-None-Match")
+	if slices.Equal(lines, []string{"*"}) {
+		return true
+	}
+	opaque := strings.TrimPrefix(version, "W/")
+	return slices.ContainsFunc(entityTags(strings.Join(lines, ",")), func(tag string) bool {
+		return strings.TrimPrefix(tag, "W/") == opaque
+	})
+}
+
+// RFC 9110 Section 13.1.1 and 13.1.2: If-Match and If-None-Match = "*" / #entity-tag
 func entityTags(field string) []string {
 	var tags []string
 	for field = strings.TrimLeft(field, " \t,"); field != ""; field = strings.TrimLeft(field, " \t,") {
