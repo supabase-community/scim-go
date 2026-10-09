@@ -36,9 +36,7 @@ func (t *target) write(kind Op, incoming any) error {
 	if t.key() == "" && !isObject(incoming) {
 		return scimerrors.ErrInvalidValue(`"value" must be an object when "path" has no sub-attribute`)
 	}
-	if err := eachSub(t.owner(), incoming, gateWrite); err != nil {
-		return err
-	}
+	stripReadOnly(t.owner(), incoming)
 	holders, err := t.holders(true)
 	if err != nil {
 		return err
@@ -189,7 +187,7 @@ func (t *target) put(holder core.Object, kind Op, incoming any) error {
 	if err := t.overwritable(holder, kind, shapedValue); err != nil {
 		return err
 	}
-	set(holder, t.key(), carryImmutable(t.attr, kind, t.elements(), shapedValue), kind)
+	set(holder, t.key(), carryForward(t.attr, kind, t.elements(), shapedValue), kind)
 	return nil
 }
 
@@ -209,14 +207,7 @@ func (t *target) overwritable(holder core.Object, kind Op, candidate any) error 
 	if err := gateImmutableWrite(t.attr, before, final); err != nil {
 		return err
 	}
-	gate := newParentGate(t.subParent(), holder)
-	if err := gate.check(t.attr, before, final); err != nil {
-		return err
-	}
-	if _, appends := before.([]any); appends && kind == OpAdd {
-		return nil
-	}
-	return eachSub(t.attr, before, gateRemove)
+	return newParentGate(t.subParent(), holder).check(t.attr, before, final)
 }
 
 // subParent reports the singular complex parent a sub-attribute write also changes, per RFC 7643 Section 7; nil for a plain top-level path.
@@ -259,9 +250,6 @@ func (t *target) removeValues() error {
 // RFC 7643 Section 7: an assigned immutable attribute SHALL NOT be updated, including by removal.
 func (t *target) gateHolderRemoval(holder core.Object) error {
 	held := holder.Get(t.key())
-	if err := eachSub(t.attr, held, gateRemove); err != nil {
-		return err
-	}
 	if err := gateRequired(t.attr, !value.IsUnassigned(held)); err != nil {
 		return err
 	}
@@ -286,14 +274,6 @@ func (t *target) drop() error {
 	count := tally(matched)
 	if count == 0 {
 		return scimerrors.ErrNoTarget(`"path" matched no elements`)
-	}
-	for i, element := range elements {
-		if !matched[i] {
-			continue
-		}
-		if err := eachSub(t.attr, element, gateRemove); err != nil {
-			return err
-		}
 	}
 	if err := gateRequired(t.attr, count == len(elements)); err != nil {
 		return err
@@ -444,45 +424,20 @@ func members(elements []any, matched []bool) ([]core.Object, error) {
 	return holders, nil
 }
 
-func eachSub(attr *core.Attribute, held any, visit func(sub *core.Attribute, held any) error) error {
-	if object := value.AsObject(held); object != nil {
-		return eachSubField(attr, object, visit)
+// RFC 7644 Section 3.5.1: readOnly values provided SHALL be ignored.
+func stripReadOnly(attr *core.Attribute, incoming any) {
+	if list, ok := incoming.([]any); ok {
+		for _, element := range list {
+			stripReadOnly(attr, element)
+		}
+		return
 	}
-	if list, ok := held.([]any); ok {
-		return eachSubElement(attr, list, visit)
-	}
-	return nil
-}
-
-func eachSubField(attr *core.Attribute, fields core.Object, visit func(sub *core.Attribute, held any) error) error {
-	for name, held := range fields {
-		if err := visit(subAttr(attr, name), held); err != nil {
-			return err
+	object := value.AsObject(incoming)
+	for name := range object {
+		if subAttr(attr, name).Mutability == core.MutabilityReadOnly {
+			delete(object, name)
 		}
 	}
-	return nil
-}
-
-func eachSubElement(attr *core.Attribute, elements []any, visit func(sub *core.Attribute, held any) error) error {
-	for _, element := range elements {
-		if err := eachSub(attr, element, visit); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// RFC 7644 Section 3.5.2: each operation against an attribute MUST be compatible with the attribute's mutability.
-func gateWrite(sub *core.Attribute, _ any) error {
-	return gate(sub)
-}
-
-// RFC 7644 Section 3.5.2.2: removing the value of a read-only attribute SHALL return "mutability".
-func gateRemove(sub *core.Attribute, held any) error {
-	if value.IsUnassigned(held) {
-		return nil
-	}
-	return gate(sub)
 }
 
 // RFC 7644 Section 3.5.2.2: an attribute that is removed or becomes unassigned and is required SHALL return "mutability".

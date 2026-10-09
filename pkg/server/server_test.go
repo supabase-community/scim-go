@@ -3640,28 +3640,25 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		assert.Equal(t, []part{{Serial: "s-1", Inspector: "qa-bot"}}, ReadBodyAs[widget](t, response).Parts)
 	})
 
-	// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute.
-	t.Run("rejects a readOnly sub-attribute inside the value", func(t *testing.T) {
-		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
-
-		for _, operation := range []patch.Operation{
-			{Op: patch.OpReplace, Path: "parts", Value: json.RawMessage(`[{"serial":"s-1","inspector":"mallory"}]`)},
-			{Op: patch.OpAdd, Path: "parts", Value: json.RawMessage(`{"serial":"s-2","inspector":"mallory"}`)},
-			{Op: patch.OpAdd, Value: json.RawMessage(`{"parts":[{"serial":"s-2","inspector":"mallory"}]}`)},
+	// RFC 7644 Section 3.5.1: readOnly values provided SHALL be ignored.
+	t.Run("ignores a readOnly sub-attribute inside the value", func(t *testing.T) {
+		for _, test := range []struct {
+			operation patch.Operation
+			want      []part
+		}{
+			{patch.Operation{Op: patch.OpReplace, Path: "parts", Value: json.RawMessage(`[{"serial":"s-1","inspector":"mallory"}]`)}, []part{{Serial: "s-1", Inspector: "qa-bot"}}},
+			{patch.Operation{Op: patch.OpReplace, Path: "parts", Value: json.RawMessage(`[{"serial":"s-1"}]`)}, []part{{Serial: "s-1", Inspector: "qa-bot"}}},
+			{patch.Operation{Op: patch.OpReplace, Value: json.RawMessage(`{"parts":[{"serial":"s-1"}]}`)}, []part{{Serial: "s-1", Inspector: "qa-bot"}}},
+			{patch.Operation{Op: patch.OpAdd, Path: "parts", Value: json.RawMessage(`{"serial":"s-2","inspector":"mallory"}`)}, []part{{Serial: "s-1", Inspector: "qa-bot"}, {Serial: "s-2"}}},
+			{patch.Operation{Op: patch.OpAdd, Value: json.RawMessage(`{"parts":[{"serial":"s-2","inspector":"mallory"}]}`)}, []part{{Serial: "s-1", Inspector: "qa-bot"}, {Serial: "s-2"}}},
 		} {
-			request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
-				WithBearerToken(validToken),
-				WithContentType(protocol.MediaType),
-				WithRequestBodyAs(t, protocol.PatchRequest{
-					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-					Operations: []patch.Operation{operation},
-				}),
-			)
-			response := Response(t, srv, request)
+			srv := newTestServer(t)
+			id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
 
-			require.Equal(t, http.StatusBadRequest, response.StatusCode, "operation: %s", operation.Value)
-			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType, "operation: %s", operation.Value)
+			response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, test.operation))
+
+			require.Equal(t, http.StatusOK, response.StatusCode, "operation: %s", test.operation.Value)
+			assert.Equal(t, test.want, ReadBodyAs[widget](t, response).Parts, "operation: %s", test.operation.Value)
 		}
 	})
 
@@ -4473,24 +4470,16 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 		assert.Len(t, ReadBodyAs[core.User](t, stored).Emails, 2)
 	})
 
-	// RFC 7644 Section 3.5.2.2: if a read-only attribute is removed or becomes unassigned, the server SHALL return "mutability".
-	t.Run("rejects a remove that unassigns a readOnly sub-attribute", func(t *testing.T) {
-		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
-
+	// RFC 7644 Section 3.5.2.2: if the target location is a multi-valued attribute and no filter is specified, the attribute and all values are removed.
+	t.Run("removes a readOnly sub-attribute with its value", func(t *testing.T) {
 		for _, path := range []string{"parts", `parts[serial eq "s-1"]`} {
-			request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
-				WithBearerToken(validToken),
-				WithContentType(protocol.MediaType),
-				WithRequestBodyAs(t, protocol.PatchRequest{
-					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-					Operations: []patch.Operation{{Op: patch.OpRemove, Path: path}},
-				}),
-			)
-			response := Response(t, srv, request)
+			srv := newTestServer(t)
+			id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
 
-			require.Equal(t, http.StatusBadRequest, response.StatusCode, "path: %s", path)
-			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType, "path: %s", path)
+			response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpRemove, Path: path}))
+
+			require.Equal(t, http.StatusOK, response.StatusCode, "path: %s", path)
+			assert.Empty(t, ReadBodyAs[widget](t, response).Parts, "path: %s", path)
 		}
 	})
 
@@ -4617,30 +4606,6 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Equal(t, scimerrors.NoTarget, ReadBodyAs[scimerrors.Error](t, response).ScimType)
-	})
-
-	// RFC 7644 Section 3.5.2.2: if a read-only attribute is removed or becomes unassigned, the server SHALL return "mutability".
-	t.Run("rejects a replace that unassigns a readOnly sub-attribute", func(t *testing.T) {
-		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
-
-		for _, operation := range []patch.Operation{
-			{Op: patch.OpReplace, Path: "parts", Value: json.RawMessage(`[{"serial":"s-1"}]`)},
-			{Op: patch.OpReplace, Value: json.RawMessage(`{"parts":[{"serial":"s-1"}]}`)},
-		} {
-			request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
-				WithBearerToken(validToken),
-				WithContentType(protocol.MediaType),
-				WithRequestBodyAs(t, protocol.PatchRequest{
-					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-					Operations: []patch.Operation{operation},
-				}),
-			)
-			response := Response(t, srv, request)
-
-			require.Equal(t, http.StatusBadRequest, response.StatusCode, "operation: %s", operation.Value)
-			assert.Equal(t, scimerrors.Mutability, ReadBodyAs[scimerrors.Error](t, response).ScimType, "operation: %s", operation.Value)
-		}
 	})
 
 	// RFC 7644 Section 3.4.2.2: for DateTime types, the comparison is chronological.

@@ -7,13 +7,15 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-// RFC 7644 Section 3.5.2: a client MUST NOT modify an attribute that has mutability "immutable".
-func carryImmutable(attr *core.Attribute, kind Op, stored []any, candidate any) any {
+// RFC 7644 Section 3.5.1: readOnly values SHALL be ignored, and immutable values MUST match.
+func carryForward(attr *core.Attribute, kind Op, stored []any, candidate any) any {
 	elements, ok := candidate.([]any)
 	if kind != OpReplace || !ok {
 		return candidate
 	}
-	subs := slices.DeleteFunc(slices.Clone(attr.SubAttributes), func(sub *core.Attribute) bool { return sub.Mutability != core.MutabilityImmutable })
+	subs := slices.DeleteFunc(slices.Clone(attr.SubAttributes), func(sub *core.Attribute) bool {
+		return sub.Mutability != core.MutabilityImmutable && sub.Mutability != core.MutabilityReadOnly
+	})
 	if len(subs) == 0 {
 		return candidate
 	}

@@ -505,8 +505,8 @@ func TestApplyAddToAbsentMultiValuedWrapsInArray(t *testing.T) {
 	require.Len(t, emails, 1)
 }
 
-// RFC 7644 Section 3.5.2: each operation against an attribute MUST be compatible with the attribute's mutability.
-func TestApplyReadOnlySubAttributeIsRejected(t *testing.T) {
+// RFC 7644 Section 3.5.1: readOnly values provided SHALL be ignored.
+func TestApplyReadOnlySubAttributeFollowsItsParent(t *testing.T) {
 	schemas := []*core.Schema{
 		(&core.Schema{ID: core.SchemaUser, Name: "User"}).With(
 			core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
@@ -519,20 +519,22 @@ func TestApplyReadOnlySubAttributeIsRejected(t *testing.T) {
 			),
 		),
 	}
+	work := map[string]any{"type": "work", "value": "a@b.com"}
+	name := map[string]any{"givenName": "Barbara", "formatted": "Barbara Jensen"}
 	cases := []struct {
 		name string
 		op   patch.Operation
+		want map[string]any
 	}{
-		{"a value-path merge", operation(patch.OpReplace, `emails[value eq "a@b.com"]`, `{"type":"home"}`)},
-		{"a replaced array", operation(patch.OpReplace, "emails", `[{"value":"a@b.com","type":"home"}]`)},
-		{"an added element", operation(patch.OpAdd, "emails", `{"value":"x@y.com","type":"home"}`)},
-		{"an added array without a path", patch.Operation{Op: patch.OpAdd, Value: json.RawMessage(`{"emails":[{"value":"x@y.com","type":"home"}]}`)}},
-		{"a merged complex attribute", operation(patch.OpReplace, "name", `{"formatted":"Ms. Barbara J Jensen"}`)},
-		// RFC 7644 Section 3.5.2.2: a read-only attribute that is removed or becomes unassigned SHALL return "mutability".
-		{"a removed complex attribute", operation(patch.OpRemove, "name", "")},
-		{"a removed multi-valued attribute", operation(patch.OpRemove, "emails", "")},
-		{"a removed element", operation(patch.OpRemove, `emails[value eq "a@b.com"]`, "")},
-		{"a replaced array that drops a readOnly value", operation(patch.OpReplace, "emails", `[{"value":"a@b.com"}]`)},
+		{"ignores it in a value-path merge", operation(patch.OpReplace, `emails[value eq "a@b.com"]`, `{"type":"home"}`), map[string]any{"emails": []any{work}, "name": name}},
+		{"carries it onto a replaced element", operation(patch.OpReplace, "emails", `[{"value":"a@b.com","type":"home"}]`), map[string]any{"emails": []any{work}, "name": name}},
+		{"carries it onto a replaced element that omits it", operation(patch.OpReplace, "emails", `[{"value":"a@b.com"}]`), map[string]any{"emails": []any{work}, "name": name}},
+		{"ignores it in an added element", operation(patch.OpAdd, "emails", `{"value":"x@y.com","type":"home"}`), map[string]any{"emails": []any{work, map[string]any{"value": "x@y.com"}}, "name": name}},
+		{"ignores it in an added array without a path", patch.Operation{Op: patch.OpAdd, Value: json.RawMessage(`{"emails":[{"value":"x@y.com","type":"home"}]}`)}, map[string]any{"emails": []any{work, map[string]any{"value": "x@y.com"}}, "name": name}},
+		{"ignores it in a merged complex attribute", operation(patch.OpReplace, "name", `{"formatted":"Ms. Barbara J Jensen"}`), map[string]any{"emails": []any{work}, "name": name}},
+		{"removes it with its complex attribute", operation(patch.OpRemove, "name", ""), map[string]any{"emails": []any{work}}},
+		{"removes it with its multi-valued attribute", operation(patch.OpRemove, "emails", ""), map[string]any{"name": name}},
+		{"removes it with its element", operation(patch.OpRemove, `emails[value eq "a@b.com"]`, ""), map[string]any{"emails": []any{}, "name": name}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -541,21 +543,10 @@ func TestApplyReadOnlySubAttributeIsRejected(t *testing.T) {
 				"name":   map[string]any{"givenName": "Barbara", "formatted": "Barbara Jensen"},
 			}
 
-			requireMutability(t, apply(item, schemas, tc.op))
+			require.NoError(t, apply(item, schemas, tc.op))
+			assert.Equal(t, tc.want, item)
 		})
 	}
-
-	t.Run("removes values whose readOnly sub-attributes are unassigned", func(t *testing.T) {
-		item := map[string]any{
-			"emails": []any{map[string]any{"value": "a@b.com"}, map[string]any{"value": "x@y.com", "type": ""}},
-			"name":   map[string]any{"givenName": "Barbara"},
-		}
-
-		require.NoError(t, apply(item, schemas, operation(patch.OpRemove, `emails[value eq "a@b.com"]`, "")))
-		require.NoError(t, apply(item, schemas, operation(patch.OpRemove, "emails", "")))
-		require.NoError(t, apply(item, schemas, operation(patch.OpRemove, "name", "")))
-		assert.Empty(t, item)
-	})
 }
 
 // RFC 7644 Section 3.5.2: a value-path merge into a readOnly complex attribute SHALL fail.
@@ -1132,12 +1123,6 @@ func TestApplyComplexMerge(t *testing.T) {
 		require.NoError(t, apply(item, schemas(), operation(patch.OpReplace, "name", `{"givenName":"Babs"}`)))
 
 		assert.Equal(t, map[string]any{"givenName": "Babs"}, item["name"])
-	})
-
-	t.Run("enforces the mutability of each merged sub-attribute", func(t *testing.T) {
-		item := map[string]any{"name": map[string]any{"formatted": "Ms. Barbara J Jensen"}}
-
-		requireMutability(t, apply(item, schemas(), operation(patch.OpReplace, "name", `{"formatted":"Babs"}`)))
 	})
 
 	t.Run("replaces a multi-valued attribute as a whole", func(t *testing.T) {
