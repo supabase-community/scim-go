@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.15.0](https://github.com/supabase-community/scim-go/compare/v0.14.0...v0.15.0) (2026-10-09)
+
+
+### Features
+
+* **server:** hand the response projection to repository writes ([a9acc92](https://github.com/supabase-community/scim-go/commit/a9acc92948e86d9554a49e81b298791f0991ec90))
+
+
+### Bug Fixes
+
+* **filter:** match an unassigned attribute with ne ([edd99f9](https://github.com/supabase-community/scim-go/commit/edd99f93dac78d534ea46ae34edc4e91eb78eb4f))
+* **patch:** succeed when a remove filter with a sub-attribute matches nothing ([c0cbe4a](https://github.com/supabase-community/scim-go/commit/c0cbe4acc04df0ea4280936b4c01044a6e43b098))
+* **patch:** unassign an extension that holds only null values ([daaddf6](https://github.com/supabase-community/scim-go/commit/daaddf6b9abcd2e06845879dff2580cacb7ea6c7))
+* recognize nested core.Object values as JSON objects ([d5fef4a](https://github.com/supabase-community/scim-go/commit/d5fef4aecad15e0a3c0b21a4f719e65ad65b4195))
+* **server:** answer If-None-Match with 304 on GET ([f73153f](https://github.com/supabase-community/scim-go/commit/f73153f2bba8c003cfac1433d444792ef4803458))
+* **server:** send Content-Location with 304 on GET ([62d776a](https://github.com/supabase-community/scim-go/commit/62d776a5c913640f51319aa2b6567ac8fb2e50de))
+* **value:** canonicalize composite identity values by attribute type ([e001ae5](https://github.com/supabase-community/scim-go/commit/e001ae5a3e2d50010ca3d346d2d71d6bef6c785c))
+
+
+### Performance Improvements
+
+* **value:** build identity keys without json.Marshal ([bb28cd3](https://github.com/supabase-community/scim-go/commit/bb28cd3d406122d7f6db69a8cddde803d9fddf18))
+
 ## [0.14.0](https://github.com/supabase-community/scim-go/compare/v0.13.0...v0.14.0) (2026-10-08)
 
 
