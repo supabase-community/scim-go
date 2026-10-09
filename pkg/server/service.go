@@ -87,7 +87,11 @@ func (s *service[T]) Delete(ctx context.Context, req *protocol.DeleteRequest) er
 	if err != nil {
 		return err
 	}
-	return conflict(req.Versions, s.repo.Delete(ctx, current))
+	// RFC 7644 Section 3.14: without If-Match the delete is unconditional.
+	if len(req.Versions) == 0 {
+		current.Common().Meta.Version = ""
+	}
+	return s.repo.Delete(ctx, current)
 }
 
 func (s *service[T]) Patch(ctx context.Context, req *protocol.PatchRequest) (T, error) {

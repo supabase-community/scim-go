@@ -4645,6 +4645,30 @@ func TestRFC7644DeletingResources(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
 	})
 
+	// RFC 7644 Section 3.14: without If-Match the delete is unconditional.
+	t.Run("deletes without If-Match after a concurrent write", func(t *testing.T) {
+		srv := newTestServer(t, withWriteBeforeDelete())
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		require.Equal(t, http.StatusNoContent, response.StatusCode)
+
+		response = Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		assert.Equal(t, http.StatusNotFound, response.StatusCode)
+	})
+
+	// RFC 7644 Section 3.14: the delete succeeds only if the If-Match ETag still matches.
+	t.Run("rejects an If-Match delete after a concurrent write", func(t *testing.T) {
+		srv := newTestServer(t, withWriteBeforeDelete())
+		id, etag := create(t, srv, &core.User{UserName: "bjensen"})
+
+		response := Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+id, WithBearerToken(validToken), WithHeader("If-Match", etag)))
+		require.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
+
+		response = Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+		assert.Equal(t, http.StatusOK, response.StatusCode)
+	})
+
 	// RFC 7644 Section 3.12: 412 when the update failed because the resource has changed on the server.
 	t.Run("rejects a delete with a stale or empty If-Match and leaves the resource intact", func(t *testing.T) {
 		for _, ifMatch := range []string{`W/"stale"`, ","} {

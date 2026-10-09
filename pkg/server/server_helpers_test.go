@@ -44,9 +44,10 @@ var tokens = map[string]error{
 }
 
 type testServer struct {
-	config     *core.ServiceProviderConfig
-	options    []server.Option[*server.Server]
-	updateGate *raceGate
+	config            *core.ServiceProviderConfig
+	options           []server.Option[*server.Server]
+	updateGate        *raceGate
+	writeBeforeDelete bool
 }
 
 type raceGate struct {
@@ -114,7 +115,8 @@ type gadget struct {
 
 type gatedRepository struct {
 	server.Repository[*core.User]
-	gate *raceGate
+	gate              *raceGate
+	writeBeforeDelete bool
 }
 
 type inspectingRepository struct {
@@ -164,8 +166,9 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 		option(s)
 	}
 	users := gatedRepository{
-		Repository: server.NewRepository[*core.User](basePath+"/Users", append(userSchemas(), core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...))),
-		gate:       s.updateGate,
+		Repository:        server.NewRepository[*core.User](basePath+"/Users", append(userSchemas(), core.NewSchema(core.SchemaEnterpriseUser).With(enterpriseAttributes()...))),
+		gate:              s.updateGate,
+		writeBeforeDelete: s.writeBeforeDelete,
 	}
 	standard := []server.Option[*server.Server]{
 		server.ErrorHandler(func(_ *http.Request, err error) {
@@ -200,6 +203,10 @@ func withUpdateGate(gate *raceGate) testOption {
 	return func(s *testServer) { s.updateGate = gate }
 }
 
+func withWriteBeforeDelete() testOption {
+	return func(s *testServer) { s.writeBeforeDelete = true }
+}
+
 func (r gatedRepository) Update(ctx context.Context, user *core.User) (*core.User, error) {
 	if r.gate != nil {
 		if err := r.gate.arrive(); err != nil {
@@ -207,6 +214,17 @@ func (r gatedRepository) Update(ctx context.Context, user *core.User) (*core.Use
 		}
 	}
 	return r.Repository.Update(ctx, user)
+}
+
+func (r gatedRepository) Delete(ctx context.Context, user *core.User) error {
+	if r.writeBeforeDelete {
+		renamed := &core.User{UserName: "renamed"}
+		renamed.ID = user.ID
+		if _, err := r.Repository.Update(ctx, renamed); err != nil {
+			return err
+		}
+	}
+	return r.Repository.Delete(ctx, user)
 }
 
 func (r inspectingRepository) Create(ctx context.Context, w *widget) (*widget, error) {
