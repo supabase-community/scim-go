@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
@@ -286,6 +290,9 @@ func userAttributes() core.Attributes {
 func enterpriseAttributes() core.Attributes {
 	return core.Attributes{
 		core.NewAttribute("employeeNumber", core.TypeString).AsImmutable(),
+		core.NewAttribute("costCenter", core.TypeString),
+		core.NewAttribute("organization", core.TypeString),
+		core.NewAttribute("division", core.TypeString),
 		core.NewAttribute("department", core.TypeString),
 		core.NewAttribute("manager", core.TypeComplex).With(
 			core.NewAttribute("value", core.TypeString),
@@ -400,4 +407,28 @@ func patchRequest(t *testing.T, srv *httptest.Server, resource string, op patch.
 		WithContentType(protocol.MediaType),
 		WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{op}}),
 	)...)
+}
+
+func assertFilterMatches(t *testing.T, srv *httptest.Server, filter, userName string) {
+	t.Helper()
+
+	path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
+	response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+	require.Equal(t, http.StatusOK, response.StatusCode, filter)
+	list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+	if userName == "" {
+		assert.Zero(t, list.TotalResults, filter)
+		return
+	}
+	require.Equal(t, 1, list.TotalResults, filter)
+	assert.Equal(t, userName, list.Resources[0].UserName, filter)
+}
+
+func swapCase(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsUpper(r) {
+			return unicode.ToLower(r)
+		}
+		return unicode.ToUpper(r)
+	}, s)
 }

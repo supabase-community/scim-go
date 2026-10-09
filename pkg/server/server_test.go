@@ -1970,6 +1970,106 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, 1, list.TotalResults)
 		assert.Equal(t, id, list.Resources[0].ID)
 	})
+
+	// RFC 7644 Section 3.4.2.2: every operator applies to each attribute Okta provisions, and ne includes a resource without the attribute.
+	t.Run("filters every attribute Okta provisions with each string operator", func(t *testing.T) {
+		srv := newTestServer(t)
+		primary := true
+		create(t, srv, &core.User{
+			UserName:   "alice",
+			ExternalID: "Okta-00u1",
+			Name: core.Name{
+				GivenName:       "Alice",
+				FamilyName:      "Liddell",
+				MiddleName:      "Pleasance",
+				HonorificPrefix: "Miss",
+				HonorificSuffix: "Esq",
+			},
+			DisplayName:       "Alice Liddell",
+			NickName:          "Ally",
+			ProfileURL:        "https://example.com/Alice",
+			Title:             "Explorer",
+			UserType:          "Employee",
+			PreferredLanguage: "en-GB",
+			Locale:            "en-GB",
+			Timezone:          "Europe/London",
+			Emails:            []core.Email{{Value: "Alice@example.com", Type: "Work", Primary: &primary}},
+			PhoneNumbers:      []core.PhoneNumber{{Value: "Tel 555 0100", Type: "Mobile", Primary: &primary}},
+			Addresses: []core.Address{{
+				Type:          "Home",
+				StreetAddress: "Christ Church",
+				Locality:      "Oxford",
+				Region:        "Oxfordshire",
+				PostalCode:    "Ox1 1dp",
+				Country:       "Gb",
+				Formatted:     "Christ Church, Oxford",
+			}},
+			EnterpriseUser: &core.EnterpriseUser{
+				EmployeeNumber: "Emp1865",
+				CostCenter:     "Cc4130",
+				Organization:   "Wonderland",
+				Division:       "Looking Glass",
+				Department:     "Tea Party",
+				Manager:        &core.Manager{Value: "Mgr-26118915"},
+			},
+		})
+		create(t, srv, &core.User{UserName: "bob"})
+
+		enterprise := string(core.SchemaEnterpriseUser) + ":"
+		for path, value := range map[string]string{
+			"externalId":                  "Okta-00u1",
+			"name.givenName":              "Alice",
+			"name.familyName":             "Liddell",
+			"name.middleName":             "Pleasance",
+			"name.honorificPrefix":        "Miss",
+			"name.honorificSuffix":        "Esq",
+			"displayName":                 "Alice Liddell",
+			"nickName":                    "Ally",
+			"profileUrl":                  "https://example.com/Alice",
+			"title":                       "Explorer",
+			"userType":                    "Employee",
+			"preferredLanguage":           "en-GB",
+			"locale":                      "en-GB",
+			"timezone":                    "Europe/London",
+			"emails.value":                "Alice@example.com",
+			"emails.type":                 "Work",
+			"phoneNumbers.value":          "Tel 555 0100",
+			"phoneNumbers.type":           "Mobile",
+			"addresses.type":              "Home",
+			"addresses.streetAddress":     "Christ Church",
+			"addresses.locality":          "Oxford",
+			"addresses.region":            "Oxfordshire",
+			"addresses.postalCode":        "Ox1 1dp",
+			"addresses.country":           "Gb",
+			"addresses.formatted":         "Christ Church, Oxford",
+			enterprise + "employeeNumber": "Emp1865",
+			enterprise + "costCenter":     "Cc4130",
+			enterprise + "organization":   "Wonderland",
+			enterprise + "division":       "Looking Glass",
+			enterprise + "department":     "Tea Party",
+			enterprise + "manager.value":  "Mgr-26118915",
+		} {
+			flipped := swapCase(value)
+			require.NotEqual(t, value, flipped, path)
+			caseInsensitive := "alice"
+			if path == "externalId" || path == "profileUrl" {
+				caseInsensitive = ""
+			}
+			for filter, want := range map[string]string{
+				path + ` eq "` + value + `"`:                 "alice",
+				path + ` eq "` + flipped + `"`:               caseInsensitive,
+				path + ` co "` + value[1:len(value)-1] + `"`: "alice",
+				path + ` sw "` + value[:2] + `"`:             "alice",
+				path + ` ew "` + value[len(value)-2:] + `"`:  "alice",
+				path + ` pr`:                 "alice",
+				path + ` ne "` + value + `"`: "bob",
+			} {
+				assertFilterMatches(t, srv, filter, want)
+			}
+		}
+		assertFilterMatches(t, srv, `emails[primary eq true]`, "alice")
+		assertFilterMatches(t, srv, `phoneNumbers[primary eq true]`, "alice")
+	})
 }
 
 // RFC 7644 3.4.2.3 Sorting
@@ -2387,7 +2487,7 @@ func TestRFC7644Attributes(t *testing.T) {
 	id, _ := create(t, srv, &core.User{
 		UserName:       "bjensen",
 		Emails:         []core.Email{{Value: "bjensen@example.com", Type: "work"}},
-		EnterpriseUser: &core.EnterpriseUser{Department: "Tour Operations", CostCenter: "4130"},
+		EnterpriseUser: &core.EnterpriseUser{Department: "Tour Operations", Manager: &core.Manager{Value: "26118915", Ref: "../Users/26118915"}},
 	})
 	get := func(t *testing.T, path string) (int, map[string]any) {
 		t.Helper()
@@ -2430,7 +2530,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		_, body := get(t, "/Users/"+id)
 		enterprise := body[string(core.SchemaEnterpriseUser)].(map[string]any)
 		assert.Equal(t, "Tour Operations", enterprise["department"])
-		assert.NotContains(t, enterprise, "costCenter")
+		assert.NotContains(t, enterprise["manager"], "$ref")
 	})
 
 	// RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.
