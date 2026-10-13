@@ -222,9 +222,10 @@ func (d *database) detach(sources map[string]struct{}, target string) {
 		}
 		item := clone(rec)
 		object, err := core.NewObject(item)
-		if err != nil || !dropMember(object, rec.schemas, target) {
+		if err != nil || !dropReferences(object, rec.schemas, target) {
 			continue
 		}
+		stampSchemas(rec.schemas, item, object)
 		if resource, err := decodeAs(item, object); err == nil {
 			d.rederive(resource, rec.schemas)
 		}
@@ -361,7 +362,7 @@ func moved(before, after []string) []string {
 	return ids
 }
 
-func dropMember(object core.Object, scope core.Schemas, target string) bool {
+func dropReferences(object core.Object, scope core.Schemas, target string) bool {
 	dropped := false
 	for _, field := range sourceFields(scope) {
 		elements := field.elements(object)
@@ -374,6 +375,13 @@ func dropMember(object core.Object, scope core.Schemas, target string) bool {
 		}
 		dropped = true
 		assign(value.AsObject(field.holder(object)), field.Name, kept)
+	}
+	for _, field := range pointerFields(scope) {
+		if value.AsObject(field.raw(object)).Get("value") != target {
+			continue
+		}
+		dropped = true
+		value.AsObject(field.holder(object)).Remove(field.Name)
 	}
 	return dropped
 }

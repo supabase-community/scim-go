@@ -746,11 +746,6 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 		assert.Equal(t, "Johnny", manager(renamed).DisplayName)
 		filtered := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?filter="+url.QueryEscape(string(core.SchemaEnterpriseUser)+`:manager.displayName eq "Johnny"`), WithBearerToken(validToken)))
 		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[core.User]](t, filtered).TotalResults)
-
-		require.Equal(t, http.StatusNoContent, Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+managerID, WithBearerToken(validToken))).StatusCode)
-		removed := manager(get())
-		assert.Equal(t, managerID, removed.Value)
-		assert.Empty(t, removed.DisplayName)
 	})
 
 	// RFC 7644 Section 3.14: the returned version matches the stored one when a user manages itself.
@@ -4846,6 +4841,33 @@ func TestRFC7644DeletingResources(t *testing.T) {
 		afterGroup := get()
 		assert.NotEqual(t, afterUser.Header.Get("ETag"), afterGroup.Header.Get("ETag"))
 		assert.Empty(t, ReadBodyAs[core.Group](t, afterGroup).Members)
+	})
+
+	// RFC 7643 Section 2.3.7: a service provider MAY enforce referential integrity for references to SCIM resources.
+	t.Run("removes a deleted resource from every single-valued reference", func(t *testing.T) {
+		srv := newTestServer(t)
+		managerID, _ := create(t, srv, &core.User{UserName: "jsmith", DisplayName: "John Smith"})
+		reportID, created := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{Department: "Tours", Manager: &core.Manager{Value: managerID}}})
+
+		require.Equal(t, http.StatusNoContent, Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+managerID, WithBearerToken(validToken))).StatusCode)
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+reportID, WithBearerToken(validToken)))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.NotEqual(t, created, response.Header.Get("ETag"))
+		assert.Equal(t, &core.EnterpriseUser{Department: "Tours"}, ReadBodyAs[core.User](t, response).EnterpriseUser)
+		filtered := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?filter="+url.QueryEscape(string(core.SchemaEnterpriseUser)+`:manager pr`), WithBearerToken(validToken)))
+		assert.Zero(t, ReadBodyAs[protocol.ListResponse[core.User]](t, filtered).TotalResults)
+	})
+
+	// RFC 7643 Section 3: "schemas" lists only the extensions present once a deleted reference empties one.
+	t.Run("drops the extension from schemas when a deleted reference was its only data", func(t *testing.T) {
+		srv := newTestServer(t)
+		managerID, _ := create(t, srv, &core.User{UserName: "jsmith"})
+		reportID, _ := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: managerID}}})
+
+		require.Equal(t, http.StatusNoContent, Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+managerID, WithBearerToken(validToken))).StatusCode)
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+reportID, WithBearerToken(validToken)))
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		assert.Equal(t, []core.SchemaURI{core.SchemaUser}, ReadBodyAs[core.User](t, response).Schemas)
 	})
 
 	// RFC 7644 Section 3.14: the client MAY supply an If-Match header so the operation succeeds only if the ETag matches.
