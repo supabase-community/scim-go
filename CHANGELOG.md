@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.15.1](https://github.com/supabase-community/scim-go/compare/v0.15.0...v0.15.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **core:** require a value for each group member ([3265f93](https://github.com/supabase-community/scim-go/commit/3265f931b95c405b71bdd419b7e0c4ae42500194))
+* **patch:** let readOnly sub-attributes follow their parent ([5b52f7a](https://github.com/supabase-community/scim-go/commit/5b52f7a6d34bc8259be00a7feba43654a3d75bd3))
+* **server:** derive User.groups and manager.displayName on write ([afe0b17](https://github.com/supabase-community/scim-go/commit/afe0b17a163827eee99dd5ccb5feb066d4769e55))
+* **server:** drop deleted resources from group members ([1cc6133](https://github.com/supabase-community/scim-go/commit/1cc6133d03bd9cc0c5a3c8f8a47735d7ac5e6de3))
+* **server:** make DELETE without If-Match unconditional ([9f862e7](https://github.com/supabase-community/scim-go/commit/9f862e745e175c431dfb118cf33d3e82402d2341))
+
 ## [0.15.0](https://github.com/supabase-community/scim-go/compare/v0.14.0...v0.15.0) (2026-10-09)
 
 
