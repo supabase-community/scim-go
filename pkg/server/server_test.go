@@ -555,6 +555,39 @@ func TestRFC7643CommonAttributes(t *testing.T) {
 	})
 }
 
+// RFC 7643 4.1 "User" Resource Schema
+func TestRFC7643UserResourceSchema(t *testing.T) {
+	// RFC 7643 Section 4.1.2: groups is a list of groups the user belongs to, derived from Group membership.
+	t.Run("derives groups from group members", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "alice"})
+		groupsOf := func() []core.GroupMembership {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			return ReadBodyAs[core.User](t, response).Groups
+		}
+		patchGroup := func(groupID string, op patch.Operation) {
+			require.Equal(t, http.StatusNoContent, Response(t, srv, patchRequest(t, srv, "Groups/"+groupID, op)).StatusCode)
+		}
+
+		group := createGroup(t, srv, &core.Group{DisplayName: "earth", Members: []core.Member{{Value: id}}})
+		want := []core.GroupMembership{{Value: group.ID, Ref: group.Meta.Location, Display: "earth", Type: "direct"}}
+		assert.Equal(t, want, groupsOf())
+
+		require.Equal(t, http.StatusOK, Response(t, srv, patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Alice"`)})).StatusCode)
+		assert.Equal(t, want, groupsOf())
+
+		patchGroup(group.ID, patch.Operation{Op: patch.OpRemove, Path: `members[value eq "` + id + `"]`})
+		assert.Empty(t, groupsOf())
+
+		patchGroup(group.ID, patch.Operation{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"` + id + `"}]`)})
+		assert.Equal(t, want, groupsOf())
+
+		require.Equal(t, http.StatusNoContent, Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Groups/"+group.ID, WithBearerToken(validToken))).StatusCode)
+		assert.Empty(t, groupsOf())
+	})
+}
+
 // RFC 7643 4.2 "Group" Resource Schema
 func TestRFC7643GroupResourceSchema(t *testing.T) {
 	// RFC 7643 Section 4.2: displayName is a human-readable name for the Group and is REQUIRED.
@@ -691,6 +724,44 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 			require.Equal(t, http.StatusCreated, response.StatusCode, schemas)
 			assert.Equal(t, []core.SchemaURI{core.SchemaUser}, ReadBodyAs[core.User](t, response).Schemas, schemas)
 		}
+	})
+
+	// RFC 7643 Section 4.3: manager.displayName is readOnly and names the manager.
+	t.Run("derives manager.displayName from the manager", func(t *testing.T) {
+		srv := newTestServer(t)
+		managerID, _ := create(t, srv, &core.User{UserName: "jsmith", DisplayName: "John Smith"})
+		reportID, created := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: managerID}}})
+		get := func() *http.Response {
+			return Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+reportID, WithBearerToken(validToken)))
+		}
+		manager := func(response *http.Response) *core.Manager {
+			return ReadBodyAs[core.User](t, response).EnterpriseUser.Manager
+		}
+
+		assert.Equal(t, "John Smith", manager(get()).DisplayName)
+
+		require.Equal(t, http.StatusOK, Response(t, srv, patchRequest(t, srv, "Users/"+managerID, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Johnny"`)})).StatusCode)
+		renamed := get()
+		assert.NotEqual(t, created, renamed.Header.Get("ETag"))
+		assert.Equal(t, "Johnny", manager(renamed).DisplayName)
+		filtered := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?filter="+url.QueryEscape(string(core.SchemaEnterpriseUser)+`:manager.displayName eq "Johnny"`), WithBearerToken(validToken)))
+		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[core.User]](t, filtered).TotalResults)
+
+		require.Equal(t, http.StatusNoContent, Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+managerID, WithBearerToken(validToken))).StatusCode)
+		removed := manager(get())
+		assert.Equal(t, managerID, removed.Value)
+		assert.Empty(t, removed.DisplayName)
+	})
+
+	// RFC 7644 Section 3.14: the returned version matches the stored one when a user manages itself.
+	t.Run("returns the current version when a user manages itself", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, _ := create(t, srv, &core.User{UserName: "jsmith", DisplayName: "John Smith"})
+		managed := Response(t, srv, patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: string(core.SchemaEnterpriseUser) + ":manager.value", Value: json.RawMessage(`"` + id + `"`)}))
+		require.Equal(t, http.StatusOK, managed.StatusCode)
+
+		renamed := Response(t, srv, patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Johnny"`)}, WithHeader("If-Match", managed.Header.Get("ETag"))))
+		assert.Equal(t, http.StatusOK, renamed.StatusCode)
 	})
 
 	// RFC 7643 Section 6: a resource type lists the schema extensions it accepts.
@@ -4983,6 +5054,33 @@ func TestRFC7644HTTPStatusAndErrorResponseHandling(t *testing.T) {
 
 // RFC 7644 3.14 Versioning Resources
 func TestRFC7644VersioningResources(t *testing.T) {
+	// RFC 7643 Section 3.1: version and lastModified change when the derived groups of a User change.
+	t.Run("changes the user version when its group membership changes", func(t *testing.T) {
+		srv := newTestServer(t)
+		id, created := create(t, srv, &core.User{UserName: "bjensen"})
+		get := func(etag string) *http.Response {
+			return Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken), WithHeader("If-None-Match", etag)))
+		}
+		replaceName := func(etag string) int {
+			return Response(t, srv, patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Babs"`)}, WithHeader("If-Match", etag))).StatusCode
+		}
+
+		group := createGroup(t, srv, &core.Group{DisplayName: "Tour Guides", Members: []core.Member{{Value: id}}})
+		joined := get(created)
+		require.Equal(t, http.StatusOK, joined.StatusCode)
+		etag := joined.Header.Get("ETag")
+		assert.NotEqual(t, created, etag)
+		assert.Equal(t, etag, ReadBodyAs[core.User](t, joined).Meta.Version)
+
+		require.Equal(t, http.StatusNoContent, Response(t, srv, patchRequest(t, srv, "Groups/"+group.ID, patch.Operation{Op: patch.OpRemove, Path: `members[value eq "` + id + `"]`})).StatusCode)
+		left := get(etag)
+		require.Equal(t, http.StatusOK, left.StatusCode)
+		assert.NotEqual(t, etag, left.Header.Get("ETag"))
+
+		assert.Equal(t, http.StatusPreconditionFailed, replaceName(etag))
+		assert.Equal(t, http.StatusOK, replaceName(left.Header.Get("ETag")))
+	})
+
 	// RFC 7644 Section 3.14: service providers MAY support weak ETags as the preferred mechanism.
 	t.Run("issues a weak ETag", func(t *testing.T) {
 		srv := newTestServer(t)

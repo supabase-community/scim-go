@@ -92,7 +92,7 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	path := s.basePath + c.endpoint
 	repository := c.repository
 	if repository == nil {
-		repository = NewRepository[T](s.base()+c.endpoint, schemas)
+		repository = newRepository[T](s.db, s.base()+c.endpoint, schemas)
 	}
 	service := NewService(repository, schemas, s.limits, c.validators...)
 	if c.wrap != nil {

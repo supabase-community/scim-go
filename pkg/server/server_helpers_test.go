@@ -171,8 +171,9 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 	for _, option := range options {
 		option(s)
 	}
+	db := server.NewDatabase()
 	users := gatedRepository{
-		Repository: server.NewRepository[*core.User](basePath+"/Users", core.Schemas{
+		Repository: server.NewRepositoryIn[*core.User](db, basePath+"/Users", core.Schemas{
 			core.NewSchema(core.SchemaUser).WithName("User").With(s.user...),
 			core.NewSchema(core.SchemaEnterpriseUser).With(s.enterprise...),
 		}),
@@ -188,6 +189,7 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, s.user...).
 			WithExtension(core.SchemaEnterpriseUser, s.enterprise...).
 			WithRepository(users)),
+		server.WithDatabase(db),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...)),
 		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetAttributes()...).
 			WithRepository(inspectingRepository{server.NewRepository[*widget](basePath+"/Widgets", core.Schemas{

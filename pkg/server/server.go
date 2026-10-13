@@ -14,6 +14,7 @@ const DefaultMaxBodySize = 1 << 20
 
 type Server struct {
 	mux           *http.ServeMux
+	db            *database
 	handler       http.Handler
 	authenticate  func(http.Handler) http.Handler
 	basePath      string
@@ -31,6 +32,7 @@ func New(basePath string, config *core.ServiceProviderConfig, options ...Option[
 	mux := http.NewServeMux()
 	s := &Server{
 		mux:          mux,
+		db:           newDatabase(),
 		basePath:     basePath,
 		config:       config,
 		limits:       limitsFrom(config),

@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 	"strconv"
-	"sync"
 	"time"
 	"uuid"
 
@@ -24,63 +23,48 @@ type Repository[T core.Resource] interface {
 }
 
 type repository[T core.Resource] struct {
-	mu       sync.Mutex
+	db       *database
 	endpoint string
 	schemas  core.Schemas
-	rows     []row[T]
-	index    map[string]int
-	owners   owners
 	fields
 	evaluator protocol.Evaluator[predicate]
 }
 
-type row[T core.Resource] struct {
-	item   T
-	object core.Object
-}
-
 // NewRepository stores resources in memory, for tests and reference servers.
 func NewRepository[T core.Resource](endpoint string, schemas core.Schemas) Repository[T] {
+	return newRepository[T](newDatabase(), endpoint, schemas)
+}
+
+func newRepository[T core.Resource](db *database, endpoint string, schemas core.Schemas) Repository[T] {
 	fields := newFields(schemas)
 	return &repository[T]{
+		db:        db,
 		endpoint:  endpoint,
 		schemas:   schemas,
-		rows:      []row[T]{},
-		index:     map[string]int{},
-		owners:    newOwners(fields),
 		fields:    fields,
 		evaluator: newEvaluator(fields),
 	}
 }
 
-func (r *repository[T]) Read(_ context.Context, id string) (item T, err error) {
-	err = r.withLock(func() error {
-		i, err := r.locate(id, "")
-		if err != nil {
-			return err
-		}
-		item = r.rows[i].item
-		return nil
-	})
-	return item, err
+func (r *repository[T]) Read(_ context.Context, id string) (T, error) {
+	item, err := r.db.find(id, r.schemas)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return item.(T), nil
 }
 
 func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
-	items, total := []T{}, 0
-	err := r.withLock(func() error {
-		matching, err := r.sortBy(query)
-		if err != nil {
-			return err
-		}
-		total = len(matching)
-		start := min(query.Offset(), total)
-		for _, row := range matching[start:min(start+query.Count, total)] {
-			items = append(items, row.item)
-		}
-		return nil
-	})
+	matching, err := r.sortBy(query, r.db.all(r.schemas))
 	if err != nil {
 		return []T{}, 0, err
+	}
+	total := len(matching)
+	start := min(query.Offset(), total)
+	items := []T{}
+	for _, rec := range matching[start:min(start+query.Count, total)] {
+		items = append(items, clone(rec).(T))
 	}
 	return items, total, nil
 }
@@ -96,121 +80,48 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 		Location:     r.endpoint + "/" + common.ID,
 		Version:      weakETag(now),
 	}
-
-	err := r.withLock(func() error {
-		created, err := r.rowOf(item)
-		if err != nil {
-			return err
-		}
-		r.index[common.ID] = len(r.rows)
-		r.rows = append(r.rows, created)
-		r.owners.claim(common.ID, created.object)
-		return nil
-	})
+	created, err := r.db.create(item, r.schemas, r.fields)
 	if err != nil {
 		var zero T
 		return zero, err
 	}
-	return item, nil
+	return created.(T), nil
 }
 
 func (r *repository[T]) Update(_ context.Context, item T) (T, error) {
-	err := r.withLock(func() error {
-		common := item.Common()
-		i, err := r.locate(common.ID, common.Meta.Version)
-		if err != nil {
-			return err
-		}
-		return r.store(i, item)
-	})
+	updated, err := r.db.update(item, r.schemas, r.fields)
 	if err != nil {
 		var zero T
 		return zero, err
 	}
-	return item, nil
+	return updated.(T), nil
 }
 
 func (r *repository[T]) Delete(_ context.Context, item T) error {
-	return r.withLock(func() error {
-		id := item.Common().ID
-		i, err := r.locate(id, item.Common().Meta.Version)
-		if err != nil {
-			return err
-		}
-		r.owners.release(id, r.rows[i].object)
-		r.rows = slices.Delete(r.rows, i, i+1)
-		delete(r.index, id)
-		for j := i; j < len(r.rows); j++ {
-			r.index[r.rows[j].item.Common().ID] = j
-		}
-		return nil
-	})
-}
-
-func (r *repository[T]) store(i int, item T) error {
 	common := item.Common()
-	common.ID = r.rows[i].item.Common().ID
-	common.Meta = bumpMeta(r.rows[i].item.Common().Meta)
-	replaced, err := r.rowOf(item)
-	if err != nil {
-		return err
-	}
-	r.owners.release(common.ID, r.rows[i].object)
-	r.owners.claim(common.ID, replaced.object)
-	r.rows[i] = replaced
-	return nil
+	return r.db.remove(common.ID, common.Meta.Version, r.schemas, r.fields)
 }
 
-func (r *repository[T]) withLock(fn func() error) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return fn()
-}
-
-// RFC 7644 Section 3.14: a non-empty version must match the stored one.
-func (r *repository[T]) locate(id, version string) (int, error) {
-	i, ok := r.index[id]
-	switch {
-	case !ok:
-		return i, scimerrors.ErrNotFound("Not found")
-	case version != "" && r.rows[i].item.Common().Meta.Version != version:
-		return i, scimerrors.ErrPreconditionFailed("resource has changed on the server")
-	}
-	return i, nil
-}
-
-// rowOf pairs item with its object and rejects a value collision, per RFC 7643, Section 7.
-func (r *repository[T]) rowOf(item T) (row[T], error) {
-	candidate, err := core.NewObject(item)
-	if err != nil {
-		return row[T]{}, err
-	}
-	if attribute := r.owners.conflict(item.Common().ID, candidate); attribute != nil {
-		return row[T]{}, scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
-	}
-	return row[T]{item: item, object: candidate}, nil
-}
-
-func (r *repository[T]) filterBy(query *protocol.SearchRequest) ([]row[T], error) {
+func (r *repository[T]) filterBy(query *protocol.SearchRequest, records []record) ([]record, error) {
 	if query.Filter == "" {
-		return r.rows, nil
+		return records, nil
 	}
 
 	predicate, err := protocol.Filter(r.schemas, query.Filter, r.evaluator)
 	if err != nil {
 		return nil, err
 	}
-	matching := []row[T]{}
-	for _, row := range r.rows {
-		if predicate(row.object) {
-			matching = append(matching, row)
+	matching := []record{}
+	for _, rec := range records {
+		if predicate(rec.object) {
+			matching = append(matching, rec)
 		}
 	}
 	return matching, nil
 }
 
-func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]row[T], error) {
-	matching, err := r.filterBy(query)
+func (r *repository[T]) sortBy(query *protocol.SearchRequest, records []record) ([]record, error) {
+	matching, err := r.filterBy(query, records)
 	if err != nil {
 		return nil, err
 	}
@@ -227,8 +138,7 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest) ([]row[T], error) 
 	if !ok {
 		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
-	matching = slices.Clone(matching)
-	slices.SortStableFunc(matching, func(a, b row[T]) int {
+	slices.SortStableFunc(matching, func(a, b record) int {
 		return compareSortKeys(attribute, key(a.object), key(b.object), query.Descending())
 	})
 
