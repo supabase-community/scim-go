@@ -98,9 +98,7 @@ func (d *database) store(item core.Resource, scope core.Schemas, unique fields) 
 	if old, ok := d.resources[id].(record); ok {
 		d.unindex(indexKeys(old, unique))
 	}
-	touched := d.unlink(id)
-	d.resources[id] = rec
-	touched = append(touched, d.link(rec)...)
+	touched := d.relink(rec)
 	d.index(keys, id)
 	d.refresh(append(touched, d.dependents(id)...))
 	return clone(d.resources[id]), nil
@@ -155,6 +153,17 @@ func (d *database) unindex(keys []indexKey) {
 	for _, key := range keys {
 		delete(d.uniqueIndex, key)
 	}
+}
+
+func (d *database) relink(rec record) []string {
+	old, _ := d.resources[rec.Common().ID].(record)
+	before := d.unlink(rec.Common().ID)
+	d.resources[rec.Common().ID] = rec
+	after := d.link(rec)
+	if reflect.DeepEqual(displayOf(old), displayOf(rec)) {
+		return moved(before, after)
+	}
+	return append(before, after...)
 }
 
 func (d *database) link(rec record) []string {
@@ -223,8 +232,13 @@ func (d *database) detach(sources map[string]struct{}, target string) {
 }
 
 func (d *database) rederive(item core.Resource, scope core.Schemas) {
-	item.Common().Meta = bumpMeta(item.Common().Meta)
-	if derived, err := d.derive(item, scope); err == nil {
+	current, _ := d.resources[item.Common().ID].(record)
+	derived, err := d.derive(item, scope)
+	if err != nil || reflect.DeepEqual(derived.object, current.object) {
+		return
+	}
+	derived.Common().Meta = bumpMeta(derived.Common().Meta)
+	if derived.object, err = core.NewObject(derived.Resource); err == nil {
 		d.resources[item.Common().ID] = derived
 	}
 }
@@ -268,7 +282,7 @@ func (d *database) referrers(field field, target string) []any {
 		elements = append(elements, map[string]any{
 			"value":   source,
 			"$ref":    rec.Common().Meta.Location,
-			"display": rec.object.Get("displayName"),
+			"display": displayOf(rec),
 			"type":    "direct",
 		})
 	}
@@ -324,6 +338,27 @@ func targetsOf(rec record) (members, pointers []string) {
 		pointers = append(pointers, idsOf([]any{field.raw(rec.object)})...)
 	}
 	return members, pointers
+}
+
+func displayOf(rec record) any {
+	return rec.object.Get("displayName")
+}
+
+func moved(before, after []string) []string {
+	sides := map[string]int{}
+	for _, id := range before {
+		sides[id] |= 1
+	}
+	for _, id := range after {
+		sides[id] |= 2
+	}
+	ids := []string{}
+	for id, side := range sides {
+		if side != 3 {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func dropMember(object core.Object, scope core.Schemas, target string) bool {

@@ -5107,6 +5107,28 @@ func TestRFC7644VersioningResources(t *testing.T) {
 		assert.Equal(t, http.StatusOK, replaceName(left.Header.Get("ETag")))
 	})
 
+	// RFC 7643 Section 3.1: version and lastModified change only when the resource itself changes.
+	t.Run("keeps the user version when another member joins or leaves its group", func(t *testing.T) {
+		srv := newTestServer(t)
+		alice, _ := create(t, srv, &core.User{UserName: "alice"})
+		bob, _ := create(t, srv, &core.User{UserName: "bob"})
+		group := createGroup(t, srv, &core.Group{DisplayName: "Tour Guides", Members: []core.Member{{Value: alice}}})
+		metaOf := func(id string) core.Meta {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			return ReadBodyAs[core.User](t, response).Meta
+		}
+		joined := metaOf(alice)
+
+		for _, op := range []patch.Operation{
+			{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"` + bob + `"}]`)},
+			{Op: patch.OpRemove, Path: `members[value eq "` + bob + `"]`},
+		} {
+			require.Equal(t, http.StatusNoContent, Response(t, srv, patchRequest(t, srv, "Groups/"+group.ID, op)).StatusCode)
+			assert.Equal(t, joined, metaOf(alice), op.Op)
+		}
+	})
+
 	// RFC 7644 Section 3.14: service providers MAY support weak ETags as the preferred mechanism.
 	t.Run("issues a weak ETag", func(t *testing.T) {
 		srv := newTestServer(t)

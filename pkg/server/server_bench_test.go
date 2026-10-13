@@ -96,6 +96,28 @@ func BenchmarkGroupWrites(b *testing.B) {
 	}
 }
 
+func BenchmarkGroupWritesWithUsers(b *testing.B) {
+	for _, n := range []int{100, 1000, 10000} {
+		handler := newTestHandler(b)
+		group := &core.Group{DisplayName: "bench"}
+		for i := range n {
+			group.Members = append(group.Members, core.Member{Value: benchUserID(b, handler, "member"+strconv.Itoa(i))})
+		}
+		location := serve(b, handler, http.MethodPost, basePath+"/Groups", benchBody(b, group), http.StatusCreated).Header().Get("Location")
+		toggle := benchUserID(b, handler, "toggle")
+		bodies := [2][]byte{
+			patchBody(b, patch.OpAdd, "members", `{"value":"`+toggle+`"}`),
+			patchBody(b, patch.OpRemove, `members[value eq "`+toggle+`"]`, ""),
+		}
+		b.Run("PATCH add-remove member/"+strconv.Itoa(n), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; b.Loop(); i++ {
+				serve(b, handler, http.MethodPatch, location, bodies[i%2], http.StatusNoContent)
+			}
+		})
+	}
+}
+
 type timedGroupRepository struct {
 	server.Repository[*core.Group]
 	read time.Time
@@ -137,6 +159,16 @@ func patchAddresses(n int, prefix string) patch.Operation {
 	}
 	raw, _ := json.Marshal(elements)
 	return patch.Operation{Op: patch.OpAdd, Path: "addresses", Value: raw}
+}
+
+func benchUserID(b *testing.B, handler http.Handler, userName string) string {
+	b.Helper()
+	var created core.User
+	w := serve(b, handler, http.MethodPost, basePath+"/Users", benchBody(b, &core.User{UserName: userName}), http.StatusCreated)
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		b.Fatal(err)
+	}
+	return created.ID
 }
 
 func createEach(b *testing.B, handler http.Handler, created *int, remove bool) {
