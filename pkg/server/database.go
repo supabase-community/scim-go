@@ -114,9 +114,11 @@ func (d *database) remove(id, version string, scope core.Schemas, unique fields)
 		return err
 	}
 	d.unindex(indexKeys(rec, unique))
+	referrers := d.references[id]
 	touched := append(d.unlink(id), d.dependents(id)...)
 	delete(d.resources, id)
 	delete(d.references, id)
+	d.detach(referrers, id)
 	d.refresh(touched)
 	return nil
 }
@@ -198,11 +200,32 @@ func (d *database) refresh(ids []string) {
 		if !ok || !derives(rec.schemas) {
 			continue
 		}
-		item := clone(rec)
-		item.Common().Meta = bumpMeta(item.Common().Meta)
-		if derived, err := d.derive(item, rec.schemas); err == nil {
-			d.resources[id] = derived
+		d.rederive(clone(rec), rec.schemas)
+	}
+}
+
+// RFC 7643 Section 2.3.7: a service provider MAY enforce referential integrity.
+func (d *database) detach(sources map[string]struct{}, target string) {
+	for source := range sources {
+		rec, ok := d.resources[source].(record)
+		if !ok {
+			continue
 		}
+		item := clone(rec)
+		object, err := core.NewObject(item)
+		if err != nil || !dropMember(object, rec.schemas, target) {
+			continue
+		}
+		if resource, err := decodeAs(item, object); err == nil {
+			d.rederive(resource, rec.schemas)
+		}
+	}
+}
+
+func (d *database) rederive(item core.Resource, scope core.Schemas) {
+	item.Common().Meta = bumpMeta(item.Common().Meta)
+	if derived, err := d.derive(item, scope); err == nil {
+		d.resources[item.Common().ID] = derived
 	}
 }
 
@@ -230,12 +253,7 @@ func (d *database) fill(object core.Object, field field, target string) {
 	if holder == nil {
 		return
 	}
-	elements := d.referrers(field, target)
-	if len(elements) == 0 {
-		holder.Remove(field.Name)
-		return
-	}
-	holder.Set(field.Name, elements)
+	assign(holder, field.Name, d.referrers(field, target))
 }
 
 // RFC 7643 Section 4.1.2: groups is readOnly, derived from Group membership.
@@ -306,6 +324,31 @@ func targetsOf(rec record) (members, pointers []string) {
 		pointers = append(pointers, idsOf([]any{field.raw(rec.object)})...)
 	}
 	return members, pointers
+}
+
+func dropMember(object core.Object, scope core.Schemas, target string) bool {
+	dropped := false
+	for _, field := range sourceFields(scope) {
+		elements := field.elements(object)
+		count := len(elements)
+		kept := slices.DeleteFunc(elements, func(element any) bool {
+			return value.AsObject(element).Get("value") == target
+		})
+		if len(kept) == count {
+			continue
+		}
+		dropped = true
+		assign(value.AsObject(field.holder(object)), field.Name, kept)
+	}
+	return dropped
+}
+
+func assign(holder core.Object, name string, elements []any) {
+	if len(elements) == 0 {
+		holder.Remove(name)
+		return
+	}
+	holder.Set(name, elements)
 }
 
 func idsOf(elements []any) []string {

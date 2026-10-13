@@ -4822,6 +4822,32 @@ func TestRFC7644DeletingResources(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
 	})
 
+	// RFC 7643 Section 2.3.7: a service provider MAY enforce referential integrity for references to SCIM resources.
+	t.Run("removes a deleted resource from the members of every group", func(t *testing.T) {
+		srv := newTestServer(t)
+		userID, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		child := createGroup(t, srv, &core.Group{DisplayName: "Tour Guides"})
+		parent := createGroup(t, srv, &core.Group{DisplayName: "Employees", Members: []core.Member{{Value: userID}, {Value: child.ID, Type: "Group"}}})
+		get := func() *http.Response {
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Groups/"+parent.ID, WithBearerToken(validToken)))
+			require.Equal(t, http.StatusOK, response.StatusCode)
+			return response
+		}
+		remove := func(path string) {
+			require.Equal(t, http.StatusNoContent, Response(t, srv, Request(t, srv, http.MethodDelete, basePath+path, WithBearerToken(validToken))).StatusCode)
+		}
+
+		remove("/Users/" + userID)
+		afterUser := get()
+		assert.NotEqual(t, parent.Meta.Version, afterUser.Header.Get("ETag"))
+		assert.Equal(t, []core.Member{{Value: child.ID, Type: "Group"}}, ReadBodyAs[core.Group](t, afterUser).Members)
+
+		remove("/Groups/" + child.ID)
+		afterGroup := get()
+		assert.NotEqual(t, afterUser.Header.Get("ETag"), afterGroup.Header.Get("ETag"))
+		assert.Empty(t, ReadBodyAs[core.Group](t, afterGroup).Members)
+	})
+
 	// RFC 7644 Section 3.14: the client MAY supply an If-Match header so the operation succeeds only if the ETag matches.
 	t.Run("deletes a resource when If-Match matches", func(t *testing.T) {
 		srv := newTestServer(t)
