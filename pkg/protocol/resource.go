@@ -80,7 +80,7 @@ func wellFormedElements(elements []any) bool {
 }
 
 func ascii(name string) bool {
-	for i := 0; i < len(name); i++ {
+	for i := range len(name) {
 		if name[i] >= utf8.RuneSelf {
 			return false
 		}

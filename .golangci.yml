@@ -15,12 +15,15 @@ formatters:
 linters:
   default: standard
   enable:
+    - asasalint
     - bidichk
     - bodyclose
     - contextcheck
     - dupl
+    - durationcheck
     - errname
     - errorlint
+    - fatcontext
     - funcorder
     - funlen
     - gocognit
@@ -29,16 +32,31 @@ linters:
     - gocyclo
     - godoclint
     - gosec
+    - intrange
     - makezero
+    - mirror
     - modernize
     - musttag
     - nestif
+    - nilerr
+    - nilnesserr
+    - nilnil
     - nolintlint
+    - perfsprint
     - prealloc
+    - predeclared
+    - reassign
+    - recvcheck
     - revive
+    - sqlclosecheck
     - testifylint
     - testpackage
     - thelper
+    - tparallel
+    - unparam
+    - usestdlibvars
+    - usetesting
+    - wastedassign
   settings:
     dupl:
       threshold: 150
@@ -55,6 +73,12 @@ linters:
       min-complexity: 10
     gocyclo:
       min-complexity: 10
+    nilnil:
+      checked-types:
+        - ptr
+        - func
+        - map
+        - chan
     nestif:
       min-complexity: 4
     revive:

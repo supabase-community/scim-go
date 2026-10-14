@@ -108,7 +108,7 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 	if err != nil {
 		return nil, err
 	}
-	if err := m.check(attr, path, op, want); err != nil {
+	if err := m.check(attr, op, want); err != nil {
 		return nil, err
 	}
 	*m.clauses++
@@ -143,7 +143,7 @@ func (m matcher) resolve(path filter.AttrPath) (*core.Attribute, error) {
 	return sub, nil
 }
 
-func (m matcher) check(attr *core.Attribute, path filter.AttrPath, op filter.Operator, want any) error {
+func (m matcher) check(attr *core.Attribute, op filter.Operator, want any) error {
 	switch {
 	case attr == nil:
 		return nil

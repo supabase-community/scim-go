@@ -60,7 +60,7 @@ func (r *visitor[Output]) VisitPresence(path filter.AttrPath) (Output, error) {
 	if err != nil {
 		return zero, err
 	}
-	if err := r.conceal(path, r.parent(path), attribute, filter.OpPresent); err != nil {
+	if err := r.conceal(r.parent(path), attribute, filter.OpPresent); err != nil {
 		return zero, err
 	}
 	return r.inner.Present(NewAttribute(attribute, path, r.scope))
@@ -140,7 +140,7 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 			parent, attribute = attribute, sub
 		}
 	}
-	if err := r.conceal(path, parent, attribute, op); err != nil {
+	if err := r.conceal(parent, attribute, op); err != nil {
 		return zero, err
 	}
 	if !value.Allowed(attribute.Type, op) {
@@ -154,7 +154,7 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 }
 
 // RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
-func (r *visitor[Output]) conceal(path filter.AttrPath, parent, attribute *core.Attribute, op filter.Operator) error {
+func (r *visitor[Output]) conceal(parent, attribute *core.Attribute, op filter.Operator) error {
 	switch {
 	case !value.Hidden(parent, attribute):
 		return nil
