@@ -2,7 +2,6 @@ package server_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -99,12 +98,6 @@ func WithRequestBodyAs[T any](t *testing.T, item T) Option[*http.Request] {
 	body, err := json.Marshal(item)
 	require.NoError(t, err)
 	return WithRequestBody(body)
-}
-
-func WithContext(ctx context.Context) Option[*http.Request] {
-	return func(r *http.Request) *http.Request {
-		return r.WithContext(ctx)
-	}
 }
 
 func ReadBodyAs[T any](t *testing.T, w *http.Response) T {
