@@ -69,7 +69,7 @@ func TestApplyValuePathComparisonMatrix(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			element := item["emails"].([]any)[0].(map[string]any)
+			element := as[map[string]any](t, as[[]any](t, item["emails"])[0])
 			assert.Equal(t, "hit", element["tag"])
 		})
 	}
@@ -80,7 +80,7 @@ func TestApplyRemoveSubAttribute(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, "name.familyName", "")))
 
-	name := item["name"].(map[string]any)
+	name := as[map[string]any](t, item["name"])
 	_, present := name["familyName"]
 	assert.False(t, present)
 	assert.Equal(t, "Barbara", name["givenName"])
@@ -174,7 +174,7 @@ func TestApplyValuePathReadOnlySubAttributeRejected(t *testing.T) {
 	require.ErrorAs(t, apply(item, schemas, operation(patch.OpReplace, `emails[value eq "a@b.com"].primary`, `true`)), &scimErr)
 	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
 
-	member := item["emails"].([]any)[0].(map[string]any)
+	member := as[map[string]any](t, as[[]any](t, item["emails"])[0])
 	assert.NotContains(t, member, "primary")
 }
 

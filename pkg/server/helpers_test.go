@@ -133,3 +133,10 @@ func keysOf(m map[string]any) []string {
 	}
 	return out
 }
+
+func as[T any](t *testing.T, v any) T {
+	t.Helper()
+	got, ok := v.(T)
+	require.True(t, ok, "%T is not the expected type", v)
+	return got
+}

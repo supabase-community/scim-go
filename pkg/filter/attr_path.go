@@ -14,7 +14,7 @@ func NewAttrPath(text string) (AttrPath, error) {
 	if err != nil {
 		return AttrPath{}, err
 	}
-	return splitAttrPath(raw.(string)), nil
+	return splitAttrPath(asString(raw)), nil
 }
 
 func (p AttrPath) String() string {

@@ -227,7 +227,7 @@ func TestDecodeResource(t *testing.T) {
 		out, err := decodeResource(requestBody(map[string]any{"userName": "bjensen", uri: map[string]any{"EmployeeNumber": "E2"}}), before, []*core.Schema{user, immutable})
 		require.NoError(t, err)
 
-		body := out[uri].(map[string]any)
+		body := as[map[string]any](t, out[uri])
 		assert.Len(t, body, 1)
 		assert.Equal(t, "E2", core.Object(body).Get("employeeNumber"))
 	})
@@ -283,4 +283,11 @@ func decodeResource(body io.Reader, existing core.Object, schemas core.Schemas) 
 		return nil, err
 	}
 	return protocol.ResourceFrom[map[string]any](document, existing, schemas)
+}
+
+func as[T any](t *testing.T, v any) T {
+	t.Helper()
+	got, ok := v.(T)
+	require.True(t, ok, "%T is not the expected type", v)
+	return got
 }

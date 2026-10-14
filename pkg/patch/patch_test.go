@@ -64,10 +64,10 @@ func TestApplyAddSingleValueAppendsToArray(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpAdd, "emails", `{"value":"c@d.com"}`)))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 2)
-	assert.Equal(t, "a@b.com", emails[0].(map[string]any)["value"])
-	assert.Equal(t, "c@d.com", emails[1].(map[string]any)["value"])
+	assert.Equal(t, "a@b.com", as[map[string]any](t, emails[0])["value"])
+	assert.Equal(t, "c@d.com", as[map[string]any](t, emails[1])["value"])
 }
 
 // RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made.
@@ -167,7 +167,7 @@ func TestApplySubAttribute(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpReplace, "name.familyName", `"Jensen"`)))
 
-	assert.Equal(t, "Jensen", item["name"].(map[string]any)["familyName"])
+	assert.Equal(t, "Jensen", as[map[string]any](t, item["name"])["familyName"])
 }
 
 func TestApplyRemoveAttribute(t *testing.T) {
@@ -212,9 +212,9 @@ func TestApplyValuePathReplaceSub(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpReplace, `emails[type eq "work"].value`, `"new@x"`)))
 
-	emails := item["emails"].([]any)
-	assert.Equal(t, "new@x", emails[0].(map[string]any)["value"])
-	assert.Equal(t, "h@x", emails[1].(map[string]any)["value"])
+	emails := as[[]any](t, item["emails"])
+	assert.Equal(t, "new@x", as[map[string]any](t, emails[0])["value"])
+	assert.Equal(t, "h@x", as[map[string]any](t, emails[1])["value"])
 }
 
 // RFC 7644 Section 3.5.2.3: all matching record values SHALL be replaced.
@@ -228,10 +228,10 @@ func TestApplyValuePathReplaceRejectsANonObjectValue(t *testing.T) {
 
 func TestApplyPrimaryDemotesTheOtherValues(t *testing.T) {
 	primaries := func(item core.Object) []any {
-		emails := item["emails"].([]any)
+		emails := as[[]any](t, item["emails"])
 		values := make([]any, len(emails))
 		for i, email := range emails {
-			values[i] = email.(map[string]any)["primary"]
+			values[i] = as[map[string]any](t, email)["primary"]
 		}
 		return values
 	}
@@ -311,7 +311,7 @@ func TestApplyValuePathRemoveElement(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[type eq "home"]`, "")))
 
-	assert.Len(t, item["emails"].([]any), 1)
+	assert.Len(t, as[[]any](t, item["emails"]), 1)
 }
 
 func TestApplyValuePathRemoveSubAttribute(t *testing.T) {
@@ -322,7 +322,7 @@ func TestApplyValuePathRemoveSubAttribute(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[type eq "work"].value`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	assert.Equal(t, map[string]any{"type": "work"}, emails[0])
 	assert.Equal(t, map[string]any{"type": "home", "value": "h@x"}, emails[1])
 }
@@ -366,9 +366,9 @@ func TestApplyValuePathRelationalIsCaseInsensitive(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[type gt "M"]`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 1)
-	assert.Equal(t, "ant", emails[0].(map[string]any)["type"])
+	assert.Equal(t, "ant", as[map[string]any](t, emails[0])["type"])
 }
 
 func TestUnknownAttributeRejected(t *testing.T) {
@@ -414,8 +414,9 @@ func TestApplyValuePathGivesEachMatchedElementItsOwnValue(t *testing.T) {
 
 		require.NoError(t, apply(item, schemas, op), op.Path)
 
-		emails := item["emails"].([]any)
-		first, second := emails[0].(map[string]any)["tags"].([]any), emails[1].(map[string]any)["tags"].([]any)
+		emails := as[[]any](t, item["emails"])
+		first := as[[]any](t, as[map[string]any](t, emails[0])["tags"])
+		second := as[[]any](t, as[map[string]any](t, emails[1])["tags"])
 		assert.Equal(t, []any{"x", "y"}, first, op.Path)
 		assert.Equal(t, []any{"x", "y"}, second, op.Path)
 		assert.NotSame(t, &first[0], &second[0], op.Path)
@@ -436,9 +437,9 @@ func TestApplyValuePathAndFilter(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpReplace, `emails[type eq "work" and primary eq true].value`, `"new@x"`)))
 
-	emails := item["emails"].([]any)
-	assert.Equal(t, "new@x", emails[0].(map[string]any)["value"])
-	assert.Equal(t, "w2@x", emails[1].(map[string]any)["value"])
+	emails := as[[]any](t, item["emails"])
+	assert.Equal(t, "new@x", as[map[string]any](t, emails[0])["value"])
+	assert.Equal(t, "w2@x", as[map[string]any](t, emails[1])["value"])
 }
 
 func TestApplyValuePathOrFilter(t *testing.T) {
@@ -450,9 +451,9 @@ func TestApplyValuePathOrFilter(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[type eq "work" or type eq "home"]`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 1)
-	assert.Equal(t, "other", emails[0].(map[string]any)["type"])
+	assert.Equal(t, "other", as[map[string]any](t, emails[0])["type"])
 }
 
 func TestApplyValuePathNotFilter(t *testing.T) {
@@ -463,9 +464,9 @@ func TestApplyValuePathNotFilter(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[not (type eq "work")]`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 1)
-	assert.Equal(t, "work", emails[0].(map[string]any)["type"])
+	assert.Equal(t, "work", as[map[string]any](t, emails[0])["type"])
 }
 
 func TestApplyValuePathNumericFilter(t *testing.T) {
@@ -476,9 +477,9 @@ func TestApplyValuePathNumericFilter(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `scores[n gt 5]`, "")))
 
-	scores := item["scores"].([]any)
+	scores := as[[]any](t, item["scores"])
 	require.Len(t, scores, 1)
-	assert.Equal(t, "b", scores[0].(map[string]any)["kind"])
+	assert.Equal(t, "b", as[map[string]any](t, scores[0])["kind"])
 }
 
 func TestApplyValuePathPresenceFilter(t *testing.T) {
@@ -489,9 +490,9 @@ func TestApplyValuePathPresenceFilter(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[value pr]`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 1)
-	assert.Equal(t, "home", emails[0].(map[string]any)["type"])
+	assert.Equal(t, "home", as[map[string]any](t, emails[0])["type"])
 }
 
 // RFC 7643 Section 2.4: multi-valued attributes contain a list of elements using the JSON array format.
@@ -555,8 +556,8 @@ func TestApplyValuePathMergeRespectsParentMutability(t *testing.T) {
 
 	requireMutability(t, apply(item, userSchemas(), operation(patch.OpReplace, `groups[value eq "g1"]`, `{"value":"g2"}`)))
 
-	groups := item["groups"].([]any)
-	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
+	groups := as[[]any](t, item["groups"])
+	assert.Equal(t, "g1", as[map[string]any](t, groups[0])["value"])
 }
 
 // RFC 7644 Section 3.5.2: a value-path write to a sub-attribute of a readOnly attribute SHALL fail.
@@ -565,8 +566,8 @@ func TestApplyValuePathWriteRespectsParentMutability(t *testing.T) {
 
 	requireMutability(t, apply(item, userSchemas(), operation(patch.OpReplace, `groups[value eq "g1"].value`, `"g2"`)))
 
-	groups := item["groups"].([]any)
-	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
+	groups := as[[]any](t, item["groups"])
+	assert.Equal(t, "g1", as[map[string]any](t, groups[0])["value"])
 }
 
 // RFC 7644 Section 3.5.2: a value-path remove of a sub-attribute of a readOnly attribute SHALL fail.
@@ -575,8 +576,8 @@ func TestApplyValuePathRemoveRespectsParentMutability(t *testing.T) {
 
 	requireMutability(t, apply(item, userSchemas(), operation(patch.OpRemove, `groups[value eq "g1"].value`, "")))
 
-	groups := item["groups"].([]any)
-	assert.Equal(t, "g1", groups[0].(map[string]any)["value"])
+	groups := as[[]any](t, item["groups"])
+	assert.Equal(t, "g1", as[map[string]any](t, groups[0])["value"])
 }
 
 // RFC 7644 3.4.2.2 - a value filter on a caseExact attribute must compare case-sensitively.
@@ -592,9 +593,9 @@ func TestApplyValuePathFilterHonorsCaseExact(t *testing.T) {
 
 	require.NoError(t, apply(item, schemas, operation(patch.OpRemove, `emails[value eq "ABC@x"]`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 1)
-	assert.Equal(t, "abc@x", emails[0].(map[string]any)["value"])
+	assert.Equal(t, "abc@x", as[map[string]any](t, emails[0])["value"])
 }
 
 // RFC 7644 Section 3.5.2.2: removing a value a filter doesn't match makes no change and still succeeds.
@@ -603,7 +604,7 @@ func TestApplyValuePathRemoveNoMatchIsANoOp(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[type eq "home"]`, "")))
 
-	assert.Len(t, item["emails"].([]any), 1)
+	assert.Len(t, as[[]any](t, item["emails"]), 1)
 }
 
 // RFC 7643 Section 2.5: unassigned attributes and the null value SHALL be considered equivalent.
@@ -615,9 +616,9 @@ func TestApplyValuePathNullFilter(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[value eq null]`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 1)
-	assert.Equal(t, "work", emails[0].(map[string]any)["type"])
+	assert.Equal(t, "work", as[map[string]any](t, emails[0])["type"])
 }
 
 // RFC 7643 Section 2.5: an unassigned attribute is null, which is not identical to the operator value.
@@ -629,9 +630,9 @@ func TestApplyValuePathNotEqualsMatchesUnassignedWithoutSchemas(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[type ne "work"]`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 1)
-	assert.Equal(t, "work", emails[0].(map[string]any)["type"])
+	assert.Equal(t, "work", as[map[string]any](t, emails[0])["type"])
 }
 
 func TestApplyValuePathMatchesNestedObjects(t *testing.T) {
@@ -642,9 +643,9 @@ func TestApplyValuePathMatchesNestedObjects(t *testing.T) {
 
 	require.NoError(t, apply(item, userSchemas(), operation(patch.OpRemove, `emails[type eq "work"]`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 1)
-	assert.Equal(t, "home", emails[0].(core.Object)["type"])
+	assert.Equal(t, "home", as[core.Object](t, emails[0])["type"])
 }
 
 func TestApplyValuePathNumericFilterNativeInt(t *testing.T) {
@@ -655,9 +656,9 @@ func TestApplyValuePathNumericFilterNativeInt(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `scores[n gt 5]`, "")))
 
-	scores := item["scores"].([]any)
+	scores := as[[]any](t, item["scores"])
 	require.Len(t, scores, 1)
-	assert.Equal(t, "b", scores[0].(map[string]any)["kind"])
+	assert.Equal(t, "b", as[map[string]any](t, scores[0])["kind"])
 }
 
 // RFC 7644 3.4.2.2 - pr does not match an empty value.
@@ -669,9 +670,9 @@ func TestApplyValuePathPresenceIgnoresEmptyString(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, `emails[value pr]`, "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 1)
-	assert.Equal(t, "home", emails[0].(map[string]any)["type"])
+	assert.Equal(t, "home", as[map[string]any](t, emails[0])["type"])
 }
 
 func TestApplyRemoveSubAttributeAcrossMultiValued(t *testing.T) {
@@ -682,7 +683,7 @@ func TestApplyRemoveSubAttributeAcrossMultiValued(t *testing.T) {
 
 	require.NoError(t, apply(item, nil, operation(patch.OpRemove, "emails.type", "")))
 
-	emails := item["emails"].([]any)
+	emails := as[[]any](t, item["emails"])
 	require.Len(t, emails, 2)
 	assert.Equal(t, map[string]any{"value": "w@x"}, emails[0])
 	assert.Equal(t, map[string]any{"value": "h@x"}, emails[1])
@@ -859,10 +860,10 @@ func TestApplyMaxFilterEvaluations(t *testing.T) {
 		}, userSchemas(), patch.MaxFilterEvaluations(10_000_000))
 		require.NoError(t, err)
 
-		emails := resource["emails"].([]any)
+		emails := as[[]any](t, resource["emails"])
 		require.Len(t, emails, 2)
 		for _, e := range emails {
-			assert.Equal(t, "new@example.com", e.(map[string]any)["value"])
+			assert.Equal(t, "new@example.com", as[map[string]any](t, e)["value"])
 		}
 	})
 
@@ -1226,9 +1227,9 @@ func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributes(t *testing.T) {
 
 	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"u-1"}]`)))
 
-	members := item["members"].([]any)
+	members := as[[]any](t, item["members"])
 	require.Len(t, members, 1)
-	assert.Equal(t, "User", members[0].(map[string]any)["type"])
+	assert.Equal(t, "User", as[map[string]any](t, members[0])["type"])
 }
 
 // RFC 7643 Section 2.2: caseExact defaults to false, so "value" matches the stored element regardless of case.
@@ -1237,9 +1238,9 @@ func TestApplyReplaceMembersMatchesTheStoredValueCaseInsensitively(t *testing.T)
 
 	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"U-1"}]`)))
 
-	members := item["members"].([]any)
+	members := as[[]any](t, item["members"])
 	require.Len(t, members, 1)
-	assert.Equal(t, "User", members[0].(map[string]any)["type"])
+	assert.Equal(t, "User", as[map[string]any](t, members[0])["type"])
 }
 
 // RFC 7643 Section 2.1: attribute names are case insensitive, so a stored sub-attribute keyed with different case is still found.
@@ -1248,9 +1249,9 @@ func TestApplyReplaceMembersKeepsAStoredSubAttributeKeyedWithDifferentCase(t *te
 
 	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"u-1"}]`)))
 
-	members := item["members"].([]any)
+	members := as[[]any](t, item["members"])
 	require.Len(t, members, 1)
-	assert.Equal(t, "User", core.Object(members[0].(map[string]any)).Get("type"))
+	assert.Equal(t, "User", core.Object(as[map[string]any](t, members[0])).Get("type"))
 }
 
 // RFC 7643 Section 2.1: an explicit sub-attribute keyed with different case is not overwritten by carry-forward.
@@ -1259,9 +1260,9 @@ func TestApplyReplaceMembersLeavesAnExplicitSubAttributeKeyedWithDifferentCaseAl
 
 	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"u-1","Type":"Group"}]`)))
 
-	members := item["members"].([]any)
+	members := as[[]any](t, item["members"])
 	require.Len(t, members, 1)
-	member := core.Object(members[0].(map[string]any))
+	member := core.Object(as[map[string]any](t, members[0]))
 	assert.Len(t, member, 2)
 	assert.Equal(t, "Group", member.Get("type"))
 }
@@ -1271,9 +1272,9 @@ func TestApplyReplaceMembersLeavesAnExplicitImmutableValueAlone(t *testing.T) {
 
 	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `[{"value":"u-1","type":"Group"}]`)))
 
-	members := item["members"].([]any)
+	members := as[[]any](t, item["members"])
 	require.Len(t, members, 1)
-	assert.Equal(t, "Group", members[0].(map[string]any)["type"])
+	assert.Equal(t, "Group", as[map[string]any](t, members[0])["type"])
 }
 
 func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributesFromASingleObjectValue(t *testing.T) {
@@ -1281,9 +1282,9 @@ func TestApplyReplaceMembersKeepsOmittedImmutableSubAttributesFromASingleObjectV
 
 	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpReplace, "members", `{"value":"u-1"}`)))
 
-	members := item["members"].([]any)
+	members := as[[]any](t, item["members"])
 	require.Len(t, members, 1)
-	assert.Equal(t, "User", members[0].(map[string]any)["type"])
+	assert.Equal(t, "User", as[map[string]any](t, members[0])["type"])
 }
 
 func TestApplyReplaceWithoutPathKeepsOmittedImmutableSubAttributes(t *testing.T) {
@@ -1291,9 +1292,9 @@ func TestApplyReplaceWithoutPathKeepsOmittedImmutableSubAttributes(t *testing.T)
 
 	require.NoError(t, apply(item, groupSchemas(), patch.Operation{Op: patch.OpReplace, Value: json.RawMessage(`{"members":[{"value":"u-1"}]}`)}))
 
-	members := item["members"].([]any)
+	members := as[[]any](t, item["members"])
 	require.Len(t, members, 1)
-	assert.Equal(t, "User", members[0].(map[string]any)["type"])
+	assert.Equal(t, "User", as[map[string]any](t, members[0])["type"])
 }
 
 // RFC 7644 Section 3.5.2: a client MUST NOT modify an attribute that has mutability "immutable".
@@ -1310,9 +1311,9 @@ func TestApplyReplaceKeepsOmittedImmutableSubAttributesWithoutAValueSubAttribute
 
 	require.NoError(t, apply(item, schemas, operation(patch.OpReplace, "parts", `[{"serial":"s-1"}]`)))
 
-	parts := item["parts"].([]any)
+	parts := as[[]any](t, item["parts"])
 	require.Len(t, parts, 1)
-	assert.Equal(t, "A", parts[0].(map[string]any)["code"])
+	assert.Equal(t, "A", as[map[string]any](t, parts[0])["code"])
 }
 
 // RFC 7643 Section 2.5: "null" for a multi-valued attribute clears it rather than storing an array holding null.
@@ -1321,7 +1322,7 @@ func TestApplyReplaceMultiValuedWithNullClearsIt(t *testing.T) {
 
 	require.NoError(t, apply(item, userSchemas(), operation(patch.OpReplace, "emails", "null")))
 
-	assert.Empty(t, item["emails"].([]any))
+	assert.Empty(t, as[[]any](t, item["emails"]))
 }
 
 // RFC 7644 Section 3.4.2.2: DateTime comparison is chronological, not lexical.
@@ -1340,8 +1341,8 @@ func TestApplyValueFilterDateTimeComparesTemporally(t *testing.T) {
 
 	require.NoError(t, apply(item, schemas, operation(patch.OpReplace, `events[at ge "2024-01-02T00:00:00Z"].label`, `"matched"`)))
 
-	events := item["events"].([]any)
-	assert.Equal(t, "matched", events[0].(map[string]any)["label"])
+	events := as[[]any](t, item["events"])
+	assert.Equal(t, "matched", as[map[string]any](t, events[0])["label"])
 }
 
 func TestApplyAddSubAttributeIntoAbsentMultiValuedIsInvalidPath(t *testing.T) {
@@ -1499,8 +1500,8 @@ func TestApplyAddMergedIntoAFilteredElementSkipsAnAlreadyPresentValue(t *testing
 
 	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, `parts[serial eq "s-1"]`, `{"codes":["A"]}`)))
 
-	parts := item["parts"].([]any)
-	assert.Equal(t, []any{"A"}, parts[0].(map[string]any)["codes"])
+	parts := as[[]any](t, item["parts"])
+	assert.Equal(t, []any{"A"}, as[map[string]any](t, parts[0])["codes"])
 }
 
 // RFC 7644 Section 3.5.2.1: adding an already-present value to a filtered sub-attribute must not duplicate it.
@@ -1517,8 +1518,8 @@ func TestApplyAddToAFilteredSubAttributeSkipsAnAlreadyPresentValue(t *testing.T)
 
 	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, `parts[serial eq "s-1"].codes`, `["A"]`)))
 
-	parts := item["parts"].([]any)
-	assert.Equal(t, []any{"A"}, parts[0].(map[string]any)["codes"])
+	parts := as[[]any](t, item["parts"])
+	assert.Equal(t, []any{"A"}, as[map[string]any](t, parts[0])["codes"])
 }
 
 // RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made, even when immutable.
@@ -1535,8 +1536,8 @@ func TestApplyAddOfAnAlreadyPresentValueToAnImmutableFilteredSubAttributeIsANoOp
 
 	require.NoError(t, apply(item, schemas, operation(patch.OpAdd, `parts[serial eq "s-1"].codes`, `["A"]`)))
 
-	parts := item["parts"].([]any)
-	assert.Equal(t, []any{"A"}, parts[0].(map[string]any)["codes"])
+	parts := as[[]any](t, item["parts"])
+	assert.Equal(t, []any{"A"}, as[map[string]any](t, parts[0])["codes"])
 }
 
 // RFC 7643 Section 7: writing a sub-attribute also changes its immutable parent complex attribute once the parent is assigned.
@@ -1544,7 +1545,7 @@ func TestApplyReplaceRejectsAWriteThroughAnAssignedImmutableParent(t *testing.T)
 	item := core.Object{"badge": map[string]any{"number": "1"}}
 
 	requireMutability(t, apply(item, badgeSchema(), operation(patch.OpReplace, "badge.number", `"2"`)))
-	assert.Equal(t, "1", item["badge"].(map[string]any)["number"])
+	assert.Equal(t, "1", as[map[string]any](t, item["badge"])["number"])
 }
 
 // RFC 7643 Section 7: an immutable attribute SHALL NOT be updated, so an unchanged write through its parent succeeds.
@@ -1552,7 +1553,7 @@ func TestApplyReplaceOfAnEqualValueThroughAnImmutableParentIsANoOp(t *testing.T)
 	item := core.Object{"badge": map[string]any{"number": "1"}}
 
 	require.NoError(t, apply(item, badgeSchema(), operation(patch.OpReplace, "badge.number", `"1"`)))
-	assert.Equal(t, "1", item["badge"].(map[string]any)["number"])
+	assert.Equal(t, "1", as[map[string]any](t, item["badge"])["number"])
 }
 
 // RFC 7643 Section 7: removing a sub-attribute also changes its immutable parent complex attribute once the parent is assigned.
@@ -1560,7 +1561,7 @@ func TestApplyRemoveRejectsARemovalThroughAnAssignedImmutableParent(t *testing.T
 	item := core.Object{"badge": map[string]any{"number": "1"}}
 
 	requireMutability(t, apply(item, badgeSchema(), operation(patch.OpRemove, "badge.number", "")))
-	assert.Equal(t, "1", item["badge"].(map[string]any)["number"])
+	assert.Equal(t, "1", as[map[string]any](t, item["badge"])["number"])
 }
 
 // RFC 7644 Section 3.5.2.1: adding an already-present value to a mutable sub-attribute makes no change, even through an immutable parent.
@@ -1568,7 +1569,7 @@ func TestApplyAddOfAnAlreadyPresentValueToAMutableSubAttributeThroughAnImmutable
 	item := core.Object{"badge": map[string]any{"codes": []any{"A"}}}
 
 	require.NoError(t, apply(item, badgeCodesSchema(), operation(patch.OpAdd, "badge.codes", `["A"]`)))
-	assert.Equal(t, []any{"A"}, item["badge"].(map[string]any)["codes"])
+	assert.Equal(t, []any{"A"}, as[map[string]any](t, item["badge"])["codes"])
 }
 
 // RFC 7643 Section 7: an assigned immutable attribute SHALL NOT be updated, including by removal.
@@ -1712,4 +1713,11 @@ func requireMutability(t *testing.T, err error) {
 	var scimErr *scimerrors.Error
 	require.ErrorAs(t, err, &scimErr)
 	assert.Equal(t, scimerrors.Mutability, scimErr.ScimType)
+}
+
+func as[T any](t *testing.T, v any) T {
+	t.Helper()
+	got, ok := v.(T)
+	require.True(t, ok, "%T is not the expected type", v)
+	return got
 }

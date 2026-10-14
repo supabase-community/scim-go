@@ -308,7 +308,7 @@ func TestRFC7643Decimal(t *testing.T) {
 	// RFC 7643 Section 2.3.3: a decimal is a real number, so 1.5 and 1.50 are the same value.
 	t.Run("keeps an immutable value written with a different number of digits", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Weight: 1.5})["id"].(string)
+		id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Weight: 1.5})["id"])
 
 		request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
 			WithBearerToken(validToken),
@@ -539,7 +539,7 @@ func TestRFC7643CommonAttributes(t *testing.T) {
 		} {
 			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+path, WithBearerToken(validToken)))
 			require.Equal(t, http.StatusOK, response.StatusCode, path)
-			assert.Equal(t, baseURL+path, ReadBodyAs[map[string]any](t, response)["meta"].(map[string]any)["location"], path)
+			assert.Equal(t, baseURL+path, as[map[string]any](t, ReadBodyAs[map[string]any](t, response)["meta"])["location"], path)
 			assert.Equal(t, baseURL+path, response.Header.Get("Content-Location"), path)
 		}
 
@@ -1171,7 +1171,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 	// RFC 7643 Section 7: a returned "request" attribute is returned in response to a PUT, POST, or PATCH that specified it.
 	t.Run("returns a request attribute the client wrote", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo"})["id"].(string)
+		id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo"})["id"])
 		patchOf := func(op patch.Operation) protocol.PatchRequest {
 			return protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{op}}
 		}
@@ -1214,7 +1214,8 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		assert.NotContains(t, created, "password")
 
 		for _, query := range []string{"", "?attributes=password"} {
-			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+created["id"].(string)+query, WithBearerToken(validToken)))
+			id := as[string](t, created["id"])
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id+query, WithBearerToken(validToken)))
 			assert.NotContains(t, ReadBodyAs[map[string]any](t, response), "password", query)
 		}
 	})
@@ -1225,7 +1226,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		created := createWidget(t, srv, &widget{Name: "gear", Secret: "wr1te-0nly"})
 
 		for _, query := range []string{"", "?attributes=secret"} {
-			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Widgets/"+created["id"].(string)+query, WithBearerToken(validToken)))
+			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Widgets/"+as[string](t, created["id"])+query, WithBearerToken(validToken)))
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			body, err := io.ReadAll(response.Body)
 			require.NoError(t, err)
@@ -2607,9 +2608,9 @@ func TestRFC7644Attributes(t *testing.T) {
 	t.Run("lists only the minimum set and the requested attributes", func(t *testing.T) {
 		status, body := get(t, "/Users?attributes=userName")
 		require.Equal(t, http.StatusOK, status)
-		resources := body["Resources"].([]any)
+		resources := as[[]any](t, body["Resources"])
 		require.Len(t, resources, 1)
-		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(resources[0].(map[string]any)))
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(as[map[string]any](t, resources[0])))
 	})
 
 	// RFC 7644 Section 3.9: each resource MUST contain the minimum set and any attributes explicitly requested by "attributes".
@@ -2636,7 +2637,7 @@ func TestRFC7644Attributes(t *testing.T) {
 	// RFC 7644 Section 3.9: the attributes returned are the minimum attribute set plus the default attribute set.
 	t.Run("omits attributes the schema does not declare", func(t *testing.T) {
 		_, body := get(t, "/Users/"+id)
-		enterprise := body[string(core.SchemaEnterpriseUser)].(map[string]any)
+		enterprise := as[map[string]any](t, body[string(core.SchemaEnterpriseUser)])
 		assert.Equal(t, "Tour Operations", enterprise["department"])
 		assert.NotContains(t, enterprise["manager"], "$ref")
 	})
@@ -3145,7 +3146,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	// RFC 7643 Section 7: a readOnly attribute SHALL NOT be modified.
 	t.Run("keeps readOnly sub-attributes of the elements it resends", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1", Code: "c0de"}, {Serial: "s-2"}}})["id"].(string)
+		id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1", Code: "c0de"}, {Serial: "s-2"}}})["id"])
 
 		request := Request(t, srv, http.MethodPut, basePath+"/Widgets/"+id,
 			WithBearerToken(validToken),
@@ -3671,7 +3672,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute.
 	t.Run("rejects a readOnly sub-attribute even when the value filter matches nothing", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
+		id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"])
 
 		request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
 			WithBearerToken(validToken),
@@ -3690,7 +3691,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7643 Section 7: a readOnly attribute SHALL NOT be modified.
 	t.Run("keeps readOnly sub-attributes the operations do not target", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
+		id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"])
 
 		request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
 			WithBearerToken(validToken),
@@ -3719,7 +3720,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			{patch.Operation{Op: patch.OpAdd, Value: json.RawMessage(`{"parts":[{"serial":"s-2","inspector":"mallory"}]}`)}, []part{{Serial: "s-1", Inspector: "qa-bot"}, {Serial: "s-2"}}},
 		} {
 			srv := newTestServer(t)
-			id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
+			id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"])
 
 			response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, test.operation))
 
@@ -3731,7 +3732,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".
 	t.Run("rejects any operator but eq on a writeOnly attribute in a value filter", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1", Code: "c0de"}}, Keys: []map[string]any{{"value": "k3y"}}})["id"].(string)
+		id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1", Code: "c0de"}}, Keys: []map[string]any{{"value": "k3y"}}})["id"])
 
 		for _, path := range []string{`parts[code sw "c"].serial`, `parts[code pr].serial`, `keys[value sw "k"].value`, `keys[value pr]`} {
 			request := Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+id,
@@ -3769,7 +3770,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: a simple multi-valued attribute is filtered by "value" alone.
 	t.Run("rejects a value filter that is not on a sub-attribute or the value", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Tags: []any{"red"}, Parts: []part{{Serial: "s-1"}}})["id"].(string)
+		id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Tags: []any{"red"}, Parts: []part{{Serial: "s-1"}}})["id"])
 
 		for _, path := range []string{`tags[type eq "x"]`, `tags[value.x eq "a"]`, `tags[urn:test:widget:value eq "red"]`, `parts[urn:test:widget:serial eq "s-1"]`} {
 			response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpRemove, Path: path}))
@@ -4540,7 +4541,7 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 	t.Run("removes a readOnly sub-attribute with its value", func(t *testing.T) {
 		for _, path := range []string{"parts", `parts[serial eq "s-1"]`} {
 			srv := newTestServer(t)
-			id := createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"].(string)
+			id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Parts: []part{{Serial: "s-1"}}})["id"])
 
 			response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpRemove, Path: path}))
 
@@ -4614,7 +4615,7 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 	// RFC 7644 Section 3.5.2.2: the values matched by a filter comparing "value" are removed.
 	t.Run("removes values of a simple multi-valued attribute matched by a value filter", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Tags: []any{"red", "blue"}})["id"].(string)
+		id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Tags: []any{"red", "blue"}})["id"])
 
 		response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpRemove, Path: `tags[value eq "red"]`}))
 
@@ -4625,7 +4626,7 @@ func TestRFC7644RemoveOperation(t *testing.T) {
 	// RFC 7643 Section 7: an immutable attribute SHALL NOT be updated, including by removal.
 	t.Run("rejects removing a value of an immutable simple multi-valued attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createWidget(t, srv, &widget{Name: "gizmo", Labels: []any{"a", "b"}})["id"].(string)
+		id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Labels: []any{"a", "b"}})["id"])
 
 		response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpRemove, Path: `labels[value eq "a"]`}))
 
@@ -4679,7 +4680,7 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 		srv := newTestServer(t)
 		created := createWidget(t, srv, &widget{Name: "gear", Parts: []part{{Serial: "s-1", Built: "2026-01-01T00:00:00Z"}}})
 
-		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+created["id"].(string),
+		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Widgets/"+as[string](t, created["id"]),
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
@@ -4746,7 +4747,7 @@ func TestRFC7644ReplaceOperation(t *testing.T) {
 			{`labels[value eq "a"]`, `"b"`, http.StatusBadRequest, scimerrors.Mutability, nil},
 		} {
 			srv := newTestServer(t)
-			id := createWidget(t, srv, &widget{Name: "gizmo", Tags: []any{"red", "blue"}, Labels: []any{"a"}})["id"].(string)
+			id := as[string](t, createWidget(t, srv, &widget{Name: "gizmo", Tags: []any{"red", "blue"}, Labels: []any{"a"}})["id"])
 
 			response := Response(t, srv, patchRequest(t, srv, "Widgets/"+id, patch.Operation{Op: patch.OpReplace, Path: tc.path, Value: json.RawMessage(tc.value)}))
 

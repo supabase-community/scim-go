@@ -170,16 +170,16 @@ func (g *grammar) attributePath() peg.Parser {
 		start := c.Position()
 		prefix := ""
 		if uri, err := schemaURI(c); err == nil {
-			prefix = uri.(string) + ":"
+			prefix = asString(uri) + ":"
 		}
 		name, err := attrName(c)
 		if err != nil {
 			c.Seek(start)
 			return nil, err
 		}
-		path := prefix + name.(string)
+		path := prefix + asString(name)
 		if sub, err := subAttr(c); err == nil {
-			path += "." + sub.(string)
+			path += "." + asString(sub)
 		}
 		return path, nil
 	}
@@ -255,11 +255,16 @@ func convert(p peg.Parser, fn func(string) (peg.ASTNode, error)) peg.Parser {
 		if err != nil {
 			return nil, err
 		}
-		out, err := fn(val.(string))
+		out, err := fn(asString(val))
 		if err != nil {
 			c.Seek(start)
 			return nil, err
 		}
 		return out, nil
 	}
+}
+
+func asString(node peg.ASTNode) string {
+	s, _ := node.(string)
+	return s
 }

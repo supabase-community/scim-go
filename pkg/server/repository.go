@@ -52,7 +52,7 @@ func (r *repository[T]) Read(_ context.Context, id string) (T, error) {
 		var zero T
 		return zero, err
 	}
-	return item.(T), nil
+	return cast[T](item), nil
 }
 
 func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
@@ -64,7 +64,7 @@ func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) (
 	start := min(query.Offset(), total)
 	items := []T{}
 	for _, rec := range matching[start:min(start+query.Count, total)] {
-		items = append(items, clone(rec).(T))
+		items = append(items, cast[T](clone(rec)))
 	}
 	return items, total, nil
 }
@@ -85,7 +85,7 @@ func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
 		var zero T
 		return zero, err
 	}
-	return created.(T), nil
+	return cast[T](created), nil
 }
 
 func (r *repository[T]) Update(_ context.Context, item T) (T, error) {
@@ -94,7 +94,7 @@ func (r *repository[T]) Update(_ context.Context, item T) (T, error) {
 		var zero T
 		return zero, err
 	}
-	return updated.(T), nil
+	return cast[T](updated), nil
 }
 
 func (r *repository[T]) Delete(_ context.Context, item T) error {
@@ -170,4 +170,9 @@ func bumpMeta(current core.Meta) core.Meta {
 	current.LastModified = now
 	current.Version = weakETag(now)
 	return current
+}
+
+func cast[T any](v any) T {
+	got, _ := v.(T)
+	return got
 }

@@ -277,12 +277,19 @@ func (sqlEvaluator) And(left, right clause) (clause, error) {
 func (sqlEvaluator) Compare(attribute *protocol.Attribute, op filter.Operator, value any) (clause, error) {
 	key := attribute.Path.Key()
 	switch op {
-	case filter.OpContains:
-		return clause{sql: key + " LIKE ?", args: []any{"%" + value.(string) + "%"}}, nil
-	case filter.OpStartsWith:
-		return clause{sql: key + " LIKE ?", args: []any{value.(string) + "%"}}, nil
-	case filter.OpEndsWith:
-		return clause{sql: key + " LIKE ?", args: []any{"%" + value.(string)}}, nil
+	case filter.OpContains, filter.OpStartsWith, filter.OpEndsWith:
+		text, ok := value.(string)
+		if !ok {
+			return clause{}, scimerrors.ErrInvalidFilter(fmt.Sprintf("operator %q needs a string", op))
+		}
+		prefix, suffix := "%", "%"
+		if op == filter.OpStartsWith {
+			prefix = ""
+		}
+		if op == filter.OpEndsWith {
+			suffix = ""
+		}
+		return clause{sql: key + " LIKE ?", args: []any{prefix + text + suffix}}, nil
 	}
 	symbol, ok := sqlOperators[op]
 	if !ok {

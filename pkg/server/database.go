@@ -49,7 +49,7 @@ func (d *database) all(scope core.Schemas) []record {
 	defer d.mu.Unlock()
 	records := []record{}
 	for _, resource := range d.resources {
-		if rec := resource.(record); inScope(rec, scope) {
+		if rec := cast[record](resource); inScope(rec, scope) {
 			records = append(records, rec)
 		}
 	}
@@ -318,7 +318,7 @@ func clone(item core.Resource) core.Resource {
 	original := reflect.ValueOf(item).Elem()
 	copied := reflect.New(original.Type())
 	copied.Elem().Set(original)
-	return copied.Interface().(core.Resource)
+	return cast[core.Resource](copied.Interface())
 }
 
 func decodeAs(item core.Resource, object core.Object) (core.Resource, error) {
@@ -328,7 +328,7 @@ func decodeAs(item core.Resource, object core.Object) (core.Resource, error) {
 	}
 	decoded := reflect.New(reflect.TypeOf(item).Elem())
 	err = json.Unmarshal(raw, decoded.Interface())
-	return decoded.Interface().(core.Resource), err
+	return cast[core.Resource](decoded.Interface()), err
 }
 
 func targetsOf(rec record) (members, pointers []string) {
