@@ -19,7 +19,7 @@ type Option[T any] func(T) T
 func Request(t *testing.T, srv *httptest.Server, method, path string, options ...Option[*http.Request]) *http.Request {
 	t.Helper()
 
-	request, err := http.NewRequest(method, srv.URL+path, nil)
+	request, err := http.NewRequestWithContext(t.Context(), method, srv.URL+path, nil)
 	require.NoError(t, err)
 	for _, option := range options {
 		request = option(request)

@@ -41,6 +41,7 @@ linters:
     - nilerr
     - nilnesserr
     - nilnil
+    - noctx
     - nolintlint
     - perfsprint
     - prealloc
@@ -53,6 +54,7 @@ linters:
     - testpackage
     - thelper
     - tparallel
+    - unconvert
     - unparam
     - usestdlibvars
     - usetesting

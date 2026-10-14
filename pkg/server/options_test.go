@@ -28,7 +28,7 @@ func TestErrorHandlerOption(t *testing.T) {
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
 	)
 
-	srv.ServeHTTP(failingWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodGet, basePath+"/Users/unknown", nil))
+	srv.ServeHTTP(failingWriter{httptest.NewRecorder()}, httptest.NewRequestWithContext(t.Context(), http.MethodGet, basePath+"/Users/unknown", nil))
 
 	assert.Len(t, reported, 1)
 }

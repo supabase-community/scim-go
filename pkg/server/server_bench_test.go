@@ -196,7 +196,7 @@ func serveEach(b *testing.B, handler http.Handler, method, target string, body [
 
 func serve(b *testing.B, handler http.Handler, method, target string, body []byte, status int) *httptest.ResponseRecorder {
 	b.Helper()
-	r := httptest.NewRequest(method, target, bytes.NewReader(body))
+	r := httptest.NewRequestWithContext(b.Context(), method, target, bytes.NewReader(body))
 	r.Header.Set("Authorization", "Bearer "+validToken)
 	r.Header.Set("Content-Type", protocol.MediaType)
 	w := httptest.NewRecorder()
