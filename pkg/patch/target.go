@@ -73,7 +73,7 @@ func (t *target) put(holder core.Object, kind Op, incoming any) error {
 		}
 		return newMerger(nested, t.attr, kind).merge(values)
 	}
-	shapedValue := t.listAdd().dedupedAdd(holder, kind, shaped(incoming, t.attr.MultiValued))
+	shapedValue := t.listAdd().dedupedAdd(holder, kind, shaped(t.attr, incoming))
 	if err := t.overwritable(holder, kind, shapedValue); err != nil {
 		return err
 	}

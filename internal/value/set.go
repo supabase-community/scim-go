@@ -25,6 +25,18 @@ func NewSet(attribute *core.Attribute, elements []any) *Set {
 	return s
 }
 
+// Unique drops repeats; RFC 7644 Section 3.5.2.1: a value the attribute already holds is not added again.
+func Unique(attribute *core.Attribute, list []any) []any {
+	seen := NewSet(attribute, nil)
+	return slices.DeleteFunc(slices.Clone(list), func(element any) bool {
+		if seen.Contains(element) {
+			return true
+		}
+		seen.Add(element)
+		return false
+	})
+}
+
 func KeyedByIdentity(attribute *core.Attribute) bool {
 	return len(attribute.SubAttributes) > 0
 }

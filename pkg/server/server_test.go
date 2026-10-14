@@ -667,6 +667,17 @@ func TestReplaceStoresUnknownManagerAsSent(t *testing.T) {
 	}
 }
 
+func TestPatchStoresDuplicateMembersOnce(t *testing.T) {
+	srv := newTestServer(t)
+	ids := seedUsers(t, srv, "alice")
+	group := createGroup(t, srv, &core.Group{DisplayName: "eng"})
+	member := `{"value":"` + ids["alice"] + `"}`
+	operation := patch.Operation{Op: patch.OpReplace, Path: "members", Value: json.RawMessage(`[` + member + `,` + member + `]`)}
+	response := Response(t, srv, patchRequest(t, srv, "Groups/"+group.ID, operation))
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Len(t, ReadBodyAs[core.Group](t, response).Members, 1)
+}
+
 // RFC 7644 Section 3.5.2.1: a value the attribute already holds is not added again.
 func TestDuplicateMembersAreStoredOnce(t *testing.T) {
 	srv := newTestServer(t)

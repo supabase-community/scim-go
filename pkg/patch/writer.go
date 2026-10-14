@@ -7,11 +7,11 @@ import (
 )
 
 // RFC 7643 Section 2.5: the null value or an empty array SHALL be considered equivalent for a multi-valued attribute.
-func shaped(incoming any, multiValued bool) any {
-	if !multiValued {
+func shaped(attribute *core.Attribute, incoming any) any {
+	if !attribute.MultiValued {
 		return incoming
 	}
-	return shapedList(incoming)
+	return value.Unique(attribute, shapedList(incoming))
 }
 
 func shapedList(incoming any) []any {

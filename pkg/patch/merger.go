@@ -46,7 +46,7 @@ func (m merger) merge(values core.Object) error {
 
 func (m merger) field(key, name string, incoming any) error {
 	sub := subAttr(m.parent, name)
-	v := shaped(incoming, sub.MultiValued)
+	v := shaped(sub, incoming)
 	if existing, ok := m.holder[key].([]any); m.kind == OpAdd && sub.MultiValued && ok {
 		v = newIndex(sub, existing).fresh(shapedList(v))
 	}
