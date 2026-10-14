@@ -31,13 +31,16 @@ func Unique(attribute *core.Attribute, list []any) []any {
 		return list
 	}
 	seen := NewSet(attribute, nil)
-	return slices.DeleteFunc(slices.Clone(list), func(element any) bool {
+	kept := make([]any, 0, len(list))
+	for _, element := range list {
 		if seen.Contains(element) {
-			return true
+			seen.promotePrimary(element)
+			continue
 		}
 		seen.Add(element)
-		return false
-	})
+		kept = append(kept, element)
+	}
+	return kept
 }
 
 func KeyedByIdentity(attribute *core.Attribute) bool {
@@ -65,6 +68,17 @@ func (s *Set) Contains(want any) bool {
 
 func (s *Set) Find(element core.Object) core.Object {
 	return s.objects[Identity(s.attribute, element)]
+}
+
+// RFC 7643 Section 2.4: the primary attribute SHOULD NOT be lost when a repeated value is dropped.
+func (s *Set) promotePrimary(element any) {
+	object := AsObject(element)
+	if primary, _ := object.Get("primary").(bool); !primary {
+		return
+	}
+	if kept := s.Find(object); kept != nil {
+		kept["primary"] = true
+	}
 }
 
 func (s *Set) addObject(object core.Object) {

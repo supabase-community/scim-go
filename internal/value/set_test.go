@@ -74,6 +74,21 @@ func TestSetIdentity(t *testing.T) {
 	})
 }
 
+func TestUniqueKeepsPrimaryOfDroppedRepeat(t *testing.T) {
+	emails := core.NewAttribute("emails", core.TypeComplex).AsMultiValued().With(
+		core.NewAttribute("value", core.TypeString),
+		core.NewAttribute("primary", core.TypeBoolean),
+	)
+	list := []any{
+		map[string]any{"value": "a@x.com", "primary": false},
+		map[string]any{"value": "A@x.com", "primary": true},
+	}
+
+	got := value.Unique(emails, list)
+
+	assert.Equal(t, []any{map[string]any{"value": "a@x.com", "primary": true}}, got)
+}
+
 func addressesLike() *core.Attribute {
 	return core.NewAttribute("addresses", core.TypeComplex).AsMultiValued().With(
 		core.NewAttribute("postalCode", core.TypeString),

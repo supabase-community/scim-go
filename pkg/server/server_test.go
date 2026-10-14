@@ -667,6 +667,15 @@ func TestReplaceStoresUnknownManagerAsSent(t *testing.T) {
 	}
 }
 
+func TestPatchKeepsUnknownManager(t *testing.T) {
+	srv := newTestServer(t)
+	id, _ := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: "jsmith@example.com"}}})
+	operation := patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Babs"`)}
+	response := Response(t, srv, patchRequest(t, srv, "Users/"+id, operation))
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	assert.Equal(t, &core.Manager{Value: "jsmith@example.com"}, ReadBodyAs[core.User](t, response).EnterpriseUser.Manager)
+}
+
 func TestPatchStoresDuplicateMembersOnce(t *testing.T) {
 	srv := newTestServer(t)
 	ids := seedUsers(t, srv, "alice")
