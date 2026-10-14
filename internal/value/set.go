@@ -27,6 +27,9 @@ func NewSet(attribute *core.Attribute, elements []any) *Set {
 
 // Unique drops repeats; RFC 7644 Section 3.5.2.1: a value the attribute already holds is not added again.
 func Unique(attribute *core.Attribute, list []any) []any {
+	if len(list) < 2 {
+		return list
+	}
 	seen := NewSet(attribute, nil)
 	return slices.DeleteFunc(slices.Clone(list), func(element any) bool {
 		if seen.Contains(element) {
