@@ -218,18 +218,25 @@ func binaryExpression(left, op peg.Parser, name string, right peg.Parser) peg.Pa
 		if err != nil {
 			return nil, err
 		}
-		start := c.Position()
-		if _, err := peg.Sequence(peg.Space(), op, peg.Space())(c); err != nil {
-			c.Seek(start)
-			return l, nil
+		if r, ok := operand(c, op, right); ok {
+			return peg.Token{"left": l, "operator": name, "right": r}, nil
 		}
-		r, err := right(c)
-		if err != nil {
-			c.Seek(start)
-			return l, nil
-		}
-		return peg.Token{"left": l, "operator": name, "right": r}, nil
+		return l, nil
 	}
+}
+
+func operand(c *peg.Context, op, right peg.Parser) (peg.ASTNode, bool) {
+	start := c.Position()
+	if _, err := peg.Sequence(peg.Space(), op, peg.Space())(c); err != nil {
+		c.Seek(start)
+		return nil, false
+	}
+	r, err := right(c)
+	if err != nil {
+		c.Seek(start)
+		return nil, false
+	}
+	return r, true
 }
 
 func constant(lit string, val peg.ASTNode) peg.Parser {

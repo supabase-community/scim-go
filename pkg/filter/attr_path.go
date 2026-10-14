@@ -37,13 +37,9 @@ func (p AttrPath) Key() string {
 
 func splitAttrPath(raw string) AttrPath {
 	var path AttrPath
-	if i := strings.LastIndex(raw, ":"); i >= 0 {
-		path.URI, raw = raw[:i], raw[i+1:]
+	if uri, rest, found := strings.CutLast(raw, ":"); found {
+		path.URI, raw = uri, rest
 	}
-	if i := strings.IndexByte(raw, '.'); i >= 0 {
-		path.Name, path.SubAttribute = raw[:i], raw[i+1:]
-	} else {
-		path.Name = raw
-	}
+	path.Name, path.SubAttribute, _ = strings.Cut(raw, ".")
 	return path
 }
