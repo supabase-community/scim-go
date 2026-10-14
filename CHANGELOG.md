@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/supabase-community/scim-go/compare/v0.15.2...v0.16.0) (2026-10-14)
+
+
+### Features
+
+* **server:** build the repository from the mounted resource ([e617368](https://github.com/supabase-community/scim-go/commit/e617368948f64a3a34ca5e0752b57ce2e167fd37))
+
 ## [0.15.2](https://github.com/supabase-community/scim-go/compare/v0.15.1...v0.15.2) (2026-10-14)
 
 
