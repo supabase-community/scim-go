@@ -38,7 +38,7 @@ func (b *budget) charge(evaluations int) error {
 func (b *budget) chargeBytes(n int) error {
 	b.outputSpent += n
 	if b.maxOutputBytes > 0 && b.outputSpent > b.maxOutputBytes {
-		return scimerrors.ErrTooLarge("the value filters of the request would write more than " + strconv.Itoa(b.maxOutputBytes) + " bytes")
+		return scimerrors.ErrTooLarge("the request would write more than " + strconv.Itoa(b.maxOutputBytes) + " bytes")
 	}
 	return nil
 }
