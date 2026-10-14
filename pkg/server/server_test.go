@@ -643,10 +643,9 @@ func TestRFC7643ReferenceValuesExist(t *testing.T) {
 	}
 
 	for name, response := range map[string]*http.Response{
-		"member that does not exist":  post("/Groups", &core.Group{DisplayName: "a", Members: []core.Member{{Value: "missing"}}}),
-		"member by userName":          post("/Groups", &core.Group{DisplayName: "b", Members: []core.Member{{Value: "alice"}}}),
-		"manager that does not exist": post("/Users", asManager("missing")),
-		"manager that is not a User":  post("/Users", asManager(group.ID)),
+		"member that does not exist": post("/Groups", &core.Group{DisplayName: "a", Members: []core.Member{{Value: "missing"}}}),
+		"member by userName":         post("/Groups", &core.Group{DisplayName: "b", Members: []core.Member{{Value: "alice"}}}),
+		"manager that is not a User": post("/Users", asManager(group.ID)),
 	} {
 		require.Equal(t, http.StatusBadRequest, response.StatusCode, name)
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType, name)
@@ -654,6 +653,32 @@ func TestRFC7643ReferenceValuesExist(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, post("/Groups", &core.Group{DisplayName: "c", Members: []core.Member{{Value: ids["alice"]}, {Value: group.ID}}}).StatusCode)
 	assert.Equal(t, http.StatusCreated, post("/Users", asManager(ids["alice"])).StatusCode)
+	assert.Equal(t, http.StatusCreated, post("/Users", asManager("missing")).StatusCode)
+}
+
+func TestReplaceStoresUnknownManagerAsSent(t *testing.T) {
+	srv := newTestServer(t)
+	id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+	for _, manager := range []string{"jsmith@example.com", "26118915-6090-4610-87e4-49d8ca9f808d"} {
+		user := &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: manager}}}
+		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+id, WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, user)))
+		require.Equal(t, http.StatusOK, response.StatusCode, manager)
+		assert.Equal(t, &core.Manager{Value: manager}, ReadBodyAs[core.User](t, response).EnterpriseUser.Manager)
+	}
+}
+
+// RFC 7644 Section 3.5.2.1: a value the attribute already holds is not added again.
+func TestDuplicateMembersAreStoredOnce(t *testing.T) {
+	srv := newTestServer(t)
+	ids := seedUsers(t, srv, "alice")
+	member := core.Member{Value: ids["alice"]}
+	group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{member, member}})
+	assert.Len(t, group.Members, 1)
+
+	replaced := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+group.ID, WithBearerToken(validToken), WithContentType(protocol.MediaType),
+		WithRequestBodyAs(t, &core.Group{DisplayName: "eng", Members: []core.Member{member, member}})))
+	require.Equal(t, http.StatusOK, replaced.StatusCode)
+	assert.Len(t, ReadBodyAs[core.Group](t, replaced).Members, 1)
 }
 
 // RFC 7643 4.3 Enterprise User Schema Extension

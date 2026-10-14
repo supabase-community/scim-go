@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"slices"
+
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
 )
@@ -74,6 +76,19 @@ func writableValue(attribute *core.Attribute, candidate, existing any) any {
 				writableObject(attribute.SubAttribute, object, stored.Find(object))
 			}
 		}
+		return unique(attribute, list)
 	}
 	return candidate
+}
+
+// RFC 7644 Section 3.5.2.1: a value the attribute already holds is not added again.
+func unique(attribute *core.Attribute, list []any) []any {
+	seen := value.NewSet(attribute, nil)
+	return slices.DeleteFunc(list, func(element any) bool {
+		if seen.Contains(element) {
+			return true
+		}
+		seen.Add(element)
+		return false
+	})
 }

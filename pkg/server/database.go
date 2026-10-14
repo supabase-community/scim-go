@@ -166,11 +166,15 @@ func (d *database) verifyTargets(rec record) error {
 		}
 	}
 	for _, field := range pointerFields(rec.schemas) {
-		if err := d.verifyIds(field, idsOf([]any{field.raw(rec.object)})); err != nil {
+		if err := d.verifyIds(field, d.known(idsOf([]any{field.raw(rec.object)}))); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (d *database) known(ids []string) []string {
+	return slices.DeleteFunc(ids, func(id string) bool { return d.resources[id] == nil })
 }
 
 func (d *database) verifyIds(field field, ids []string) error {
