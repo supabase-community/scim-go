@@ -571,7 +571,7 @@ func TestRFC7643UserResourceSchema(t *testing.T) {
 		}
 
 		group := createGroup(t, srv, &core.Group{DisplayName: "earth", Members: []core.Member{{Value: id}}})
-		want := []core.GroupMembership{{Value: group.ID, Ref: group.Meta.Location, Display: "earth", Type: "direct"}}
+		want := []core.GroupMembership{{Value: group.ID}}
 		assert.Equal(t, want, groupsOf())
 
 		require.Equal(t, http.StatusOK, Response(t, srv, patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Alice"`)})).StatusCode)
@@ -752,26 +752,14 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 		}
 	})
 
-	// RFC 7643 Section 4.3: manager.displayName is readOnly and names the manager.
-	t.Run("derives manager.displayName from the manager", func(t *testing.T) {
+	// RFC 7643 Section 4.3: manager.$ref and manager.displayName are optional, the server stores only the value.
+	t.Run("stores only the manager value", func(t *testing.T) {
 		srv := newTestServer(t)
 		managerID, _ := create(t, srv, &core.User{UserName: "jsmith", DisplayName: "John Smith"})
-		reportID, created := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: managerID}}})
-		get := func() *http.Response {
-			return Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+reportID, WithBearerToken(validToken)))
-		}
-		manager := func(response *http.Response) *core.Manager {
-			return ReadBodyAs[core.User](t, response).EnterpriseUser.Manager
-		}
+		reportID, _ := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: managerID, Ref: "https://evil.example/Users/x", DisplayName: "Mallory"}}})
 
-		assert.Equal(t, "John Smith", manager(get()).DisplayName)
-
-		require.Equal(t, http.StatusOK, Response(t, srv, patchRequest(t, srv, "Users/"+managerID, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Johnny"`)})).StatusCode)
-		renamed := get()
-		assert.NotEqual(t, created, renamed.Header.Get("ETag"))
-		assert.Equal(t, "Johnny", manager(renamed).DisplayName)
-		filtered := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?filter="+url.QueryEscape(string(core.SchemaEnterpriseUser)+`:manager.displayName eq "Johnny"`), WithBearerToken(validToken)))
-		assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[core.User]](t, filtered).TotalResults)
+		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+reportID, WithBearerToken(validToken)))
+		assert.Equal(t, &core.Manager{Value: managerID}, ReadBodyAs[core.User](t, response).EnterpriseUser.Manager)
 	})
 
 	// RFC 7644 Section 3.14: the returned version matches the stored one when a user manages itself.
@@ -3400,7 +3388,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 			require.Equal(t, http.StatusOK, response.StatusCode)
 		})
 
-		t.Run("resending a member by value and display alone twice keeps $ref and type", func(t *testing.T) {
+		t.Run("resending a member by value and display alone twice keeps type and never stores $ref", func(t *testing.T) {
 			srv := newTestServer(t)
 			ids := seedUsers(t, srv, "u-1")
 			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User", Ref: "https://example.com/v2/Users/u-1"}}}).ID
@@ -3418,7 +3406,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 			second := resend()
 			require.Equal(t, http.StatusOK, second.StatusCode)
-			assert.Equal(t, []core.Member{{Value: ids["u-1"], Type: "User", Ref: "https://example.com/v2/Users/u-1"}}, ReadBodyAs[core.Group](t, second).Members)
+			assert.Equal(t, []core.Member{{Value: ids["u-1"], Type: "User"}}, ReadBodyAs[core.Group](t, second).Members)
 		})
 	})
 

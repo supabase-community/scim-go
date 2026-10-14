@@ -103,7 +103,7 @@ func (d *database) store(item core.Resource, scope core.Schemas, unique fields) 
 	}
 	touched := d.relink(rec)
 	d.index(keys, id)
-	d.refresh(append(touched, d.dependents(id)...))
+	d.refresh(touched)
 	return clone(d.resources[id]), nil
 }
 
@@ -116,7 +116,7 @@ func (d *database) remove(id, version string, scope core.Schemas, unique fields)
 	}
 	d.unindex(indexKeys(rec, unique))
 	referrers := d.references[id]
-	touched := append(d.unlink(id), d.dependents(id)...)
+	touched := d.unlink(id)
 	delete(d.resources, id)
 	delete(d.references, id)
 	d.detach(referrers, id)
@@ -185,14 +185,9 @@ func (d *database) verifyIds(field field, ids []string) error {
 }
 
 func (d *database) relink(rec record) []string {
-	old, _ := d.resources[rec.Common().ID].(record)
 	before := d.unlink(rec.Common().ID)
 	d.resources[rec.Common().ID] = rec
-	after := d.link(rec)
-	if reflect.DeepEqual(displayOf(old), displayOf(rec)) {
-		return moved(before, after)
-	}
-	return append(before, after...)
+	return moved(before, d.link(rec))
 }
 
 func (d *database) link(rec record) []string {
@@ -219,16 +214,6 @@ func (d *database) unlink(source string) []string {
 		}
 	}
 	return members
-}
-
-func (d *database) dependents(target string) []string {
-	ids := []string{}
-	for source := range d.references[target] {
-		if rec, ok := d.resources[source].(record); ok && len(pointerFields(rec.schemas)) > 0 {
-			ids = append(ids, source)
-		}
-	}
-	return ids
 }
 
 func (d *database) refresh(ids []string) {
@@ -281,8 +266,15 @@ func (d *database) derive(item core.Resource, scope core.Schemas) (record, error
 	for _, field := range derivedFields(scope) {
 		d.fill(object, field, item.Common().ID)
 	}
+	for _, field := range sourceFields(scope) {
+		for _, element := range field.elements(object) {
+			value.AsObject(element).Remove("$ref")
+		}
+	}
 	for _, field := range pointerFields(scope) {
-		d.follow(object, field)
+		if pointer := value.AsObject(field.raw(object)); pointer != nil {
+			scrub(pointer)
+		}
 	}
 	resource, err := decodeAs(item, object)
 	if err != nil {
@@ -310,30 +302,16 @@ func (d *database) referrers(field field, target string) []any {
 			continue
 		}
 		elements = append(elements, map[string]any{
-			"value":   source,
-			"$ref":    rec.Common().Meta.Location,
-			"display": displayOf(rec),
-			"type":    "direct",
+			"value": source,
 		})
 	}
 	return elements
 }
 
-// RFC 7643 Section 4.3: manager.displayName is readOnly, derived from the manager.
-func (d *database) follow(object core.Object, field field) {
-	pointer := value.AsObject(field.raw(object))
-	if pointer == nil {
-		return
-	}
-	id, _ := pointer.Get("value").(string)
-	target, ok := d.resources[id].(record)
-	found := ok && slices.Contains(refOf(field.Attribute).ReferenceTypes, target.Common().Meta.ResourceType.Reference())
-	for _, sub := range readOnlySubs(field.Attribute) {
-		pointer.Remove(sub.Name)
-		if found && !value.IsUnassigned(target.object.Get(sub.Name)) {
-			pointer.Set(sub.Name, target.object.Get(sub.Name))
-		}
-	}
+// RFC 7643 Section 4.3: manager.$ref and manager.displayName are optional, the server stores only the value.
+func scrub(pointer core.Object) {
+	pointer.Remove("$ref")
+	pointer.Remove("displayName")
 }
 
 func inScope(rec record, scope core.Schemas) bool {
@@ -370,10 +348,6 @@ func targetsOf(rec record) (members, pointers []string) {
 		pointers = append(pointers, idsOf([]any{field.raw(rec.object)})...)
 	}
 	return members, pointers
-}
-
-func displayOf(rec record) any {
-	return rec.object.Get("displayName")
 }
 
 func moved(before, after []string) []string {
@@ -444,7 +418,7 @@ func derivedFields(scope core.Schemas) fields {
 }
 
 func derives(scope core.Schemas) bool {
-	return len(derivedFields(scope)) > 0 || len(pointerFields(scope)) > 0
+	return len(derivedFields(scope)) > 0 || len(sourceFields(scope)) > 0 || len(pointerFields(scope)) > 0
 }
 
 func pointerFields(scope core.Schemas) fields {
