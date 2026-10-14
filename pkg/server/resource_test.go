@@ -62,9 +62,12 @@ func TestResourceValidatorsSeeTheFullProjection(t *testing.T) {
 	}
 	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
+		server.WithDatabase(server.NewDatabase()),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
 			WithValidators(record)),
 	))
+	ids := seedUsers(t, srv, "u-1")
 	created := createGroup(t, srv, &core.Group{DisplayName: "eng"})
 
 	response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+created.ID,
@@ -72,7 +75,7 @@ func TestResourceValidatorsSeeTheFullProjection(t *testing.T) {
 		WithContentType(protocol.MediaType),
 		WithRequestBodyAs(t, protocol.PatchRequest{
 			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-			Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"User"}]`)}},
+			Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-1","type":"User"}]`))}},
 		}),
 	))
 

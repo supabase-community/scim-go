@@ -90,6 +90,9 @@ func (d *database) store(item core.Resource, scope core.Schemas, unique fields) 
 	if err != nil {
 		return nil, err
 	}
+	if err := d.verifyTargets(rec); err != nil {
+		return nil, err
+	}
 	keys := indexKeys(rec, unique)
 	if attribute := d.conflict(rec, keys); attribute != nil {
 		return nil, scimerrors.ErrUniqueness(strconv.Quote(attribute.Name) + " must be unique")
@@ -153,6 +156,32 @@ func (d *database) unindex(keys []indexKey) {
 	for _, key := range keys {
 		delete(d.uniqueIndex, key)
 	}
+}
+
+// RFC 7643 Section 2.3.7: a reference value is the id of an existing resource.
+func (d *database) verifyTargets(rec record) error {
+	for _, field := range sourceFields(rec.schemas) {
+		if err := d.verifyIds(field, idsOf(field.elements(rec.object))); err != nil {
+			return err
+		}
+	}
+	for _, field := range pointerFields(rec.schemas) {
+		if err := d.verifyIds(field, idsOf([]any{field.raw(rec.object)})); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *database) verifyIds(field field, ids []string) error {
+	types := refOf(field.Attribute).ReferenceTypes
+	for _, id := range ids {
+		target, ok := d.resources[id].(record)
+		if !ok || !slices.Contains(types, target.Common().Meta.ResourceType.Reference()) {
+			return scimerrors.ErrInvalidValue(strconv.Quote(id) + " does not reference an existing resource")
+		}
+	}
+	return nil
 }
 
 func (d *database) relink(rec record) []string {

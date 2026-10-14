@@ -150,12 +150,20 @@ func groupSchemas() core.Schemas {
 	return core.Schemas{core.NewSchema(core.SchemaGroup).WithName("Group").With(core.GroupAttributes()...)}
 }
 
-func newGroupHandler(tb testing.TB, repo server.Repository[*core.Group]) http.Handler {
+func newGroupHandler(tb testing.TB, wrap func(server.Repository[*core.Group]) server.Repository[*core.Group]) http.Handler {
 	tb.Helper()
+	db := server.NewDatabase()
+	groups := wrap(server.NewRepositoryIn[*core.Group](db, basePath+"/Groups", groupSchemas()))
 	return server.New(basePath, fullServiceProviderConfig(),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
-		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).WithRepository(repo)),
+		server.WithDatabase(db),
+		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
+		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).WithRepository(groups)),
 	)
+}
+
+func plainGroups(repo server.Repository[*core.Group]) server.Repository[*core.Group] {
+	return repo
 }
 
 func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
@@ -370,6 +378,44 @@ func createGroup(t *testing.T, srv *httptest.Server, group *core.Group) core.Gro
 	response := Response(t, srv, request)
 	require.Equal(t, http.StatusCreated, response.StatusCode)
 	return ReadBodyAs[core.Group](t, response)
+}
+
+type userIDs map[string]string
+
+func seedUsers(t *testing.T, srv *httptest.Server, names ...string) userIDs {
+	t.Helper()
+
+	ids := userIDs{}
+	for _, name := range names {
+		ids[name], _ = create(t, srv, &core.User{UserName: name})
+	}
+	return ids
+}
+
+func (ids userIDs) fill(text string) string {
+	for name, id := range ids {
+		text = strings.ReplaceAll(text, name, id)
+	}
+	return text
+}
+
+func (ids userIDs) operations(ops []patch.Operation) []patch.Operation {
+	filled := slices.Clone(ops)
+	for i := range filled {
+		filled[i].Path = ids.fill(filled[i].Path)
+		if filled[i].Value != nil {
+			filled[i].Value = json.RawMessage(ids.fill(string(filled[i].Value)))
+		}
+	}
+	return filled
+}
+
+func (ids userIDs) body(t *testing.T, value any) Option[*http.Request] {
+	t.Helper()
+
+	raw, err := json.Marshal(value)
+	require.NoError(t, err)
+	return WithRequestBody([]byte(ids.fill(string(raw))))
 }
 
 func createWidget(t *testing.T, srv *httptest.Server, w *widget) map[string]any {

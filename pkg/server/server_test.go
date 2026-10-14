@@ -630,6 +630,32 @@ func TestRFC7643GroupResourceSchema(t *testing.T) {
 	})
 }
 
+// RFC 7643 Section 2.3.7: a reference value is the id of an existing resource.
+func TestRFC7643ReferenceValuesExist(t *testing.T) {
+	srv := newTestServer(t)
+	ids := seedUsers(t, srv, "alice")
+	group := createGroup(t, srv, &core.Group{DisplayName: "eng"})
+	post := func(path string, body any) *http.Response {
+		return Response(t, srv, Request(t, srv, http.MethodPost, basePath+path, WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, body)))
+	}
+	asManager := func(id string) *core.User {
+		return &core.User{UserName: "bob" + id, EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: id}}}
+	}
+
+	for name, response := range map[string]*http.Response{
+		"member that does not exist":  post("/Groups", &core.Group{DisplayName: "a", Members: []core.Member{{Value: "missing"}}}),
+		"member by userName":          post("/Groups", &core.Group{DisplayName: "b", Members: []core.Member{{Value: "alice"}}}),
+		"manager that does not exist": post("/Users", asManager("missing")),
+		"manager that is not a User":  post("/Users", asManager(group.ID)),
+	} {
+		require.Equal(t, http.StatusBadRequest, response.StatusCode, name)
+		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType, name)
+	}
+
+	assert.Equal(t, http.StatusCreated, post("/Groups", &core.Group{DisplayName: "c", Members: []core.Member{{Value: ids["alice"]}, {Value: group.ID}}}).StatusCode)
+	assert.Equal(t, http.StatusCreated, post("/Users", asManager(ids["alice"])).StatusCode)
+}
+
 // RFC 7643 4.3 Enterprise User Schema Extension
 func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 	srv := newTestServer(t)
@@ -2041,6 +2067,7 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: every operator applies to each attribute Okta provisions, and ne includes a resource without the attribute.
 	t.Run("filters every attribute Okta provisions with each string operator", func(t *testing.T) {
 		srv := newTestServer(t)
+		manager, _ := create(t, srv, &core.User{UserName: "bob"})
 		primary := true
 		create(t, srv, &core.User{
 			UserName:   "alice",
@@ -2077,10 +2104,9 @@ func TestRFC7644Filtering(t *testing.T) {
 				Organization:   "Wonderland",
 				Division:       "Looking Glass",
 				Department:     "Tea Party",
-				Manager:        &core.Manager{Value: "Mgr-26118915"},
+				Manager:        &core.Manager{Value: manager},
 			},
 		})
-		create(t, srv, &core.User{UserName: "bob"})
 
 		enterprise := string(core.SchemaEnterpriseUser) + ":"
 		for path, value := range map[string]string{
@@ -2114,7 +2140,7 @@ func TestRFC7644Filtering(t *testing.T) {
 			enterprise + "organization":   "Wonderland",
 			enterprise + "division":       "Looking Glass",
 			enterprise + "department":     "Tea Party",
-			enterprise + "manager.value":  "Mgr-26118915",
+			enterprise + "manager.value":  manager,
 		} {
 			flipped := swapCase(value)
 			require.NotEqual(t, value, flipped, path)
@@ -2141,7 +2167,8 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: every operator applies to each Group attribute, and ne includes a resource without the attribute.
 	t.Run("filters every group attribute with each string operator", func(t *testing.T) {
 		srv := newTestServer(t)
-		createGroup(t, srv, &core.Group{DisplayName: "Engineering", Members: []core.Member{{Value: "Alice-1865", Type: "User"}}})
+		member := seedUsers(t, srv, "Alice-1865")["Alice-1865"]
+		createGroup(t, srv, &core.Group{DisplayName: "Engineering", Members: []core.Member{{Value: member, Type: "User"}}})
 		createGroup(t, srv, &core.Group{DisplayName: "ops"})
 		matches := func(filter string) []string {
 			path := basePath + "/Groups?" + url.Values{"filter": {filter}}.Encode()
@@ -2157,7 +2184,7 @@ func TestRFC7644Filtering(t *testing.T) {
 
 		for path, value := range map[string]string{
 			"displayName":   "Engineering",
-			"members.value": "Alice-1865",
+			"members.value": member,
 			"members.type":  "User",
 		} {
 			filters := map[string][]string{
@@ -2767,8 +2794,12 @@ func TestRFC7644Attributes(t *testing.T) {
 
 	// RFC 7644 Section 3.5.2: the server MAY return 204 (No Content) and the appropriate response headers.
 	t.Run("hands the repository a write projection without members when a group patch answers 204", func(t *testing.T) {
-		repository := &projectingRepository[*core.Group]{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas()), attribute: "members"}
-		srv := Server(t, newGroupHandler(t, repository))
+		var repository *projectingRepository[*core.Group]
+		srv := Server(t, newGroupHandler(t, func(r server.Repository[*core.Group]) server.Repository[*core.Group] {
+			repository = &projectingRepository[*core.Group]{Repository: r, attribute: "members"}
+			return repository
+		}))
+		ids := seedUsers(t, srv, "u-1")
 		created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups", WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, core.Group{DisplayName: "eng"})))
 		require.Equal(t, http.StatusCreated, created.StatusCode)
 		id := ReadBodyAs[core.Group](t, created).ID
@@ -2778,7 +2809,7 @@ func TestRFC7644Attributes(t *testing.T) {
 			WithContentType(protocol.MediaType),
 			WithRequestBodyAs(t, protocol.PatchRequest{
 				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"User"}]`)}},
+				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-1","type":"User"}]`))}},
 			}),
 		))
 
@@ -3093,16 +3124,17 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	// RFC 7644 Section 3.5.1: if the service provider has no existing immutable values, the new value(s) SHALL be applied.
 	t.Run("allows assigning an immutable sub-attribute of a group member for the first time", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1"}}}).ID
+		ids := seedUsers(t, srv, "u-1")
+		id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"]}}}).ID
 
 		response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}),
+			WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}}),
 		))
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, []core.Member{{Value: "u-1", Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
+		assert.Equal(t, []core.Member{{Value: ids["u-1"], Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
 	})
 
 	// RFC 7644 Section 3.5.1: values provided for readOnly attributes SHALL be ignored.
@@ -3222,12 +3254,15 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				srv := newTestServer(t)
-				id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{seed}}).ID
+				ids := seedUsers(t, srv, "u-1", "u-2")
+				stored, sent := seed, test.member
+				stored.Value, sent.Value = ids[stored.Value], ids[sent.Value]
+				id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{stored}}).ID
 
 				response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
 					WithBearerToken(validToken),
 					WithContentType(protocol.MediaType),
-					WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{test.member}}),
+					WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{sent}}),
 				))
 
 				require.Equal(t, http.StatusOK, response.StatusCode)
@@ -3245,21 +3280,23 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 	t.Run("group member replace is idempotent", func(t *testing.T) {
 		t.Run("PUT re-sending an existing member by value alone keeps its stored type", func(t *testing.T) {
 			srv := newTestServer(t)
-			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}).ID
+			ids := seedUsers(t, srv, "u-1")
+			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}}).ID
 
 			response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
 				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
-				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1"}}}),
+				WithRequestBodyAs(t, core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"]}}}),
 			))
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
-			assert.Equal(t, []core.Member{{Value: "u-1", Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
+			assert.Equal(t, []core.Member{{Value: ids["u-1"], Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
 		})
 
 		t.Run("PATCH replace members with an already-present value and no type keeps the stored type", func(t *testing.T) {
 			srv := newTestServer(t)
-			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}).ID
+			ids := seedUsers(t, srv, "u-1")
+			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}}).ID
 
 			response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
 				WithBearerToken(validToken),
@@ -3267,13 +3304,13 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 				WithRequestBodyAs(t, protocol.PatchRequest{
 					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
 					Operations: []patch.Operation{
-						{Op: patch.OpReplace, Path: "members", Value: json.RawMessage(`[{"value":"u-1"}]`)},
+						{Op: patch.OpReplace, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-1"}]`))},
 					},
 				}),
 			))
 
 			require.Equal(t, http.StatusOK, response.StatusCode)
-			assert.Equal(t, []core.Member{{Value: "u-1", Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
+			assert.Equal(t, []core.Member{{Value: ids["u-1"], Type: "User"}}, ReadBodyAs[core.Group](t, response).Members)
 		})
 
 		t.Run("a resend that omits type does not waive mutability for a later request", func(t *testing.T) {
@@ -3282,7 +3319,8 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 		t.Run("PATCH remove of an immutable sub-attribute of a matched member is still a mutability error", func(t *testing.T) {
 			srv := newTestServer(t)
-			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}).ID
+			ids := seedUsers(t, srv, "u-1")
+			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}}).ID
 
 			response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
 				WithBearerToken(validToken),
@@ -3290,7 +3328,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 				WithRequestBodyAs(t, protocol.PatchRequest{
 					Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
 					Operations: []patch.Operation{
-						{Op: patch.OpRemove, Path: `members[value eq "u-1"].type`},
+						{Op: patch.OpRemove, Path: ids.fill(`members[value eq "u-1"].type`)},
 					},
 				}),
 			))
@@ -3303,14 +3341,15 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		for _, path := range []string{"members.value", `members[value eq "u-1"].value`} {
 			t.Run("PATCH remove of the member value sub-attribute itself is a mutability error: "+path, func(t *testing.T) {
 				srv := newTestServer(t)
-				id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}).ID
+				ids := seedUsers(t, srv, "u-1", "u-2")
+				id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}}).ID
 
 				response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
 					WithBearerToken(validToken),
 					WithContentType(protocol.MediaType),
 					WithRequestBodyAs(t, protocol.PatchRequest{
 						Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-						Operations: []patch.Operation{{Op: patch.OpRemove, Path: path}},
+						Operations: []patch.Operation{{Op: patch.OpRemove, Path: ids.fill(path)}},
 					}),
 				))
 
@@ -3327,14 +3366,15 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		} {
 			t.Run("PATCH replace that changes the member value sub-attribute is a mutability error: "+op.Path, func(t *testing.T) {
 				srv := newTestServer(t)
-				id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}).ID
+				ids := seedUsers(t, srv, "u-1")
+				id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}}).ID
 
 				response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
 					WithBearerToken(validToken),
 					WithContentType(protocol.MediaType),
 					WithRequestBodyAs(t, protocol.PatchRequest{
 						Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-						Operations: []patch.Operation{op},
+						Operations: []patch.Operation{{Op: op.Op, Path: ids.fill(op.Path), Value: json.RawMessage(ids.fill(string(op.Value)))}},
 					}),
 				))
 
@@ -3345,14 +3385,15 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 		t.Run("PATCH remove of an unassigned immutable sub-attribute of a matched member is a no-op", func(t *testing.T) {
 			srv := newTestServer(t)
-			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1"}}}).ID
+			ids := seedUsers(t, srv, "u-1")
+			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"]}}}).ID
 
 			response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
 				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, protocol.PatchRequest{
 					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-					Operations: []patch.Operation{{Op: patch.OpRemove, Path: `members[value eq "u-1"].type`}},
+					Operations: []patch.Operation{{Op: patch.OpRemove, Path: ids.fill(`members[value eq "u-1"].type`)}},
 				}),
 			))
 
@@ -3361,13 +3402,14 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 		t.Run("resending a member by value and display alone twice keeps $ref and type", func(t *testing.T) {
 			srv := newTestServer(t)
-			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User", Ref: "https://example.com/v2/Users/u-1"}}}).ID
+			ids := seedUsers(t, srv, "u-1")
+			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User", Ref: "https://example.com/v2/Users/u-1"}}}).ID
 
 			resend := func() *http.Response {
 				return Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
 					WithBearerToken(validToken),
 					WithContentType(protocol.MediaType),
-					WithRequestBody([]byte(`{"displayName":"eng","members":[{"value":"u-1","display":"alice@example.com"}]}`)),
+					WithRequestBody([]byte(ids.fill(`{"displayName":"eng","members":[{"value":"u-1","display":"alice@example.com"}]}`))),
 				))
 			}
 
@@ -3376,25 +3418,26 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 
 			second := resend()
 			require.Equal(t, http.StatusOK, second.StatusCode)
-			assert.Equal(t, []core.Member{{Value: "u-1", Type: "User", Ref: "https://example.com/v2/Users/u-1"}}, ReadBodyAs[core.Group](t, second).Members)
+			assert.Equal(t, []core.Member{{Value: ids["u-1"], Type: "User", Ref: "https://example.com/v2/Users/u-1"}}, ReadBodyAs[core.Group](t, second).Members)
 		})
 	})
 
 	// RFC 7644 Section 3.5.1: if an immutable value is already set, the input value(s) MUST match.
 	t.Run("group member mutability is linear in member count", func(t *testing.T) {
 		srv := newTestServer(t)
+		dup := seedUsers(t, srv, "dup")["dup"]
 		grow := func(n int) time.Duration {
 			original := make([]core.Member, n)
 			for i := range original {
-				original[i] = core.Member{Value: "dup", Type: "User"}
+				original[i] = core.Member{Value: dup, Type: "User"}
 			}
 			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: original}).ID
 
 			changed := make([]core.Member, n)
 			for i := range changed {
-				changed[i] = core.Member{Value: "dup", Type: "Group"}
+				changed[i] = core.Member{Value: dup, Type: "Group"}
 			}
-			changed[n-1] = core.Member{Value: "dup", Type: "User"}
+			changed[n-1] = core.Member{Value: dup, Type: "User"}
 			start := time.Now()
 			response := Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
 				WithBearerToken(validToken),
@@ -3552,15 +3595,16 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7644 Section 3.5.2: a server MAY return 204 with no body for a successful PATCH.
 	t.Run("returns 204 with an ETag for a group member add or remove, and is case-insensitive about the op and the path", func(t *testing.T) {
 		srv := newTestServer(t)
-		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})
+		ids := seedUsers(t, srv, "u-1", "u-2", "u-3")
+		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}})
 
 		for _, test := range []struct {
 			name string
 			op   patch.Operation
 		}{
-			{"add", patch.Operation{Op: patch.OpAdd, Path: "Members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
-			{"add with a capitalized op", patch.Operation{Op: patch.Op("Add"), Path: "members", Value: json.RawMessage(`[{"value":"u-3","type":"User"}]`)}},
-			{"remove", patch.Operation{Op: patch.OpRemove, Path: `MEMBERS[value eq "u-2"]`}},
+			{"add", patch.Operation{Op: patch.OpAdd, Path: "Members", Value: json.RawMessage(ids.fill(`[{"value":"u-2","type":"User"}]`))}},
+			{"add with a capitalized op", patch.Operation{Op: patch.Op("Add"), Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-3","type":"User"}]`))}},
+			{"remove", patch.Operation{Op: patch.OpRemove, Path: ids.fill(`MEMBERS[value eq "u-2"]`)}},
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
@@ -3584,7 +3628,8 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7644 Section 3.5.2: the server MUST return 200 if the "attributes" parameter is specified.
 	t.Run("returns 200 with a body for a group member patch when attributes or excludedAttributes is requested", func(t *testing.T) {
 		srv := newTestServer(t)
-		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})
+		ids := seedUsers(t, srv, "u-1", "u-2")
+		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}})
 
 		for _, query := range []string{"?attributes=displayName", "?excludedAttributes=displayName"} {
 			t.Run(query, func(t *testing.T) {
@@ -3593,7 +3638,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 					WithContentType(protocol.MediaType),
 					WithRequestBodyAs(t, protocol.PatchRequest{
 						Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-						Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}},
+						Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-2","type":"User"}]`))}},
 					}),
 				))
 
@@ -3608,7 +3653,8 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7644 Section 3.5.2: 204 is scoped to a patch where every operation touches only "members".
 	t.Run("returns 200 with a body when a group member patch is mixed with a non-member operation", func(t *testing.T) {
 		srv := newTestServer(t)
-		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})
+		ids := seedUsers(t, srv, "u-1", "u-2")
+		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}})
 
 		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
 			WithBearerToken(validToken),
@@ -3616,7 +3662,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			WithRequestBodyAs(t, protocol.PatchRequest{
 				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
 				Operations: []patch.Operation{
-					{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)},
+					{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-2","type":"User"}]`))},
 					{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"renamed"`)},
 				},
 			}),
@@ -3631,14 +3677,15 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7644 Section 3.5.2: a path-less replace is a different operation shape and does not qualify for 204.
 	t.Run("returns 200 with a body for a path-less replace that only sets members", func(t *testing.T) {
 		srv := newTestServer(t)
-		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})
+		ids := seedUsers(t, srv, "u-1", "u-2")
+		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}})
 
 		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 			WithRequestBodyAs(t, protocol.PatchRequest{
 				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpReplace, Value: json.RawMessage(`{"members":[{"value":"u-2","type":"User"}]}`)}},
+				Operations: []patch.Operation{{Op: patch.OpReplace, Value: json.RawMessage(ids.fill(`{"members":[{"value":"u-2","type":"User"}]}`))}},
 			}),
 		))
 
@@ -4046,14 +4093,15 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				srv := newTestServer(t, withUserAttributes(immutableEmployeeNumber))
-				created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+test.endpoint, WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, test.resource)))
+				ids := seedUsers(t, srv, "u-1", "u-2", "u-3")
+				created := Response(t, srv, Request(t, srv, http.MethodPost, basePath+test.endpoint, WithBearerToken(validToken), WithContentType(protocol.MediaType), ids.body(t, test.resource)))
 				require.Equal(t, http.StatusCreated, created.StatusCode)
 				id, _ := ReadBodyAs[map[string]any](t, created)["id"].(string)
 
 				request := Request(t, srv, http.MethodPatch, basePath+test.endpoint+"/"+id,
 					WithBearerToken(validToken),
 					WithContentType(protocol.MediaType),
-					WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{test.op}}),
+					ids.body(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{test.op}}),
 				)
 
 				response := Response(t, srv, request)
@@ -4068,13 +4116,14 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7644 Section 3.5.2.1: if the user was already a member of this group, no changes should be made to the resource.
 	t.Run("adding a group member that repeats a value with another type is a no-op", func(t *testing.T) {
 		srv := newTestServer(t)
-		id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}).ID
+		ids := seedUsers(t, srv, "u-1")
+		id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}}).ID
 
 		response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+id,
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 			WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{
-				{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"Group"}]`)},
+				{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-1","type":"Group"}]`))},
 			}}),
 		))
 		require.Equal(t, http.StatusNoContent, response.StatusCode)
@@ -4199,11 +4248,14 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 
 	// RFC 7643 Section 4.2: while values MAY be added or removed, sub-attributes of members are "immutable".
 	t.Run("group member patch", func(t *testing.T) {
-		newGroupServer := func(t *testing.T) *httptest.Server {
+		newGroupServer := func(t *testing.T) (*httptest.Server, userIDs) {
 			t.Helper()
-			return Server(t, newGroupHandler(t, server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())))
+			srv := Server(t, newGroupHandler(t, plainGroups))
+			return srv, seedUsers(t, srv, "u-1", "u-2")
 		}
-		eng := &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}}
+		eng := func(ids userIDs) *core.Group {
+			return &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}}
+		}
 		patchMembers := func(t *testing.T, srv *httptest.Server, id string, ops []patch.Operation, options ...Option[*http.Request]) *http.Response {
 			t.Helper()
 			options = append([]Option[*http.Request]{
@@ -4246,23 +4298,27 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 			},
 		} {
 			t.Run(scenario.name, func(t *testing.T) {
-				srv := newGroupServer(t)
-				group := createGroup(t, srv, eng)
+				srv, ids := newGroupServer(t)
+				group := createGroup(t, srv, eng(ids))
+				expected := slices.Clone(scenario.expectedMembers)
+				for i := range expected {
+					expected[i].Value = ids[expected[i].Value]
+				}
 
-				response := patchMembers(t, srv, group.ID, scenario.ops)
+				response := patchMembers(t, srv, group.ID, ids.operations(scenario.ops))
 				require.Equal(t, http.StatusNoContent, response.StatusCode)
 				assert.NotEmpty(t, response.Header.Get("ETag"))
 
 				fetched := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Groups/"+group.ID, WithBearerToken(validToken)))
 				patched := ReadBodyAs[core.Group](t, fetched)
-				assert.ElementsMatch(t, scenario.expectedMembers, patched.Members)
+				assert.ElementsMatch(t, expected, patched.Members)
 			})
 		}
 
 		t.Run("a valid member add on an unknown id is a 404", func(t *testing.T) {
-			srv := newGroupServer(t)
+			srv, ids := newGroupServer(t)
 
-			response := patchMembers(t, srv, "does-not-exist", []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}})
+			response := patchMembers(t, srv, "does-not-exist", []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-2","type":"User"}]`))}})
 
 			require.Equal(t, http.StatusNotFound, response.StatusCode)
 		})
@@ -4274,10 +4330,10 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 
 		// RFC 7643 Section 2.2: an added member's "type" must be a canonical value.
 		t.Run("rejects an added member whose type is not canonical", func(t *testing.T) {
-			srv := newGroupServer(t)
-			group := createGroup(t, srv, eng)
+			srv, ids := newGroupServer(t)
+			group := createGroup(t, srv, eng(ids))
 
-			response := patchMembers(t, srv, group.ID, []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"Bogus"}]`)}})
+			response := patchMembers(t, srv, group.ID, []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-2","type":"Bogus"}]`))}})
 
 			require.Equal(t, http.StatusBadRequest, response.StatusCode)
 			assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
@@ -4285,8 +4341,8 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 
 		// RFC 7643 Section 2.3: an added member whose "value" is not a string is a 4xx, not a raw decode error.
 		t.Run("rejects an added member whose value is the wrong type", func(t *testing.T) {
-			srv := newGroupServer(t)
-			group := createGroup(t, srv, eng)
+			srv, ids := newGroupServer(t)
+			group := createGroup(t, srv, eng(ids))
 
 			response := patchMembers(t, srv, group.ID, []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":123}]`)}})
 
@@ -4294,10 +4350,10 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 		})
 
 		t.Run("rejects a member add with a stale If-Match", func(t *testing.T) {
-			srv := newGroupServer(t)
-			group := createGroup(t, srv, eng)
+			srv, ids := newGroupServer(t)
+			group := createGroup(t, srv, eng(ids))
 
-			response := patchMembers(t, srv, group.ID, []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-2","type":"User"}]`)}}, WithHeader("If-Match", `W/"stale"`))
+			response := patchMembers(t, srv, group.ID, []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-2","type":"User"}]`))}}, WithHeader("If-Match", `W/"stale"`))
 
 			require.Equal(t, http.StatusPreconditionFailed, response.StatusCode)
 		})
@@ -4406,14 +4462,15 @@ func TestRFC7644AddOperation(t *testing.T) {
 	// RFC 7644 Section 3.5.2.1: if the target location already contains the value specified, no changes SHOULD be made, and the modify timestamp SHALL NOT change.
 	t.Run("does not append a group member the target location already contains, and leaves meta.lastModified unchanged", func(t *testing.T) {
 		srv := newTestServer(t)
-		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})
+		ids := seedUsers(t, srv, "u-1")
+		group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}})
 
 		request := Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
 			WithRequestBodyAs(t, protocol.PatchRequest{
 				Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"u-1","type":"User"}]`)}},
+				Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-1","type":"User"}]`))}},
 			}),
 		)
 		response := Response(t, srv, request)
@@ -4439,14 +4496,15 @@ func TestRFC7644AddOperation(t *testing.T) {
 	} {
 		t.Run("leaves meta.version unchanged when "+tc.name, func(t *testing.T) {
 			srv := newTestServer(t)
-			group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: "u-1", Type: "User"}}})
+			ids := seedUsers(t, srv, "u-1")
+			group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"], Type: "User"}}})
 
 			Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+group.ID,
 				WithBearerToken(validToken),
 				WithContentType(protocol.MediaType),
 				WithRequestBodyAs(t, protocol.PatchRequest{
 					Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-					Operations: []patch.Operation{{Op: tc.op, Path: "members", Value: json.RawMessage(tc.body)}},
+					Operations: []patch.Operation{{Op: tc.op, Path: "members", Value: json.RawMessage(ids.fill(tc.body))}},
 				}),
 			))
 

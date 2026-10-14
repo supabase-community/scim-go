@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -67,19 +68,25 @@ func BenchmarkServerPatchManyAddresses(b *testing.B) {
 
 func BenchmarkGroupWrites(b *testing.B) {
 	for _, n := range []int{100, 1000, 10000} {
-		repo := &timedGroupRepository{Repository: server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())}
-		handler := newGroupHandler(b, repo)
-		group := benchGroup(n, "seed")
+		var repo *timedGroupRepository
+		handler := newGroupHandler(b, func(r server.Repository[*core.Group]) server.Repository[*core.Group] {
+			repo = &timedGroupRepository{Repository: r}
+			return repo
+		})
+		group := &core.Group{DisplayName: "bench"}
+		for i := range n {
+			group.Members = append(group.Members, core.Member{Value: benchUserID(b, handler, "seed"+strconv.Itoa(i))})
+		}
 		location := serve(b, handler, http.MethodPost, basePath+"/Groups", benchBody(b, group), http.StatusCreated).Header().Get("Location")
-		joined := benchGroup(n, "seed")
-		joined.Members = append(joined.Members, core.Member{Value: "toggle", Ref: "https://example.com/Users/toggle", Type: "User"})
+		toggle := benchUserID(b, handler, "toggle")
+		joined := &core.Group{DisplayName: "bench", Members: append(slices.Clone(group.Members), core.Member{Value: toggle})}
 		for _, c := range []struct {
 			name   string
 			method string
 			bodies [2][]byte
 			status int
 		}{
-			{"PATCH add-remove member", http.MethodPatch, [2][]byte{patchBody(b, patch.OpAdd, "members", `{"value":"toggle","$ref":"https://example.com/Users/toggle","type":"User"}`), patchBody(b, patch.OpRemove, `members[value eq "toggle"]`, "")}, http.StatusNoContent},
+			{"PATCH add-remove member", http.MethodPatch, [2][]byte{patchBody(b, patch.OpAdd, "members", `{"value":"`+toggle+`"}`), patchBody(b, patch.OpRemove, `members[value eq "`+toggle+`"]`, "")}, http.StatusNoContent},
 			{"PATCH displayName", http.MethodPatch, [2][]byte{patchBody(b, patch.OpReplace, "displayName", `"engineering"`), patchBody(b, patch.OpReplace, "displayName", `"platform"`)}, http.StatusOK},
 			{"PUT add-remove member", http.MethodPut, [2][]byte{benchBody(b, joined), benchBody(b, group)}, http.StatusOK},
 			{"GET", http.MethodGet, [2][]byte{}, http.StatusOK},
@@ -141,15 +148,6 @@ func patchBody(b *testing.B, op patch.Op, path, value string) []byte {
 		operation.Value = json.RawMessage(value)
 	}
 	return benchBody(b, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{operation}})
-}
-
-func benchGroup(n int, prefix string) *core.Group {
-	members := make([]core.Member, n)
-	for i := range members {
-		value := prefix + strconv.Itoa(i)
-		members[i] = core.Member{Value: value, Ref: "https://example.com/Users/" + value, Type: "User"}
-	}
-	return &core.Group{DisplayName: "bench", Members: members}
 }
 
 func patchAddresses(n int, prefix string) patch.Operation {
