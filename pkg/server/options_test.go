@@ -240,6 +240,21 @@ func TestWithRepository(t *testing.T) {
 	assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
 }
 
+func TestWithRepositoryFunc(t *testing.T) {
+	var location string
+	var schemas core.Schemas
+	server.New(basePath, fullServiceProviderConfig(), server.WithBaseURL("https://example.com/scim/v2"), server.WithResource(
+		server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
+			WithRepositoryFunc(func(resource *server.Resource[*core.User]) server.Repository[*core.User] {
+				location, schemas = resource.Location(), resource.Schemas()
+				return server.NewRepository[*core.User](location, schemas)
+			}),
+	))
+
+	assert.Equal(t, "https://example.com/scim/v2/Users", location)
+	assert.Equal(t, "https://example.com/scim/v2/Schemas/"+string(core.SchemaUser), schemas.Base().Meta.Location)
+}
+
 type tenantKey struct{}
 
 type tenantRepository struct {
