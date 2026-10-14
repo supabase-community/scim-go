@@ -50,9 +50,9 @@ func (p *patcher) write(root core.Object, kind Op, op Operation) error {
 		}
 		return p.mergeRoot(root, values, kind)
 	}
-	path, err := filter.NewPath(op.Path)
+	path, err := parsePath(op.Path)
 	if err != nil {
-		return scimerrors.ErrInvalidPath(scimerrors.InvalidPath.Description())
+		return err
 	}
 	if len(op.Value) == 0 {
 		return scimerrors.ErrInvalidValue(`"value" is required for "add" and "replace"`)
@@ -79,15 +79,15 @@ func (p *patcher) remove(root core.Object, op Operation) error {
 	if op.hasValue() {
 		return scimerrors.ErrInvalidSyntax(`"remove" does not take a "value"`)
 	}
-	path, err := filter.NewPath(op.Path)
+	path, err := parsePath(op.Path)
 	if err != nil {
-		return scimerrors.ErrInvalidPath(scimerrors.InvalidPath.Description())
+		return err
 	}
 	target, err := p.target(root, path)
 	if err != nil {
 		return err
 	}
-	return target.remove()
+	return target.remover().run()
 }
 
 // RFC 7644 Section 3.5.2.1: if "path" is omitted, the target location is assumed to be the resource itself.
@@ -150,6 +150,7 @@ func (p *patcher) target(root core.Object, path filter.Path) (*target, error) {
 	}
 	t := &target{root: root, extension: p.extension(path), parent: parent, path: path, budget: p.budget, indexes: p.indexes}
 	if path.ValueFilter != nil {
+		t.filter = filterState{parent: parent, budget: p.budget}
 		if t.filter.match, t.filter.clauses, err = compile(parent, path.ValueFilter); err != nil {
 			return nil, err
 		}
@@ -169,6 +170,14 @@ func (p *patcher) extension(path filter.Path) string {
 		return string(schema.ID)
 	}
 	return ""
+}
+
+func parsePath(raw string) (filter.Path, error) {
+	path, err := filter.NewPath(raw)
+	if err != nil {
+		return path, scimerrors.ErrInvalidPath(scimerrors.InvalidPath.Description())
+	}
+	return path, nil
 }
 
 func resolve(schemas core.Schemas, path filter.Path) (*core.Attribute, error) {

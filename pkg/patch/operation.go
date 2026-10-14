@@ -5,6 +5,15 @@ import (
 	"encoding/json"
 )
 
+// Op is the kind of modification in a PATCH operation, per RFC 7644, Section 3.5.2.
+type Op string
+
+const (
+	OpAdd     Op = "add"
+	OpRemove  Op = "remove"
+	OpReplace Op = "replace"
+)
+
 // Operation is a single modification within a PATCH request, per RFC 7644, Section 3.5.2.
 type Operation struct {
 	Op    Op              `json:"op"`
