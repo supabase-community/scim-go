@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.15.2](https://github.com/supabase-community/scim-go/compare/v0.15.1...v0.15.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* **patch:** correct write budget error text ([1d10113](https://github.com/supabase-community/scim-go/commit/1d1011376175df19e8295e4b3c9c232428dfe0d1))
+* **patch:** dedupe multi-valued values on add and replace ([951d54f](https://github.com/supabase-community/scim-go/commit/951d54f3cf6e282d91cab21e0dff86d1942b9dbf))
+* **server:** dedupe members and accept unprovisioned manager ([ef3a738](https://github.com/supabase-community/scim-go/commit/ef3a73879010c995dfafa8927b5ad7c49be15b71))
+* **server:** drop deleted resources from single-valued references ([03fa6cc](https://github.com/supabase-community/scim-go/commit/03fa6cc6411e8dd51bf9245f574c1a8c7aad52cc))
+* **server:** refresh only changed members on group write ([2ec6b40](https://github.com/supabase-community/scim-go/commit/2ec6b40d5fcdcd4faa19f47afb9e870ace1d321b))
+* **server:** reject members and manager that do not exist ([e6c8e73](https://github.com/supabase-community/scim-go/commit/e6c8e73984c3afaf22f1dad481a7ef86dce2d940))
+* **server:** return an error when a stored resource has the wrong type ([45139e6](https://github.com/supabase-community/scim-go/commit/45139e6fd08ad292b55a3f45ace621e29c9374e9))
+* **server:** stop storing and returning optional reference sub-attributes ([1064133](https://github.com/supabase-community/scim-go/commit/10641332580d8e7a6ddd20b602a59a3f5b9c00a4))
+* **value:** keep primary when a repeated value is dropped ([6f147f7](https://github.com/supabase-community/scim-go/commit/6f147f7570fac772465903a6e4468c22bbf95cd9))
+
+
+### Performance Improvements
+
+* **value:** skip dedupe for lists of fewer than two ([5367966](https://github.com/supabase-community/scim-go/commit/5367966d13a6c98c0d626ce1f06db20b6a15f757))
+
 ## [0.15.1](https://github.com/supabase-community/scim-go/compare/v0.15.0...v0.15.1) (2026-10-13)
 
 
