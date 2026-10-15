@@ -72,11 +72,6 @@ func TestValue(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a type mismatch", func(t *testing.T) {
-		_, err := decode.JSON[int]([]byte(`"text"`))
-		assert.Error(t, err)
-	})
-
 	t.Run("rejects text that is not well formed UTF-8", func(t *testing.T) {
 		for _, raw := range []string{"{\"a\":\"b\xffc\"}", `{"bad":"\ud800"}`} {
 			_, err := decode.Value([]byte(raw))
@@ -111,6 +106,13 @@ func TestValue(t *testing.T) {
 
 		copy(raw, bytes.Repeat([]byte("x"), len(raw)))
 		assert.Equal(t, map[string]any{"name": "before"}, got)
+	})
+}
+
+func TestJSON(t *testing.T) {
+	t.Run("rejects a type mismatch", func(t *testing.T) {
+		_, err := decode.JSON[int]([]byte(`"text"`))
+		assert.Error(t, err)
 	})
 }
 
