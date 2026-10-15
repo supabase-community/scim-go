@@ -1,3 +1,4 @@
+// Package server provides the building blocks of a SCIM 2.0 HTTP server, per RFC 7644. Experimental API.
 package server
 
 import (

@@ -1,3 +1,4 @@
+// Package patch applies SCIM PATCH operations to resources, per RFC 7644 Section 3.5.2.
 package patch
 
 import (

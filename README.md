@@ -17,7 +17,7 @@ SCIM_BEARER_TOKEN=secret go run github.com/supabase-community/scim-go/cmd/scimd@
 curl -X POST http://localhost:8080/scim/v2/Users \
   -H "Authorization: Bearer secret" \
   -H "Content-Type: application/scim+json" \
-  -d '{"userName":"alice"}'
+  -d '{"userName":"bjensen"}'
 ```
 
 `scimd` is a demo of the library. It is not meant for production.

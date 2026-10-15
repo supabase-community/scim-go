@@ -1,3 +1,4 @@
+// Package scimerrors defines SCIM error responses, per RFC 7644 Section 3.12.
 package scimerrors
 
 import "net/http"
