@@ -42,7 +42,7 @@ func DecodePatchRequest(body io.Reader) (*PatchRequest, error) {
 	return req, nil
 }
 
-// Patch applies the operations to document in place and returns the resource it describes; RFC 7644 Section 3.5.2: a PATCH request SHALL be treated as atomic.
+// Patch applies the operations to document in place and returns the resource it describes; RFC 7644 Section 3.5.2 atomicity needs the caller to discard document on error.
 func (r *PatchRequest) Patch[T any](document core.Object, schemas core.Schemas, opts ...patch.Option) (T, error) {
 	if err := patch.Apply(document, r.Operations, schemas, opts...); err != nil {
 		var zero T
