@@ -63,7 +63,8 @@ func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) (
 	total := len(matching)
 	start := min(query.Offset(), total)
 	items := []T{}
-	for _, rec := range matching[start:min(start+query.Count, total)] {
+	end := start + min(max(query.Count, 0), total-start)
+	for _, rec := range matching[start:end] {
 		copied, err := cast[T](clone(rec))
 		if err != nil {
 			return []T{}, 0, err

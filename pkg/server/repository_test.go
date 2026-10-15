@@ -2,12 +2,14 @@ package server_test
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
@@ -36,6 +38,33 @@ func TestRepositoryUniqueness(t *testing.T) {
 			_, err = repository.Create(context.Background(), tc.second)
 
 			assert.ErrorIs(t, err, scimerrors.ErrUniqueness(""))
+		})
+	}
+}
+
+func TestRepositoryListBounds(t *testing.T) {
+	cases := []struct {
+		name  string
+		query *protocol.SearchRequest
+		want  int
+	}{
+		{"negative count", &protocol.SearchRequest{StartIndex: 1, Count: -1}, 0},
+		{"count past the end", &protocol.SearchRequest{StartIndex: 2, Count: math.MaxInt}, 1},
+		{"start past the end", &protocol.SearchRequest{StartIndex: 10, Count: 5}, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			repository := server.NewRepository[*core.User](basePath+"/Users", userSchemas())
+			for _, name := range []string{"a", "b"} {
+				_, err := repository.Create(context.Background(), &core.User{UserName: name})
+				require.NoError(t, err)
+			}
+
+			items, total, err := repository.List(context.Background(), tc.query)
+
+			require.NoError(t, err)
+			assert.Equal(t, 2, total)
+			assert.Len(t, items, tc.want)
 		})
 	}
 }
