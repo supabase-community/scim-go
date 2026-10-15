@@ -178,7 +178,7 @@ func (d *database) known(ids []string) []string {
 }
 
 func (d *database) verifyIds(field field, ids []string) error {
-	types := refOf(field.Attribute).ReferenceTypes
+	types := field.Attribute.SubAttribute("$ref").ReferenceTypes
 	for _, id := range ids {
 		target, ok := d.resources[id].(record)
 		if !ok || !slices.Contains(types, target.Common().Meta.ResourceType.Reference()) {
@@ -298,7 +298,7 @@ func (d *database) fill(object core.Object, field field, target string) {
 
 // RFC 7643 Section 4.1.2: groups is readOnly, derived from Group membership.
 func (d *database) referrers(field field, target string) []any {
-	types := refOf(field.Attribute).ReferenceTypes
+	types := field.Attribute.SubAttribute("$ref").ReferenceTypes
 	elements := []any{}
 	for _, source := range slices.Sorted(maps.Keys(d.references[target])) {
 		rec, ok := d.resources[source].(record)
@@ -414,11 +414,11 @@ func idsOf(elements []any) []string {
 }
 
 func sourceFields(scope core.Schemas) fields {
-	return referenceFields(scope, false)
+	return referenceFields(scope, func(r core.ReferenceAttribute) bool { return r.MultiValued && r.InverseOf == "" })
 }
 
 func derivedFields(scope core.Schemas) fields {
-	return referenceFields(scope, true)
+	return referenceFields(scope, func(r core.ReferenceAttribute) bool { return r.InverseOf != "" })
 }
 
 func derives(scope core.Schemas) bool {
@@ -426,13 +426,9 @@ func derives(scope core.Schemas) bool {
 }
 
 func pointerFields(scope core.Schemas) fields {
-	matching := fields{}
-	for _, field := range newFields(scope) {
-		if field.parent == nil && !field.MultiValued && field.Type == core.TypeComplex && refOf(field.Attribute) != nil && len(readOnlySubs(field.Attribute)) > 0 {
-			matching = append(matching, field)
-		}
-	}
-	return matching
+	return referenceFields(scope, func(r core.ReferenceAttribute) bool {
+		return !r.MultiValued && len(readOnlySubs(r.Attribute)) > 0
+	})
 }
 
 func readOnlySubs(attribute *core.Attribute) []*core.Attribute {
@@ -445,23 +441,15 @@ func readOnlySubs(attribute *core.Attribute) []*core.Attribute {
 	return subs
 }
 
-func referenceFields(scope core.Schemas, readOnly bool) fields {
+func referenceFields(scope core.Schemas, match func(core.ReferenceAttribute) bool) fields {
+	all := newFields(scope)
 	matching := fields{}
-	for _, field := range newFields(scope) {
-		if field.isList() && field.Type == core.TypeComplex && refOf(field.Attribute) != nil && (field.Mutability == core.MutabilityReadOnly) == readOnly {
+	for _, reference := range scope.ReferenceAttributes() {
+		if field, ok := all.lookup(reference.Attribute); ok && match(reference) {
 			matching = append(matching, field)
 		}
 	}
 	return matching
-}
-
-func refOf(attribute *core.Attribute) *core.Attribute {
-	for _, sub := range attribute.SubAttributes {
-		if sub.Name == "$ref" {
-			return sub
-		}
-	}
-	return nil
 }
 
 func indexKeys(rec record, unique fields) []indexKey {

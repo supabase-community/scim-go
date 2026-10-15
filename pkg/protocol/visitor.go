@@ -63,7 +63,7 @@ func (r *visitor[Output]) VisitPresence(path filter.AttrPath) (Output, error) {
 	if err := r.conceal(r.parent(path), attribute, filter.OpPresent); err != nil {
 		return zero, err
 	}
-	return r.inner.Present(newAttribute(attribute, path, r.scope))
+	return r.inner.Present(newAttribute(r.schemas, attribute, path, r.scope))
 }
 
 func (r *visitor[Output]) VisitAnd(left, right Output) (Output, error) {
@@ -87,7 +87,7 @@ func (r *visitor[Output]) VisitValuePath(path filter.AttrPath, valueFilter func(
 	if !attribute.MultiValued {
 		return zero, invalidFilter()
 	}
-	return r.inner.ValuePath(newAttribute(attribute, path, nil), r.scoped(attribute, valueFilter))
+	return r.inner.ValuePath(newAttribute(r.schemas, attribute, path, nil), r.scoped(attribute, valueFilter))
 }
 
 func (r *visitor[Output]) scoped(attribute *core.Attribute, valueFilter func() (Output, error)) func() (Output, error) {
@@ -150,7 +150,7 @@ func (r *visitor[Output]) compare(path filter.AttrPath, op filter.Operator, lite
 	if !ok {
 		return zero, scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
 	}
-	return r.inner.Compare(newAttribute(attribute, path, r.scope), op, coerced)
+	return r.inner.Compare(newAttribute(r.schemas, attribute, path, r.scope), op, coerced)
 }
 
 // RFC 7643 Section 4.1.1: a password is used to "compare (i.e., filter for equality)".

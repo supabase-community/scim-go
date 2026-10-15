@@ -45,23 +45,23 @@ func (s *SearchRequest) Validate(schemas core.Schemas) error {
 		}
 	}
 	if s.SortBy != "" {
-		_, _, err := s.SortAttribute(schemas)
+		_, err := s.SortAttribute(schemas)
 		return err
 	}
 	return nil
 }
 
-// SortAttribute resolves sortBy to its attribute and that attribute's parent, per RFC 7644, Section 3.4.2.3.
-func (s *SearchRequest) SortAttribute(schemas core.Schemas) (parent, attribute *core.Attribute, err error) {
+// SortAttribute resolves sortBy to its attribute, per RFC 7644, Section 3.4.2.3.
+func (s *SearchRequest) SortAttribute(schemas core.Schemas) (*Attribute, error) {
 	path, err := filter.NewAttrPath(s.SortBy)
 	if err != nil {
-		return nil, nil, scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
+		return nil, scimerrors.ErrInvalidValue(scimerrors.InvalidValue.Description())
 	}
 	parent, ok := schemas.Resolve(core.SchemaURI(path.URI), path.Name, "")
 	if !ok {
-		return nil, nil, scimerrors.ErrInvalidValue("Unknown sortBy")
+		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
-	attribute = parent
+	attribute := parent
 	switch {
 	case path.SubAttribute != "":
 		attribute = parent.SubAttribute(path.SubAttribute)
@@ -69,16 +69,16 @@ func (s *SearchRequest) SortAttribute(schemas core.Schemas) (parent, attribute *
 		attribute = parent.SubAttribute("value")
 	}
 	if attribute == nil {
-		return nil, nil, scimerrors.ErrInvalidValue("Unknown sortBy")
+		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
 	if value.Hidden(parent, attribute) {
-		return nil, nil, scimerrors.ErrInvalidValue(`"sortBy" must not name a writeOnly or returned "never" attribute`)
+		return nil, scimerrors.ErrInvalidValue(`"sortBy" must not name a writeOnly or returned "never" attribute`)
 	}
 	// RFC 7644 Section 3.4.2.3: a complex "sortBy" must be a path to a sub-attribute.
 	if attribute.Type == core.TypeComplex {
-		return nil, nil, scimerrors.ErrInvalidValue(`"sortBy" must name a sub-attribute of a complex attribute`)
+		return nil, scimerrors.ErrInvalidValue(`"sortBy" must name a sub-attribute of a complex attribute`)
 	}
-	return parent, attribute, nil
+	return newAttribute(schemas, attribute, path, nil), nil
 }
 
 func (s *SearchRequest) Projection(schemas core.Schemas) (Projection, error) {

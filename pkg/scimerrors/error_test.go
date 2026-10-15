@@ -119,6 +119,7 @@ func TestErrorConstructors(t *testing.T) {
 		{"ErrNotImplemented", scimerrors.ErrNotImplemented(""), http.StatusNotImplemented, "", "Section 3.12, Table 8"},
 		{"ErrInternal", scimerrors.ErrInternal(""), http.StatusInternalServerError, "", "Section 3.12, Table 8"},
 		{"ErrPreconditionFailed", scimerrors.ErrPreconditionFailed(""), http.StatusPreconditionFailed, "", "Section 3.14"},
+		{"ErrChanged", scimerrors.ErrChanged(), http.StatusConflict, "", "Section 3.12, Table 8"},
 	} {
 		t.Run(tc.name+" pairs "+strconv.Itoa(tc.status)+" with "+string(tc.scimType), func(t *testing.T) {
 			assert.Equal(t, tc.status, tc.err.StatusCode(), tc.cite)

@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"slices"
-	"strconv"
 	"time"
 	"uuid"
 
@@ -78,15 +77,15 @@ func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) (
 }
 
 func (r *repository[T]) Create(_ context.Context, item T) (T, error) {
-	now := time.Now().UTC()
+	at := now()
 	common := item.Common()
 	common.ID = uuid.NewV7().String()
 	common.Meta = core.Meta{
 		ResourceType: r.schemas[0].Name,
-		Created:      now,
-		LastModified: now,
+		Created:      at,
+		LastModified: at,
 		Location:     r.endpoint + "/" + common.ID,
-		Version:      weakETag(now),
+		Version:      WeakETag(at),
 	}
 	created, err := r.db.create(item, r.schemas, r.fields)
 	if err != nil {
@@ -137,17 +136,17 @@ func (r *repository[T]) sortBy(query *protocol.SearchRequest, records []record) 
 		return matching, nil
 	}
 
-	parent, attribute, err := query.SortAttribute(r.schemas)
+	sorted, err := query.SortAttribute(r.schemas)
 	if err != nil {
 		return nil, err
 	}
 
-	key, ok := r.sortKey(parent, attribute)
+	key, ok := r.sortKey(sorted.Root(), sorted.Definition)
 	if !ok {
 		return nil, scimerrors.ErrInvalidValue("Unknown sortBy")
 	}
 	slices.SortStableFunc(matching, func(a, b record) int {
-		return compareSortKeys(attribute, key(a.object), key(b.object), query.Descending())
+		return compareSortKeys(sorted.Definition, key(a.object), key(b.object), query.Descending())
 	})
 
 	return matching, nil
@@ -169,14 +168,17 @@ func (r *repository[T]) sortKey(parent, attribute *core.Attribute) (func(core.Ob
 	}, true
 }
 
-func weakETag(t time.Time) string {
-	return `W/"` + strconv.FormatInt(t.UnixNano(), 10) + `"`
+func now() time.Time {
+	return time.Now().UTC().Truncate(time.Microsecond)
 }
 
 func bumpMeta(current core.Meta) core.Meta {
-	now := time.Now().UTC()
-	current.LastModified = now
-	current.Version = weakETag(now)
+	modified := now()
+	if !modified.After(current.LastModified) {
+		modified = current.LastModified.Add(time.Microsecond)
+	}
+	current.LastModified = modified
+	current.Version = WeakETag(modified)
 	return current
 }
 

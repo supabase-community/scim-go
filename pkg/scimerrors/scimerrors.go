@@ -79,3 +79,8 @@ func ErrInternal(detail string) *Error {
 func ErrPreconditionFailed(detail string) *Error {
 	return NewError(http.StatusPreconditionFailed, "", detail)
 }
+
+// ErrChanged is the 409 of RFC 7644 Section 3.12, Table 8, for a version that no longer matches the latest. Retry it.
+func ErrChanged() *Error {
+	return NewError(http.StatusConflict, "", "resource changed during the request; retry")
+}

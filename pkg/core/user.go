@@ -112,7 +112,7 @@ func UserAttributes() Attributes {
 			NewAttribute("type", TypeString).Suggesting("work", "home", "other"),
 			NewAttribute("primary", TypeBoolean),
 		),
-		NewAttribute("groups", TypeComplex).AsMultiValued().AsReadOnly().With(
+		NewAttribute("groups", TypeComplex).AsMultiValued().AsReadOnly().AsInverseOf("members").With(
 			NewAttribute("value", TypeString).AsReadOnly(),
 			NewAttribute("$ref", TypeReference).Referencing("User", "Group").AsReadOnly(),
 			NewAttribute("display", TypeString).AsReadOnly(),

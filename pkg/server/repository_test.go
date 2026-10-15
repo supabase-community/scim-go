@@ -69,3 +69,22 @@ func TestRepositoryListBounds(t *testing.T) {
 		})
 	}
 }
+
+// RFC 7644 Section 3.14: a write must not leave the version an earlier write had.
+func TestRepositoryUpdateAlwaysChangesTheVersion(t *testing.T) {
+	repository := server.NewRepository[*core.User]("/Users", core.Schemas{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)})
+	user, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
+	require.NoError(t, err)
+	seen := map[string]bool{user.Meta.Version: true}
+
+	for range 50 {
+		user, err = repository.Update(t.Context(), user)
+
+		require.NoError(t, err)
+		assert.False(t, seen[user.Meta.Version], user.Meta.Version)
+		seen[user.Meta.Version] = true
+		modified, ok := server.ParseWeakETag(user.Meta.Version)
+		require.True(t, ok)
+		assert.True(t, modified.Equal(user.Meta.LastModified))
+	}
+}

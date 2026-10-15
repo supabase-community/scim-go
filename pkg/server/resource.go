@@ -108,7 +108,7 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 		build = func(*Resource[T]) Repository[T] { return newRepository[T](s.db, c.Location(), schemas) }
 	}
 	repository := build(c)
-	service := NewService(repository, schemas, s.limits, c.validators...)
+	service := stamp(NewService(repository, schemas, s.limits, c.validators...), core.ResourceTypeName(c.name), c.Location())
 	if c.wrap != nil {
 		service = c.wrap(service)
 	}

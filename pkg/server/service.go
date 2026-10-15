@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"slices"
 
 	"github.com/supabase-community/scim-go/internal/decode"
@@ -200,7 +199,7 @@ func schemaURIsToAny(uris []core.SchemaURI) []any {
 
 func conflict(versions []string, err error) error {
 	if len(versions) == 0 && errors.Is(err, scimerrors.ErrPreconditionFailed("")) {
-		return scimerrors.NewError(http.StatusConflict, "", "resource changed during the request; retry")
+		return scimerrors.ErrChanged()
 	}
 	return err
 }

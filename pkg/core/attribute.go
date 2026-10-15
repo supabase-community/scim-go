@@ -14,6 +14,7 @@ type Attribute struct {
 	Uniqueness      Uniqueness      `json:"uniqueness"`
 	ReferenceTypes  []ReferenceType `json:"referenceTypes,omitempty"`
 	SubAttributes   Attributes      `json:"subAttributes,omitempty"`
+	InverseOf       string          `json:"-"`
 }
 
 func NewAttribute(name string, attributeType AttributeType) *Attribute {
@@ -80,6 +81,11 @@ func (a *Attribute) Suggesting(values ...string) *Attribute {
 
 func (a *Attribute) Referencing(referenceTypes ...ReferenceType) *Attribute {
 	a.ReferenceTypes = referenceTypes
+	return a
+}
+
+func (a *Attribute) AsInverseOf(attribute string) *Attribute {
+	a.InverseOf = attribute
 	return a
 }
 
