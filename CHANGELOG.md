@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.17.1](https://github.com/supabase-community/scim-go/compare/v0.17.0...v0.17.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **decode:** reject invalid UTF-8 and lone surrogates ([faac348](https://github.com/supabase-community/scim-go/commit/faac348fb520af158bcd809118afcfbd5260f32b))
+* **server:** clamp List bounds so count and startIndex cannot panic ([193f53b](https://github.com/supabase-community/scim-go/commit/193f53b4c647126e6682adbc8dad08906f199d3b))
+* **server:** treat a nil List query as empty ([2a1fd7b](https://github.com/supabase-community/scim-go/commit/2a1fd7b8e52db83b9fea8e29f72ede64d336286f))
+
 ## [0.17.0](https://github.com/supabase-community/scim-go/compare/v0.16.0...v0.17.0) (2026-10-15)
 
 
