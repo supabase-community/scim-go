@@ -39,10 +39,10 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("composes and, or, not", func(t *testing.T) {
-		out, err := protocol.Filter[clause](schemas, `userName eq "bob" and not (active eq false)`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `userName eq "jsmith" and not (active eq false)`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "(username = ? AND NOT (active = ?))", out.sql)
-		assert.Equal(t, []any{"bob", false}, out.args)
+		assert.Equal(t, []any{"jsmith", false}, out.args)
 	})
 
 	t.Run("resolves presence", func(t *testing.T) {
@@ -60,10 +60,10 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("composes a value path with a sibling comparison", func(t *testing.T) {
-		out, err := protocol.Filter[clause](schemas, `emails[type eq "work"] and userName eq "bob"`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `emails[type eq "work"] and userName eq "jsmith"`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "(EXISTS(emails: type = ?) AND username = ?)", out.sql)
-		assert.Equal(t, []any{"work", "bob"}, out.args)
+		assert.Equal(t, []any{"work", "jsmith"}, out.args)
 	})
 
 	t.Run("sets Parent on attributes inside a value path", func(t *testing.T) {
@@ -109,10 +109,10 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("composes or", func(t *testing.T) {
-		out, err := protocol.Filter[clause](schemas, `userName eq "bob" or active eq true`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `userName eq "jsmith" or active eq true`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "(username = ? OR active = ?)", out.sql)
-		assert.Equal(t, []any{"bob", true}, out.args)
+		assert.Equal(t, []any{"jsmith", true}, out.args)
 	})
 
 	t.Run("renders an integer comparison", func(t *testing.T) {
@@ -138,10 +138,10 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("renders a ne comparison", func(t *testing.T) {
-		out, err := protocol.Filter[clause](schemas, `userName ne "bob"`, sqlEvaluator{})
+		out, err := protocol.Filter[clause](schemas, `userName ne "jsmith"`, sqlEvaluator{})
 		require.NoError(t, err)
 		assert.Equal(t, "username <> ?", out.sql)
-		assert.Equal(t, []any{"bob"}, out.args)
+		assert.Equal(t, []any{"jsmith"}, out.args)
 	})
 
 	// RFC 7644 Section 3.4.2.2: co, sw, ew match a substring of the attribute value.
@@ -198,7 +198,7 @@ func TestFilter(t *testing.T) {
 	})
 
 	t.Run("rejects any attribute when no schemas are configured", func(t *testing.T) {
-		_, err := protocol.Filter[clause]([]*core.Schema{}, `userName eq "bob"`, sqlEvaluator{})
+		_, err := protocol.Filter[clause]([]*core.Schema{}, `userName eq "jsmith"`, sqlEvaluator{})
 		require.ErrorIs(t, err, scimerrors.ErrInvalidFilter(""))
 	})
 

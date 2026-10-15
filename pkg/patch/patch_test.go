@@ -92,7 +92,7 @@ func TestApplyAddWithoutPathSkipsAValueTheTargetAlreadyContains(t *testing.T) {
 func TestApplyAddSkipsAnElementAlreadyPresentByValueAlone(t *testing.T) {
 	item := core.Object{"members": []any{map[string]any{"value": "u-1", "type": "User", "$ref": "https://example.com/Users/u-1"}}}
 
-	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpAdd, "members", `[{"value":"u-1","display":"Bob"}]`)))
+	require.NoError(t, apply(item, groupSchemas(), operation(patch.OpAdd, "members", `[{"value":"u-1","display":"John"}]`)))
 
 	assert.Len(t, item["members"], 1)
 }

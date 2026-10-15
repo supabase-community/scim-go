@@ -337,12 +337,12 @@ func TestProjectionAll(t *testing.T) {
 	projection, err := protocol.ParseProjection(url.Values{"attributes": {"userName"}}, schemas)
 	require.NoError(t, err)
 
-	resources := []map[string]any{{"userName": "alice", "id": "1"}, {"userName": "bob", "id": "2"}}
+	resources := []map[string]any{{"userName": "bjensen", "id": "1"}, {"userName": "jsmith", "id": "2"}}
 	raw, err := json.Marshal(projection.All(resources))
 
 	require.NoError(t, err)
 	schema := `"schemas": ["` + string(core.SchemaUser) + `"]`
-	assert.JSONEq(t, `[{`+schema+`, "userName": "alice", "id": "1"}, {`+schema+`, "userName": "bob", "id": "2"}]`, string(raw))
+	assert.JSONEq(t, `[{`+schema+`, "userName": "bjensen", "id": "1"}, {`+schema+`, "userName": "jsmith", "id": "2"}]`, string(raw))
 }
 
 func keys(m map[string]any) []string {

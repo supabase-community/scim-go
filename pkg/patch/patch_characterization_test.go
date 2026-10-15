@@ -128,7 +128,7 @@ func TestApplyNoPathMergeRejectsReadOnly(t *testing.T) {
 }
 
 func TestApplySubAttributeOnNonComplexRejected(t *testing.T) {
-	item := map[string]any{"userName": "bob"}
+	item := map[string]any{"userName": "jsmith"}
 
 	var scimErr *scimerrors.Error
 	require.ErrorAs(t, apply(item, nil, operation(patch.OpReplace, "userName.foo", `"x"`)), &scimErr)

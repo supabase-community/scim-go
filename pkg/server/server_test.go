@@ -560,7 +560,7 @@ func TestRFC7643UserResourceSchema(t *testing.T) {
 	// RFC 7643 Section 4.1.2: groups is a list of groups the user belongs to, derived from Group membership.
 	t.Run("derives groups from group members", func(t *testing.T) {
 		srv := newTestServer(t)
-		id, _ := create(t, srv, &core.User{UserName: "alice"})
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 		groupsOf := func() []core.GroupMembership {
 			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
 			require.Equal(t, http.StatusOK, response.StatusCode)
@@ -574,7 +574,7 @@ func TestRFC7643UserResourceSchema(t *testing.T) {
 		want := []core.GroupMembership{{Value: group.ID}}
 		assert.Equal(t, want, groupsOf())
 
-		require.Equal(t, http.StatusOK, Response(t, srv, patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Alice"`)})).StatusCode)
+		require.Equal(t, http.StatusOK, Response(t, srv, patchRequest(t, srv, "Users/"+id, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Barbara"`)})).StatusCode)
 		assert.Equal(t, want, groupsOf())
 
 		patchGroup(group.ID, patch.Operation{Op: patch.OpRemove, Path: `members[value eq "` + id + `"]`})
@@ -633,26 +633,26 @@ func TestRFC7643GroupResourceSchema(t *testing.T) {
 // RFC 7643 Section 2.3.7: a reference value is the id of an existing resource.
 func TestRFC7643ReferenceValuesExist(t *testing.T) {
 	srv := newTestServer(t)
-	ids := seedUsers(t, srv, "alice")
+	ids := seedUsers(t, srv, "bjensen")
 	group := createGroup(t, srv, &core.Group{DisplayName: "eng"})
 	post := func(path string, body any) *http.Response {
 		return Response(t, srv, Request(t, srv, http.MethodPost, basePath+path, WithBearerToken(validToken), WithContentType(protocol.MediaType), WithRequestBodyAs(t, body)))
 	}
 	asManager := func(id string) *core.User {
-		return &core.User{UserName: "bob" + id, EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: id}}}
+		return &core.User{UserName: "jsmith" + id, EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: id}}}
 	}
 
 	for name, response := range map[string]*http.Response{
 		"member that does not exist": post("/Groups", &core.Group{DisplayName: "a", Members: []core.Member{{Value: "missing"}}}),
-		"member by userName":         post("/Groups", &core.Group{DisplayName: "b", Members: []core.Member{{Value: "alice"}}}),
+		"member by userName":         post("/Groups", &core.Group{DisplayName: "b", Members: []core.Member{{Value: "bjensen"}}}),
 		"manager that is not a User": post("/Users", asManager(group.ID)),
 	} {
 		require.Equal(t, http.StatusBadRequest, response.StatusCode, name)
 		assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType, name)
 	}
 
-	assert.Equal(t, http.StatusCreated, post("/Groups", &core.Group{DisplayName: "c", Members: []core.Member{{Value: ids["alice"]}, {Value: group.ID}}}).StatusCode)
-	assert.Equal(t, http.StatusCreated, post("/Users", asManager(ids["alice"])).StatusCode)
+	assert.Equal(t, http.StatusCreated, post("/Groups", &core.Group{DisplayName: "c", Members: []core.Member{{Value: ids["bjensen"]}, {Value: group.ID}}}).StatusCode)
+	assert.Equal(t, http.StatusCreated, post("/Users", asManager(ids["bjensen"])).StatusCode)
 	assert.Equal(t, http.StatusCreated, post("/Users", asManager("missing")).StatusCode)
 }
 
@@ -678,9 +678,9 @@ func TestPatchKeepsUnknownManager(t *testing.T) {
 
 func TestPatchStoresDuplicateMembersOnce(t *testing.T) {
 	srv := newTestServer(t)
-	ids := seedUsers(t, srv, "alice")
+	ids := seedUsers(t, srv, "bjensen")
 	group := createGroup(t, srv, &core.Group{DisplayName: "eng"})
-	member := `{"value":"` + ids["alice"] + `"}`
+	member := `{"value":"` + ids["bjensen"] + `"}`
 	operation := patch.Operation{Op: patch.OpReplace, Path: "members", Value: json.RawMessage(`[` + member + `,` + member + `]`)}
 	response := Response(t, srv, patchRequest(t, srv, "Groups/"+group.ID, operation))
 	require.Equal(t, http.StatusOK, response.StatusCode)
@@ -690,8 +690,8 @@ func TestPatchStoresDuplicateMembersOnce(t *testing.T) {
 // RFC 7644 Section 3.5.2.1: a value the attribute already holds is not added again.
 func TestDuplicateMembersAreStoredOnce(t *testing.T) {
 	srv := newTestServer(t)
-	ids := seedUsers(t, srv, "alice")
-	member := core.Member{Value: ids["alice"]}
+	ids := seedUsers(t, srv, "bjensen")
+	member := core.Member{Value: ids["bjensen"]}
 	group := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{member, member}})
 	assert.Len(t, group.Members, 1)
 
@@ -1169,7 +1169,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		request := Request(t, srv, http.MethodPost, basePath+"/Users",
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
-			WithRequestBody([]byte(`{"id":"client-chosen","userName":"alice","meta":{"created":"2000-01-01T00:00:00Z"}}`)),
+			WithRequestBody([]byte(`{"id":"client-chosen","userName":"bjensen","meta":{"created":"2000-01-01T00:00:00Z"}}`)),
 		)
 		response := Response(t, srv, request)
 
@@ -1185,11 +1185,11 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		extension := string(core.SchemaEnterpriseUser)
 
 		for _, body := range []string{
-			`{"userName":"alice","USERNAME":"bob"}`,
-			`{"userName":"alice","` + extension + `":{"department":"ops"},"` + strings.ToLower(extension) + `":{"manager":{"displayName":"forged"}}}`,
-			`{"userName":"alice","` + extension + `":{"manager":{"value":"m-1"},"MANAGER":{"displayName":"forged"}}}`,
-			`{"userName":"alice","` + extension + `":{"department":"ops"},"` + strings.Replace(extension, "enterprise", "enterpri\u017fe", 1) + `":{"manager":{"displayName":"forged"}}}`,
-			`{"userName":"alice","nick\u00e9":"bob"}`,
+			`{"userName":"bjensen","USERNAME":"jsmith"}`,
+			`{"userName":"bjensen","` + extension + `":{"department":"ops"},"` + strings.ToLower(extension) + `":{"manager":{"displayName":"forged"}}}`,
+			`{"userName":"bjensen","` + extension + `":{"manager":{"value":"m-1"},"MANAGER":{"displayName":"forged"}}}`,
+			`{"userName":"bjensen","` + extension + `":{"department":"ops"},"` + strings.Replace(extension, "enterprise", "enterpri\u017fe", 1) + `":{"manager":{"displayName":"forged"}}}`,
+			`{"userName":"bjensen","nick\u00e9":"jsmith"}`,
 		} {
 			request := Request(t, srv, http.MethodPost, basePath+"/Users",
 				WithBearerToken(validToken),
@@ -1210,7 +1210,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users",
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
-			WithRequestBody([]byte(`{"userName":"alice","userName":"bob"}`)),
+			WithRequestBody([]byte(`{"userName":"bjensen","userName":"jsmith"}`)),
 		))
 
 		require.Equal(t, http.StatusBadRequest, response.StatusCode)
@@ -1221,7 +1221,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 	t.Run("ignores readOnly groups", func(t *testing.T) {
 		srv := newTestServer(t)
 
-		id, _ := create(t, srv, &core.User{UserName: "alice", Groups: []core.GroupMembership{{Value: "g-1", Type: "direct"}}})
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Groups: []core.GroupMembership{{Value: "g-1", Type: "direct"}}})
 
 		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
 		assert.NotContains(t, ReadBodyAs[map[string]any](t, response), "groups")
@@ -1265,7 +1265,7 @@ func TestRFC7644CreatingResources(t *testing.T) {
 		request := Request(t, srv, http.MethodPost, basePath+"/Users?attributes=password",
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, core.User{UserName: "alice", Password: "t1meMa$heen"}),
+			WithRequestBodyAs(t, core.User{UserName: "bjensen", Password: "t1meMa$heen"}),
 		)
 		response := Response(t, srv, request)
 		require.Equal(t, http.StatusCreated, response.StatusCode)
@@ -1379,9 +1379,9 @@ func TestRFC7644QueryResources(t *testing.T) {
 	// RFC 7644 Section 3.4.2: totalResults is the total number of results returned by the list or query operation.
 	t.Run("lists all created resources", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
 		request := Request(t, srv, http.MethodGet, basePath+"/Users",
 			WithBearerToken(validToken),
@@ -1393,11 +1393,11 @@ func TestRFC7644QueryResources(t *testing.T) {
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		assert.Equal(t, 3, list.TotalResults)
 		require.Len(t, list.Resources, 3)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 		assert.Equal(t, []core.SchemaURI{core.SchemaUser}, list.Resources[0].Schemas)
 		assert.NotEmpty(t, list.Resources[0].Meta.Location)
-		assert.Equal(t, "bob", list.Resources[1].UserName)
-		assert.Equal(t, "carol", list.Resources[2].UserName)
+		assert.Equal(t, "jsmith", list.Resources[1].UserName)
+		assert.Equal(t, "mpepperidge", list.Resources[2].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2: a query returns zero or more resources, and Resources is REQUIRED only if totalResults is non-zero.
@@ -1437,8 +1437,8 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: filter=schemas eq "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
 	t.Run("filters resources by schemas", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "1"}})
-		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{EmployeeNumber: "1"}})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`schemas eq "` + string(core.SchemaEnterpriseUser) + `"`}}.Encode()
 		response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType)))
@@ -1446,16 +1446,16 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.2: when specified, only those resources matching the filter expression SHALL be returned.
 	t.Run("filters resources by an exact match on userName", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
-		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "alice"`}}.Encode()
+		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "bjensen"`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path,
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
@@ -1465,7 +1465,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.12: invalidFilter when the attribute and filter comparison combination is not supported.
@@ -1488,8 +1488,8 @@ func TestRFC7644Filtering(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
 		inactive := false
-		create(t, srv, &core.User{UserName: "alice", Active: &active})
-		create(t, srv, &core.User{UserName: "bob", Active: &inactive})
+		create(t, srv, &core.User{UserName: "bjensen", Active: &active})
+		create(t, srv, &core.User{UserName: "jsmith", Active: &inactive})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`active eq true`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1498,7 +1498,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 
 		path = basePath + "/Users?" + url.Values{"filter": {`active ne true`}}.Encode()
 		request = Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1507,26 +1507,26 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list = ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "bob", list.Resources[0].UserName)
+		assert.Equal(t, "jsmith", list.Resources[0].UserName)
 	})
 
 	// RFC 7643 Section 2.5: unassigned attributes and the null value SHALL be considered equivalent.
 	t.Run("filters with eq null and ne null as unassigned and assigned, and ne a value as including unassigned", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
-		create(t, srv, &core.User{UserName: "alice", NickName: "al", Active: &active, Emails: []core.Email{{Value: "alice@example.com"}}})
-		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "bjensen", NickName: "al", Active: &active, Emails: []core.Email{{Value: "bjensen@example.com"}}})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
 		for filter, want := range map[string]string{
-			`nickName eq null`:                    "bob",
-			`nickName ne null`:                    "alice",
-			`active eq null`:                      "bob",
-			`emails eq null`:                      "bob",
-			`emails ne null`:                      "alice",
-			`emails.value eq null`:                "bob",
-			`nickName ne "al"`:                    "bob",
-			`active ne true`:                      "bob",
-			`emails.value ne "alice@example.com"`: "bob",
+			`nickName eq null`:                      "jsmith",
+			`nickName ne null`:                      "bjensen",
+			`active eq null`:                        "jsmith",
+			`emails eq null`:                        "jsmith",
+			`emails ne null`:                        "bjensen",
+			`emails.value eq null`:                  "jsmith",
+			`nickName ne "al"`:                      "jsmith",
+			`active ne true`:                        "jsmith",
+			`emails.value ne "bjensen@example.com"`: "jsmith",
 		} {
 			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
 			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1542,7 +1542,7 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: pr matches an attribute with a non-empty or non-null value.
 	t.Run("filters with the pr operator for presence", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "bjensen"})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`userName pr`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1557,8 +1557,8 @@ func TestRFC7644Filtering(t *testing.T) {
 	t.Run("pr matches a non-string value and excludes an absent one", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
-		create(t, srv, &core.User{UserName: "alice", Active: &active})
-		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "bjensen", Active: &active})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`active pr`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1567,14 +1567,14 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
 	// RFC 7643 Section 3.1: "id" is a common attribute of every resource.
 	t.Run("filters by eq and pr on the common id attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		id, _ := create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
+		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`id eq "` + id + `"`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1583,7 +1583,7 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 
 		path = basePath + "/Users?" + url.Values{"filter": {`id pr`}}.Encode()
 		request = Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1638,8 +1638,8 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7643 Section 3.1: "externalId" and "meta" are common attributes of every resource.
 	t.Run("filters by presence on the other common attributes", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", ExternalID: "ext-1"})
-		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "bjensen", ExternalID: "ext-1"})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
 		cases := map[string]int{
 			`externalId pr`:        1,
@@ -1662,10 +1662,10 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: co, sw, and ew match a substring anywhere, at the start, and at the end of the value.
 	t.Run("filters with the co, sw, and ew string operators", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
-		cases := []string{`userName co "li"`, `userName sw "al"`, `userName ew "ce"`}
+		cases := []string{`userName co "jen"`, `userName sw "bj"`, `userName ew "en"`}
 		for _, filter := range cases {
 			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
 			request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1674,15 +1674,15 @@ func TestRFC7644Filtering(t *testing.T) {
 			require.Equal(t, http.StatusOK, response.StatusCode, "filter: %s", filter)
 			list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 			require.Equal(t, 1, list.TotalResults, "filter: %s", filter)
-			assert.Equal(t, "alice", list.Resources[0].UserName, "filter: %s", filter)
+			assert.Equal(t, "bjensen", list.Resources[0].UserName, "filter: %s", filter)
 		}
 	})
 
 	// RFC 7644 Section 3.4.2.2: a bare multi-valued attribute name compares its "value" sub-attribute.
 	t.Run("filters a multi-valued attribute name without a sub-attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "alice@example.com"}}})
-		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{{Value: "bob@example.org"}}})
+		create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "bjensen@example.com"}}})
+		create(t, srv, &core.User{UserName: "jsmith", Emails: []core.Email{{Value: "jsmith@example.org"}}})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`emails co "example.com"`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1691,73 +1691,73 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.2: and is only a match if both expressions evaluate to true.
 	t.Run("combines clauses with and", func(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
-		create(t, srv, &core.User{UserName: "alice", Active: &active})
-		create(t, srv, &core.User{UserName: "bob", Active: &active})
+		create(t, srv, &core.User{UserName: "bjensen", Active: &active})
+		create(t, srv, &core.User{UserName: "jsmith", Active: &active})
 
-		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "alice" and active eq true`}}.Encode()
+		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "bjensen" and active eq true`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.2: or is a match if either expression evaluates to true.
 	t.Run("combines clauses with or", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
-		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "alice" or userName eq "carol"`}}.Encode()
+		path := basePath + "/Users?" + url.Values{"filter": {`userName eq "bjensen" or userName eq "mpepperidge"`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 2, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
-		assert.Equal(t, "carol", list.Resources[1].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
+		assert.Equal(t, "mpepperidge", list.Resources[1].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.2: not is a match if the expression evaluates to false.
 	t.Run("negates a clause with not", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
-		path := basePath + "/Users?" + url.Values{"filter": {`not (userName eq "carol")`}}.Encode()
+		path := basePath + "/Users?" + url.Values{"filter": {`not (userName eq "mpepperidge")`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.2: for string attribute types, gt, ge, lt, and le are a lexicographical comparison.
 	t.Run("filters with the ordering operators ne, gt, ge, lt, and le", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
 		cases := map[string]string{
-			`userName ne "bob"`: "alice,carol",
-			`userName gt "bob"`: "carol",
-			`userName ge "bob"`: "bob,carol",
-			`userName lt "bob"`: "alice",
-			`userName le "bob"`: "alice,bob",
+			`userName ne "jsmith"`: "bjensen,mpepperidge",
+			`userName gt "jsmith"`: "mpepperidge",
+			`userName ge "jsmith"`: "jsmith,mpepperidge",
+			`userName lt "jsmith"`: "bjensen",
+			`userName le "jsmith"`: "bjensen,jsmith",
 		}
 		for filter, want := range cases {
 			path := basePath + "/Users?" + url.Values{"filter": {filter}, "sortBy": {"userName"}}.Encode()
@@ -1777,11 +1777,11 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: valuePath = attrPath "[" valFilter "]"
 	t.Run("filters using a value path expression on a multi-valued complex attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{
+		create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{
 			{Value: "a@work.com", Type: "work"},
 			{Value: "a@home.com", Type: "home"},
 		}})
-		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{
+		create(t, srv, &core.User{UserName: "jsmith", Emails: []core.Email{
 			{Value: "b@home.com", Type: "home"},
 		}})
 
@@ -1792,20 +1792,20 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.2: complex attribute filter expressions MUST be applied to the same value of a parent attribute.
 	t.Run("a value path filter with and requires both conditions on the same element", func(t *testing.T) {
 		srv := newTestServer(t)
-		alicePrimary := false
-		aliceHome := true
+		bjensenPrimary := false
+		bjensenHome := true
 		bobPrimary := true
-		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{
-			{Value: "a@work.com", Type: "work", Primary: &alicePrimary},
-			{Value: "a@home.com", Type: "home", Primary: &aliceHome},
+		create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{
+			{Value: "a@work.com", Type: "work", Primary: &bjensenPrimary},
+			{Value: "a@home.com", Type: "home", Primary: &bjensenHome},
 		}})
-		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{
+		create(t, srv, &core.User{UserName: "jsmith", Emails: []core.Email{
 			{Value: "b@work.com", Type: "work", Primary: &bobPrimary},
 		}})
 
@@ -1816,14 +1816,14 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "bob", list.Resources[0].UserName)
+		assert.Equal(t, "jsmith", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.2: valFilter = attrExp / logExp / *1"not" "(" valFilter ")"
 	t.Run("a value path filter combines conditions with or", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
-		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{{Value: "b@other.com", Type: "other"}}})
+		create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
+		create(t, srv, &core.User{UserName: "jsmith", Emails: []core.Email{{Value: "b@other.com", Type: "other"}}})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`emails[type eq "work" or type eq "home"]`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1832,15 +1832,15 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.12: invalidFilter when the attribute and filter comparison combination is not supported.
 	t.Run("rejects a value path filter on a single-valued complex attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Name: core.Name{GivenName: "alice"}})
+		create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "bjensen"}})
 
-		path := basePath + "/Users?" + url.Values{"filter": {`name[givenName eq "alice"]`}}.Encode()
+		path := basePath + "/Users?" + url.Values{"filter": {`name[givenName eq "bjensen"]`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
 
@@ -1851,7 +1851,7 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: FILTER = attrExp / logExp / valuePath / *1"not" "(" FILTER ")"
 	t.Run("rejects a sub-attribute after a value path filter", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@work.com", Type: "work"}}})
+		create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@work.com", Type: "work"}}})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`emails[type eq "work"].value`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1864,8 +1864,8 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: valFilter = attrExp / logExp / *1"not" "(" valFilter ")"
 	t.Run("a value path filter negates a condition with not", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
-		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{{Value: "b@work.com", Type: "work"}}})
+		create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@home.com", Type: "home"}}})
+		create(t, srv, &core.User{UserName: "jsmith", Emails: []core.Email{{Value: "b@work.com", Type: "work"}}})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`emails[not (type eq "home")]`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1874,14 +1874,14 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "bob", list.Resources[0].UserName)
+		assert.Equal(t, "jsmith", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.2: attrExp = (attrPath SP "pr") / (attrPath SP compareOp SP compValue)
 	t.Run("a value path filter tests presence within the element", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{{Value: "a@home.com"}}})
-		create(t, srv, &core.User{UserName: "bob", Emails: []core.Email{{Value: "b@work.com", Type: "work"}}})
+		create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{{Value: "a@home.com"}}})
+		create(t, srv, &core.User{UserName: "jsmith", Emails: []core.Email{{Value: "b@work.com", Type: "work"}}})
 
 		path := basePath + "/Users?" + url.Values{"filter": {`emails[type pr]`}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -1890,13 +1890,13 @@ func TestRFC7644Filtering(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Equal(t, 1, list.TotalResults)
-		assert.Equal(t, "bob", list.Resources[0].UserName)
+		assert.Equal(t, "jsmith", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 3.4.2.2 - dot notation matches any element; brackets match the same element.
 	t.Run("dot notation matches conditions on different elements but a value path does not", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Emails: []core.Email{
+		create(t, srv, &core.User{UserName: "bjensen", Emails: []core.Email{
 			{Value: "a@work.com", Type: "work", Primary: new(false)},
 			{Value: "a@home.com", Type: "home", Primary: new(true)},
 		}})
@@ -2027,9 +2027,9 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: gt, ge, lt, and le on Boolean and Binary attributes SHALL cause a failed response with "invalidFilter".
 	t.Run("orders every attribute type except boolean and binary", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", ProfileURL: "https://a.example.com"})
-		create(t, srv, &core.User{UserName: "bob", ProfileURL: "https://b.example.com"})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen", ProfileURL: "https://a.example.com"})
+		create(t, srv, &core.User{UserName: "jsmith", ProfileURL: "https://b.example.com"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
 		search := func(filter string) *http.Response {
 			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
@@ -2046,8 +2046,8 @@ func TestRFC7644Filtering(t *testing.T) {
 			return names
 		}
 
-		assert.Equal(t, []string{"bob"}, userNames(`profileUrl gt "https://a.example.com"`))
-		assert.Equal(t, []string{"alice"}, userNames(`profileUrl lt "https://b.example.com"`))
+		assert.Equal(t, []string{"jsmith"}, userNames(`profileUrl gt "https://a.example.com"`))
+		assert.Equal(t, []string{"bjensen"}, userNames(`profileUrl lt "https://b.example.com"`))
 		for _, filter := range []string{`active gt true`, `x509Certificates.value gt "x"`} {
 			response := search(filter)
 			require.Equal(t, http.StatusBadRequest, response.StatusCode, filter)
@@ -2100,27 +2100,27 @@ func TestRFC7644Filtering(t *testing.T) {
 	// RFC 7644 Section 3.4.2.2: every operator applies to each attribute Okta provisions, and ne includes a resource without the attribute.
 	t.Run("filters every attribute Okta provisions with each string operator", func(t *testing.T) {
 		srv := newTestServer(t)
-		manager, _ := create(t, srv, &core.User{UserName: "bob"})
+		manager, _ := create(t, srv, &core.User{UserName: "jsmith"})
 		primary := true
 		create(t, srv, &core.User{
-			UserName:   "alice",
+			UserName:   "bjensen",
 			ExternalID: "Okta-00u1",
 			Name: core.Name{
-				GivenName:       "Alice",
-				FamilyName:      "Liddell",
+				GivenName:       "Barbara",
+				FamilyName:      "Jensen",
 				MiddleName:      "Pleasance",
 				HonorificPrefix: "Miss",
 				HonorificSuffix: "Esq",
 			},
-			DisplayName:       "Alice Liddell",
+			DisplayName:       "Barbara Jensen",
 			NickName:          "Ally",
-			ProfileURL:        "https://example.com/Alice",
+			ProfileURL:        "https://example.com/Barbara",
 			Title:             "Explorer",
 			UserType:          "Employee",
 			PreferredLanguage: "en-GB",
 			Locale:            "en-GB",
 			Timezone:          "Europe/London",
-			Emails:            []core.Email{{Value: "Alice@example.com", Type: "Work", Primary: &primary}},
+			Emails:            []core.Email{{Value: "Barbara@example.com", Type: "Work", Primary: &primary}},
 			PhoneNumbers:      []core.PhoneNumber{{Value: "Tel 555 0100", Type: "Mobile", Primary: &primary}},
 			Addresses: []core.Address{{
 				Type:          "Home",
@@ -2144,20 +2144,20 @@ func TestRFC7644Filtering(t *testing.T) {
 		enterprise := string(core.SchemaEnterpriseUser) + ":"
 		for path, value := range map[string]string{
 			"externalId":                  "Okta-00u1",
-			"name.givenName":              "Alice",
-			"name.familyName":             "Liddell",
+			"name.givenName":              "Barbara",
+			"name.familyName":             "Jensen",
 			"name.middleName":             "Pleasance",
 			"name.honorificPrefix":        "Miss",
 			"name.honorificSuffix":        "Esq",
-			"displayName":                 "Alice Liddell",
+			"displayName":                 "Barbara Jensen",
 			"nickName":                    "Ally",
-			"profileUrl":                  "https://example.com/Alice",
+			"profileUrl":                  "https://example.com/Barbara",
 			"title":                       "Explorer",
 			"userType":                    "Employee",
 			"preferredLanguage":           "en-GB",
 			"locale":                      "en-GB",
 			"timezone":                    "Europe/London",
-			"emails.value":                "Alice@example.com",
+			"emails.value":                "Barbara@example.com",
 			"emails.type":                 "Work",
 			"phoneNumbers.value":          "Tel 555 0100",
 			"phoneNumbers.type":           "Mobile",
@@ -2177,30 +2177,30 @@ func TestRFC7644Filtering(t *testing.T) {
 		} {
 			flipped := swapCase(value)
 			require.NotEqual(t, value, flipped, path)
-			caseInsensitive := "alice"
+			caseInsensitive := "bjensen"
 			if path == "externalId" || path == "profileUrl" {
 				caseInsensitive = ""
 			}
 			for filter, want := range map[string]string{
-				path + ` eq "` + value + `"`:                 "alice",
+				path + ` eq "` + value + `"`:                 "bjensen",
 				path + ` eq "` + flipped + `"`:               caseInsensitive,
-				path + ` co "` + value[1:len(value)-1] + `"`: "alice",
-				path + ` sw "` + value[:2] + `"`:             "alice",
-				path + ` ew "` + value[len(value)-2:] + `"`:  "alice",
-				path + ` pr`:                 "alice",
-				path + ` ne "` + value + `"`: "bob",
+				path + ` co "` + value[1:len(value)-1] + `"`: "bjensen",
+				path + ` sw "` + value[:2] + `"`:             "bjensen",
+				path + ` ew "` + value[len(value)-2:] + `"`:  "bjensen",
+				path + ` pr`:                 "bjensen",
+				path + ` ne "` + value + `"`: "jsmith",
 			} {
 				assertFilterMatches(t, srv, filter, want)
 			}
 		}
-		assertFilterMatches(t, srv, `emails[primary eq true]`, "alice")
-		assertFilterMatches(t, srv, `phoneNumbers[primary eq true]`, "alice")
+		assertFilterMatches(t, srv, `emails[primary eq true]`, "bjensen")
+		assertFilterMatches(t, srv, `phoneNumbers[primary eq true]`, "bjensen")
 	})
 
 	// RFC 7644 Section 3.4.2.2: every operator applies to each Group attribute, and ne includes a resource without the attribute.
 	t.Run("filters every group attribute with each string operator", func(t *testing.T) {
 		srv := newTestServer(t)
-		member := seedUsers(t, srv, "Alice-1865")["Alice-1865"]
+		member := seedUsers(t, srv, "Barbara-1865")["Barbara-1865"]
 		createGroup(t, srv, &core.Group{DisplayName: "Engineering", Members: []core.Member{{Value: member, Type: "User"}}})
 		createGroup(t, srv, &core.Group{DisplayName: "ops"})
 		matches := func(filter string) []string {
@@ -2243,9 +2243,9 @@ func TestRFC7644Sorting(t *testing.T) {
 	// RFC 7644 Section 3.4.2.3: if "sortBy" is provided and no "sortOrder" is specified, "sortOrder" SHALL default to ascending.
 	t.Run("sorts ascending by default when only sortBy is given", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
 		path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path,
@@ -2257,17 +2257,17 @@ func TestRFC7644Sorting(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Len(t, list.Resources, 3)
-		assert.Equal(t, "alice", list.Resources[0].UserName)
-		assert.Equal(t, "bob", list.Resources[1].UserName)
-		assert.Equal(t, "carol", list.Resources[2].UserName)
+		assert.Equal(t, "bjensen", list.Resources[0].UserName)
+		assert.Equal(t, "jsmith", list.Resources[1].UserName)
+		assert.Equal(t, "mpepperidge", list.Resources[2].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.3: allowed "sortOrder" values are "ascending" and "descending".
 	t.Run("sorts descending when sortOrder is descending", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
 		path := basePath + "/Users?" + url.Values{"sortBy": {"userName"}, "sortOrder": {"descending"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path,
@@ -2279,16 +2279,16 @@ func TestRFC7644Sorting(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Len(t, list.Resources, 3)
-		assert.Equal(t, "carol", list.Resources[0].UserName)
-		assert.Equal(t, "bob", list.Resources[1].UserName)
-		assert.Equal(t, "alice", list.Resources[2].UserName)
+		assert.Equal(t, "mpepperidge", list.Resources[0].UserName)
+		assert.Equal(t, "jsmith", list.Resources[1].UserName)
+		assert.Equal(t, "bjensen", list.Resources[2].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.3: "sortBy" specifies the attribute whose value SHALL be used to order the returned responses.
 	t.Run("sorts by the common id attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		first, _ := create(t, srv, &core.User{UserName: "alice"})
-		second, _ := create(t, srv, &core.User{UserName: "bob"})
+		first, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		second, _ := create(t, srv, &core.User{UserName: "jsmith"})
 		want := []string{first, second}
 		slices.Sort(want)
 
@@ -2407,9 +2407,9 @@ func TestRFC7644Sorting(t *testing.T) {
 		srv := newTestServer(t)
 		active := true
 		inactive := false
-		create(t, srv, &core.User{UserName: "alice", Active: &active})
-		create(t, srv, &core.User{UserName: "bob", Active: &inactive})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen", Active: &active})
+		create(t, srv, &core.User{UserName: "jsmith", Active: &inactive})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
 		path := basePath + "/Users?" + url.Values{"sortBy": {"active"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -2418,9 +2418,9 @@ func TestRFC7644Sorting(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Len(t, list.Resources, 3)
-		assert.Equal(t, "bob", list.Resources[0].UserName)
-		assert.Equal(t, "alice", list.Resources[1].UserName)
-		assert.Equal(t, "carol", list.Resources[2].UserName)
+		assert.Equal(t, "jsmith", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[1].UserName)
+		assert.Equal(t, "mpepperidge", list.Resources[2].UserName)
 
 		path = basePath + "/Users?" + url.Values{"sortBy": {"active"}, "sortOrder": {"descending"}}.Encode()
 		request = Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -2429,9 +2429,9 @@ func TestRFC7644Sorting(t *testing.T) {
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		list = ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
 		require.Len(t, list.Resources, 3)
-		assert.Equal(t, "carol", list.Resources[0].UserName)
-		assert.Equal(t, "alice", list.Resources[1].UserName)
-		assert.Equal(t, "bob", list.Resources[2].UserName)
+		assert.Equal(t, "mpepperidge", list.Resources[0].UserName)
+		assert.Equal(t, "bjensen", list.Resources[1].UserName)
+		assert.Equal(t, "jsmith", list.Resources[2].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.3: "sortOrder" MUST sort according to the attribute type.
@@ -2568,9 +2568,9 @@ func TestRFC7644Pagination(t *testing.T) {
 	// RFC 7644 Section 3.4.2.4: startIndex is the 1-based index of the first query result and count is the maximum per page.
 	t.Run("paginates with startIndex and count", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
 		path := basePath + "/Users?" + url.Values{"startIndex": {"2"}, "count": {"1"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path,
@@ -2584,14 +2584,14 @@ func TestRFC7644Pagination(t *testing.T) {
 		assert.Equal(t, 3, list.TotalResults)
 		assert.Equal(t, 1, list.ItemsPerPage)
 		require.Len(t, list.Resources, 1)
-		assert.Equal(t, "bob", list.Resources[0].UserName)
+		assert.Equal(t, "jsmith", list.Resources[0].UserName)
 	})
 
 	// RFC 7644 Section 3.4.2.4: if count is unspecified, the maximum number of results is set by the service provider.
 	t.Run("pages with a custom default count", func(t *testing.T) {
 		srv := newTestServer(t, withOption(server.DefaultCount(1)))
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
 		request := Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(validToken), WithContentType(protocol.MediaType))
 		response := Response(t, srv, request)
@@ -2604,9 +2604,9 @@ func TestRFC7644Pagination(t *testing.T) {
 	t.Run("caps the count at a custom maximum", func(t *testing.T) {
 		config := core.NewServiceProviderConfig().Sorting().Filtering(2).Patching().Versioning()
 		srv := newTestServer(t, withConfig(config))
-		create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		create(t, srv, &core.User{UserName: "carol"})
+		create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 
 		path := basePath + "/Users?" + url.Values{"count": {"50"}}.Encode()
 		request := Request(t, srv, http.MethodGet, path, WithBearerToken(validToken), WithContentType(protocol.MediaType))
@@ -2732,7 +2732,7 @@ func TestRFC7644Attributes(t *testing.T) {
 		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users?attributes=userName",
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, core.User{UserName: "alice", Emails: []core.Email{{Value: "a@example.com"}}}),
+			WithRequestBodyAs(t, core.User{UserName: "jsmith", Emails: []core.Email{{Value: "a@example.com"}}}),
 		))
 		require.Equal(t, http.StatusCreated, response.StatusCode)
 		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(ReadBodyAs[map[string]any](t, response)))
@@ -2878,14 +2878,14 @@ func TestRFC7644QueryingResourcesUsingHTTPPOST(t *testing.T) {
 	// RFC 7644 Section 3.4.3: after receiving an HTTP POST request, a response is returned as specified in Section 3.4.2.
 	t.Run("answers a search on a resource endpoint with a ListResponse", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "mpepperidge"})
 		create(t, srv, &core.User{UserName: "bjensen"})
-		create(t, srv, &core.User{UserName: "bob"})
+		create(t, srv, &core.User{UserName: "jsmith"})
 
 		response := search(t, srv, basePath+"/Users/.search", `{
 			"schemas": ["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],
 			"attributes": ["userName"],
-			"filter": "userName sw \"b\"",
+			"filter": "userName co \"s\"",
 			"sortBy": "userName",
 			"sortOrder": "descending",
 			"startIndex": 1,
@@ -2897,7 +2897,7 @@ func TestRFC7644QueryingResourcesUsingHTTPPOST(t *testing.T) {
 		assert.Equal(t, []core.SchemaURI{protocol.SchemaListResponse}, list.Schemas)
 		assert.Equal(t, 2, list.TotalResults)
 		require.Len(t, list.Resources, 1)
-		assert.Equal(t, "bob", list.Resources[0]["userName"])
+		assert.Equal(t, "jsmith", list.Resources[0]["userName"])
 		assert.NotContains(t, list.Resources[0], "meta")
 	})
 
@@ -3442,7 +3442,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 				return Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Groups/"+id,
 					WithBearerToken(validToken),
 					WithContentType(protocol.MediaType),
-					WithRequestBody([]byte(ids.fill(`{"displayName":"eng","members":[{"value":"u-1","display":"alice@example.com"}]}`))),
+					WithRequestBody([]byte(ids.fill(`{"displayName":"eng","members":[{"value":"u-1","display":"bjensen@example.com"}]}`))),
 				))
 			}
 
@@ -3833,12 +3833,12 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7644 Section 3.12: invalidFilter when the attribute and filter comparison combination is not supported.
 	t.Run("rejects a value path filter on a single-valued complex attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		id, _ := create(t, srv, &core.User{UserName: "alice", Name: core.Name{GivenName: "alice"}})
+		id, _ := create(t, srv, &core.User{UserName: "bjensen", Name: core.Name{GivenName: "bjensen"}})
 
 		for _, op := range []patch.Operation{
-			{Op: patch.OpReplace, Path: `name[givenName eq "alice"].familyName`, Value: json.RawMessage(`"x"`)},
-			{Op: patch.OpAdd, Path: `name[givenName eq "alice"].familyName`, Value: json.RawMessage(`"x"`)},
-			{Op: patch.OpRemove, Path: `name[givenName eq "alice"]`},
+			{Op: patch.OpReplace, Path: `name[givenName eq "bjensen"].familyName`, Value: json.RawMessage(`"x"`)},
+			{Op: patch.OpAdd, Path: `name[givenName eq "bjensen"].familyName`, Value: json.RawMessage(`"x"`)},
+			{Op: patch.OpRemove, Path: `name[givenName eq "bjensen"]`},
 		} {
 			response := Response(t, srv, patchRequest(t, srv, "Users/"+id, op))
 
@@ -4003,7 +4003,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 	// RFC 7644 Section 3.12: uniqueness when one or more of the attribute values are already in use.
 	t.Run("rejects a patch that collides with another resource's unique value", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice"})
+		create(t, srv, &core.User{UserName: "jsmith"})
 		id, _ := create(t, srv, &core.User{UserName: "bjensen"})
 
 		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
@@ -4015,7 +4015,7 @@ func TestRFC7644ModifyingWithPATCH(t *testing.T) {
 					{
 						Op:    patch.OpReplace,
 						Path:  "userName",
-						Value: json.RawMessage(`"alice"`),
+						Value: json.RawMessage(`"jsmith"`),
 					},
 				},
 			}),
@@ -4523,9 +4523,9 @@ func TestRFC7644AddOperation(t *testing.T) {
 		body string
 	}{
 		{"adding a member in another case", patch.OpAdd, `[{"Value":"u-1","Type":"User"}]`},
-		{"adding a member with a sub-attribute the resource does not store", patch.OpAdd, `[{"value":"u-1","type":"User","display":"alice"}]`},
+		{"adding a member with a sub-attribute the resource does not store", patch.OpAdd, `[{"value":"u-1","type":"User","display":"bjensen"}]`},
 		{"replacing the members with the same member in another case", patch.OpReplace, `[{"Value":"u-1","Type":"User"}]`},
-		{"replacing the members with the same member and a sub-attribute the resource does not store", patch.OpReplace, `[{"value":"u-1","type":"User","display":"alice"}]`},
+		{"replacing the members with the same member and a sub-attribute the resource does not store", patch.OpReplace, `[{"value":"u-1","type":"User","display":"bjensen"}]`},
 	} {
 		t.Run("leaves meta.version unchanged when "+tc.name, func(t *testing.T) {
 			srv := newTestServer(t)
@@ -4868,20 +4868,20 @@ func TestRFC7644DeletingResources(t *testing.T) {
 	// RFC 7644 Section 3.6: the server MUST return 404 for all operations associated with the previously deleted resource.
 	t.Run("keeps later resources addressable after deleting an earlier one", func(t *testing.T) {
 		srv := newTestServer(t)
-		first, _ := create(t, srv, &core.User{UserName: "alice"})
-		create(t, srv, &core.User{UserName: "bob"})
-		last, _ := create(t, srv, &core.User{UserName: "carol"})
+		first, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		create(t, srv, &core.User{UserName: "jsmith"})
+		last, _ := create(t, srv, &core.User{UserName: "mpepperidge"})
 
 		require.Equal(t, http.StatusNoContent, Response(t, srv, Request(t, srv, http.MethodDelete, basePath+"/Users/"+first, WithBearerToken(validToken))).StatusCode)
 
 		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+last, WithBearerToken(validToken)))
 		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.Equal(t, "carol", ReadBodyAs[core.User](t, response).UserName)
+		assert.Equal(t, "mpepperidge", ReadBodyAs[core.User](t, response).UserName)
 
 		response = Response(t, srv, Request(t, srv, http.MethodPut, basePath+"/Users/"+last,
 			WithBearerToken(validToken),
 			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, core.User{UserName: "caroline"}),
+			WithRequestBodyAs(t, core.User{UserName: "mpepperidge2"}),
 		))
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, last, ReadBodyAs[core.User](t, response).ID)
@@ -5224,22 +5224,22 @@ func TestRFC7644VersioningResources(t *testing.T) {
 	// RFC 7643 Section 3.1: version and lastModified change only when the resource itself changes.
 	t.Run("keeps the user version when another member joins or leaves its group", func(t *testing.T) {
 		srv := newTestServer(t)
-		alice, _ := create(t, srv, &core.User{UserName: "alice"})
-		bob, _ := create(t, srv, &core.User{UserName: "bob"})
-		group := createGroup(t, srv, &core.Group{DisplayName: "Tour Guides", Members: []core.Member{{Value: alice}}})
+		bjensen, _ := create(t, srv, &core.User{UserName: "bjensen"})
+		jsmith, _ := create(t, srv, &core.User{UserName: "jsmith"})
+		group := createGroup(t, srv, &core.Group{DisplayName: "Tour Guides", Members: []core.Member{{Value: bjensen}}})
 		metaOf := func(id string) core.Meta {
 			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+id, WithBearerToken(validToken)))
 			require.Equal(t, http.StatusOK, response.StatusCode)
 			return ReadBodyAs[core.User](t, response).Meta
 		}
-		joined := metaOf(alice)
+		joined := metaOf(bjensen)
 
 		for _, op := range []patch.Operation{
-			{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"` + bob + `"}]`)},
-			{Op: patch.OpRemove, Path: `members[value eq "` + bob + `"]`},
+			{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(`[{"value":"` + jsmith + `"}]`)},
+			{Op: patch.OpRemove, Path: `members[value eq "` + jsmith + `"]`},
 		} {
 			require.Equal(t, http.StatusNoContent, Response(t, srv, patchRequest(t, srv, "Groups/"+group.ID, op)).StatusCode)
-			assert.Equal(t, joined, metaOf(alice), op.Op)
+			assert.Equal(t, joined, metaOf(bjensen), op.Op)
 		}
 	})
 
@@ -5692,14 +5692,14 @@ func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 	// RFC 7644 Section 7.5.2: a GET filter that contains sensitive information SHOULD be refused with 403.
 	t.Run("rejects a GET filter on a writeOnly attribute with sensitive", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Password: "hunter2"})
+		create(t, srv, &core.User{UserName: "bjensen", Password: "hunter2"})
 		createWidget(t, srv, &widget{Name: "gear", Secret: "s3cret", Keys: []map[string]any{{"value": "k3y"}}})
 
 		for _, query := range []struct{ resource, filter string }{
 			{"/Users", `password eq "hunter2"`},
 			{"/Users", `password sw "hun"`},
 			{"/Users", `not (password ne "hunter2")`},
-			{"/Users", `userName eq "alice" and password eq "hunter2"`},
+			{"/Users", `userName eq "bjensen" and password eq "hunter2"`},
 			{"/Widgets", `secret eq "s3cret"`},
 			{"/Widgets", `keys.value eq "k3y"`},
 			{"/Widgets", `keys[value eq "k3y"]`},
@@ -5719,7 +5719,7 @@ func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 	// RFC 7644 Section 7.5.2: HTTP POST is the remedy for a sensitive filter refused in a GET.
 	t.Run("accepts a POST .search filter for equality on a writeOnly attribute", func(t *testing.T) {
 		srv := newTestServer(t)
-		create(t, srv, &core.User{UserName: "alice", Password: "hunter2"})
+		create(t, srv, &core.User{UserName: "bjensen", Password: "hunter2"})
 
 		for _, query := range []struct {
 			filter string
