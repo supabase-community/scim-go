@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.18.0](https://github.com/supabase-community/scim-go/compare/v0.17.1...v0.18.0) (2026-10-15)
+
+
+### Features
+
+* **scimtest:** add a client and a conformance suite driven by service provider discovery ([692cd1a](https://github.com/supabase-community/scim-go/commit/692cd1aebcd606d234287a3b2cb3dc0965cd540c))
+* **server:** resolve sort attributes, list reference attributes, stamp meta and keep versions strictly increasing ([dc7ab70](https://github.com/supabase-community/scim-go/commit/dc7ab7054d825cdcfd24a2a6998bf66e2a6c6dca))
+
 ## [0.17.1](https://github.com/supabase-community/scim-go/compare/v0.17.0...v0.17.1) (2026-10-15)
 
 
