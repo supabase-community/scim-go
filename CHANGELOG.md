@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.17.0](https://github.com/supabase-community/scim-go/compare/v0.16.0...v0.17.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **api:** unexport filter.NewNode and protocol.NewAttribute
+
+### Code Refactoring
+
+* **api:** unexport filter.NewNode and protocol.NewAttribute ([f19246e](https://github.com/supabase-community/scim-go/commit/f19246e3d264489aacf1fcf3a8eecf0f60568b57))
+
 ## [0.16.0](https://github.com/supabase-community/scim-go/compare/v0.15.2...v0.16.0) (2026-10-14)
 
 
