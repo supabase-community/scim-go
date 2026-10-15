@@ -2,7 +2,7 @@
 
 COVERAGE := coverage.out
 COVER_MIN := 95
-COVER_EXCLUDE := /pkg/scimtest/|/internal/|/cmd/server/
+COVER_EXCLUDE := /pkg/scimtest/|/internal/|/cmd/scimd/
 BENCHCOUNT ?= 1
 FUZZTIME ?= 30s
 
@@ -12,11 +12,11 @@ clean:
 
 .PHONY: build
 build:
-	go build -o bin/scim-server ./cmd/server
+	go build -o bin/scimd ./cmd/scimd
 
 .PHONY: run
 run:
-	go run ./cmd/server
+	go run ./cmd/scimd
 
 .PHONY: smoke
 smoke: build

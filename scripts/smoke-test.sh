@@ -13,7 +13,7 @@ tmp=$(mktemp -d)
 passed=0
 failed=0
 
-PORT="$PORT" SCIM_BEARER_TOKEN="$TOKEN" SCIM_BASE_URL="$BASE_URL" bin/scim-server >"$tmp/server.log" 2>&1 &
+PORT="$PORT" SCIM_BEARER_TOKEN="$TOKEN" SCIM_BASE_URL="$BASE_URL" bin/scimd >"$tmp/server.log" 2>&1 &
 server=$!
 trap 'kill "$server" 2>/dev/null; rm -rf "$tmp"' EXIT
 
