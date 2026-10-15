@@ -6,7 +6,7 @@ type Node struct {
 	raw peg.Token
 }
 
-func NewNode(raw peg.ASTNode) *Node {
+func newNode(raw peg.ASTNode) *Node {
 	token, ok := raw.(peg.Token)
 	if !ok {
 		return nil
@@ -40,15 +40,15 @@ func (n *Node) Not() bool {
 }
 
 func (n *Node) Operand() *Node {
-	return NewNode(n.raw["not"])
+	return newNode(n.raw["not"])
 }
 
 func (n *Node) Left() *Node {
-	return NewNode(n.raw["left"])
+	return newNode(n.raw["left"])
 }
 
 func (n *Node) Right() *Node {
-	return NewNode(n.raw["right"])
+	return newNode(n.raw["right"])
 }
 
 func (n *Node) HasPath() bool {
@@ -61,7 +61,7 @@ func (n *Node) Path() string {
 }
 
 func (n *Node) ValueFilter() *Node {
-	return NewNode(n.raw["value_filter"])
+	return newNode(n.raw["value_filter"])
 }
 
 func (n *Node) SubAttribute() string {

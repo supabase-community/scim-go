@@ -11,7 +11,7 @@ type Attribute struct {
 	Parent     *core.Attribute
 }
 
-func NewAttribute(definition *core.Attribute, path filter.AttrPath, parent *core.Attribute) *Attribute {
+func newAttribute(definition *core.Attribute, path filter.AttrPath, parent *core.Attribute) *Attribute {
 	return &Attribute{
 		Definition: definition,
 		Path:       path,

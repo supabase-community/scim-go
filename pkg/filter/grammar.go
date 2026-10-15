@@ -67,7 +67,7 @@ func (g *grammar) parse(text string, p peg.Parser) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewNode(raw), nil
+	return newNode(raw), nil
 }
 
 func (g *grammar) run(text string, p peg.Parser) (peg.ASTNode, error) {
