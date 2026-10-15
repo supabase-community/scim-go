@@ -48,6 +48,7 @@ func TestRepositoryListBounds(t *testing.T) {
 		query *protocol.SearchRequest
 		want  int
 	}{
+		{"nil query", nil, 0},
 		{"negative count", &protocol.SearchRequest{StartIndex: 1, Count: -1}, 0},
 		{"count past the end", &protocol.SearchRequest{StartIndex: 2, Count: math.MaxInt}, 1},
 		{"start past the end", &protocol.SearchRequest{StartIndex: 10, Count: 5}, 0},

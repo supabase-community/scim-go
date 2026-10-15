@@ -56,6 +56,9 @@ func (r *repository[T]) Read(_ context.Context, id string) (T, error) {
 }
 
 func (r *repository[T]) List(_ context.Context, query *protocol.SearchRequest) ([]T, int, error) {
+	if query == nil {
+		query = &protocol.SearchRequest{}
+	}
 	matching, err := r.sortBy(query, r.db.all(r.schemas))
 	if err != nil {
 		return []T{}, 0, err
