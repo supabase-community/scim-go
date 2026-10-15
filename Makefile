@@ -8,7 +8,7 @@ FUZZTIME ?= 30s
 
 .PHONY: clean
 clean:
-	rm -rf $(COVERAGE)
+	rm -rf $(COVERAGE) dist
 
 .PHONY: build
 build:
@@ -17,6 +17,10 @@ build:
 .PHONY: run
 run:
 	go run ./cmd/scimd
+
+.PHONY: snapshot
+snapshot:
+	goreleaser release --snapshot --clean
 
 .PHONY: smoke
 smoke: build

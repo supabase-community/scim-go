@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -18,6 +20,8 @@ import (
 )
 
 const basePath = "/scim/v2"
+
+var version string
 
 var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
@@ -36,8 +40,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	fmt.Println("scim server listening on", addr, "under", basePath)
+	fmt.Println("scimd", moduleVersion(), "listening on", addr, "under", basePath)
 	run(ctx.Done(), httpServer)
+}
+
+func moduleVersion() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		return cmp.Or(version, info.Main.Version)
+	}
+	return version
 }
 
 func configFromEnv() (addr, token, baseURL string) {

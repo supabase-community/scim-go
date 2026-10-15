@@ -22,6 +22,10 @@ jobs:
           check-latest: true
       - run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
       - run: make ci
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: "~> v2"
+          args: check
       - run: git diff --exit-code
       - if: ${{ github.event_name == 'workflow_dispatch' }}
         run: make fuzz FUZZTIME=5m
@@ -32,6 +36,9 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
         id: release
@@ -40,3 +47,25 @@ jobs:
           manifest-file: .release-please-manifest.json
       - if: ${{ steps.release.outputs.release_created }}
         run: curl -fsSL "https://proxy.golang.org/github.com/supabase-community/scim-go/@v/${{ steps.release.outputs.tag_name }}.info"
+  binaries:
+    needs: release
+    if: ${{ !cancelled() && needs.release.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.release.outputs.tag_name }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
