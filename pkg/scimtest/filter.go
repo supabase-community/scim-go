@@ -1,9 +1,6 @@
 package scimtest
 
 import (
-	"net/url"
-	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -19,6 +16,7 @@ type filterCase struct {
 
 type filterTarget struct {
 	path      string
+	set       func(body core.Object, value string)
 	caseExact bool
 	unique    string
 	alpha     string
@@ -50,7 +48,7 @@ var filterCases = []filterCase{
 func newFilterTable(t *testing.T, r *resource) *filterTable {
 	t.Helper()
 
-	table := &filterTable{r: r, targets: filterTargets(r.schema)}
+	table := &filterTable{r: r, targets: filterTargets(r.schemas)}
 	for _, target := range table.targets {
 		table.seed(t, target)
 	}
@@ -79,7 +77,8 @@ func (ft *filterTable) seed(t *testing.T, target *filterTarget) {
 	target.alpha, target.beta = "scimtest alpha "+target.unique, "scimtest beta "+target.unique
 	for _, value := range []string{target.alpha, target.beta} {
 		body := ft.r.body(t, newUnique())
-		setPath(body, target.path, value)
+		target.set(body, value)
+		body.Set("schemas", ft.r.schemaURIs(body))
 		_, created := ft.r.post(t, body)
 		if created == nil {
 			target.rejected = true
@@ -101,65 +100,73 @@ func (ft *filterTable) check(t *testing.T, target *filterTarget, tc filterCase) 
 			want = append(want, target.ids[i])
 		}
 	}
-	filter := "(" + tc.expr(target) + ") and (" + idFilter(target.ids...) + ")"
-	if got := ft.matches(t, filter, target.ids); !slices.Equal(got, want) {
-		t.Errorf("scimtest: GET %s?filter=%s (RFC 7644 3.4.2.2)\n        want ids: %v\n        got ids:  %v", ft.r.kind.Endpoint, url.QueryEscape(filter), want, got)
-	}
-}
-
-func (ft *filterTable) matches(t *testing.T, filter string, ours []string) []string {
-	t.Helper()
-
-	query := filterBy(filter)
-	query.Set("count", strconv.Itoa(len(ours)))
-	found := ft.r.filtered(t, query)
-	return slices.DeleteFunc(slices.Clone(ours), func(id string) bool { return !slices.Contains(found, id) })
+	ft.r.expectMatches(t, tc.expr(target), target.ids, want)
 }
 
 func (target *filterTarget) compare(op, value string) string {
 	return target.path + " " + op + " " + quoted(value)
 }
 
-func filterTargets(schema *core.Schema) []*filterTarget {
-	var targets []*filterTarget
-	for _, attribute := range schema.Attributes {
-		if isFilterable(attribute) {
-			targets = append(targets, &filterTarget{path: attribute.Name, caseExact: attribute.CaseExact})
-		}
-		targets = append(targets, subTargets(attribute)...)
+func filterTargets(schemas core.Schemas) []*filterTarget {
+	targets := attributeTargets(schemas.Base().Attributes, "", func(body core.Object) core.Object { return body })
+	for _, extension := range schemas.Extensions() {
+		uri := string(extension.ID)
+		targets = append(targets, attributeTargets(extension.Attributes, uri+":", func(body core.Object) core.Object {
+			holder, _ := body.Get(uri).(map[string]any)
+			if holder == nil {
+				holder = map[string]any{}
+				body.Set(uri, holder)
+			}
+			return holder
+		})...)
 	}
 	return targets
 }
 
-func subTargets(attribute *core.Attribute) []*filterTarget {
-	if attribute.Type != core.TypeComplex || attribute.MultiValued || attribute.Mutability != core.MutabilityReadWrite {
+func attributeTargets(attributes core.Attributes, prefix string, holder func(core.Object) core.Object) []*filterTarget {
+	var targets []*filterTarget
+	for _, attribute := range attributes {
+		if isFilterable(attribute) {
+			targets = append(targets, &filterTarget{path: prefix + attribute.Name, caseExact: attribute.CaseExact, set: func(body core.Object, value string) {
+				holder(body).Set(attribute.Name, value)
+			}})
+		}
+		targets = append(targets, subTargets(attribute, prefix, holder)...)
+	}
+	return targets
+}
+
+func subTargets(attribute *core.Attribute, prefix string, holder func(core.Object) core.Object) []*filterTarget {
+	if attribute.Type != core.TypeComplex || attribute.Mutability != core.MutabilityReadWrite {
 		return nil
 	}
 	var targets []*filterTarget
 	for _, sub := range attribute.SubAttributes {
 		if isFilterable(sub) {
-			targets = append(targets, &filterTarget{path: attribute.Name + "." + sub.Name, caseExact: sub.CaseExact})
+			targets = append(targets, &filterTarget{path: prefix + attribute.Name + "." + sub.Name, caseExact: sub.CaseExact, set: subSetter(holder, attribute, sub)})
 		}
 	}
 	return targets
+}
+
+func subSetter(holder func(core.Object) core.Object, attribute, sub *core.Attribute) func(core.Object, string) {
+	if attribute.MultiValued {
+		return func(body core.Object, value string) {
+			holder(body).Set(attribute.Name, []any{map[string]any{sub.Name: value}})
+		}
+	}
+	return func(body core.Object, value string) {
+		parent, _ := holder(body).Get(attribute.Name).(map[string]any)
+		if parent == nil {
+			parent = map[string]any{}
+		}
+		parent[sub.Name] = value
+		holder(body).Set(attribute.Name, parent)
+	}
 }
 
 func isFilterable(attribute *core.Attribute) bool {
 	return attribute.Type == core.TypeString && !attribute.MultiValued &&
 		attribute.Mutability == core.MutabilityReadWrite && len(attribute.CanonicalValues) == 0 &&
 		(attribute.Returned == core.ReturnedDefault || attribute.Returned == core.ReturnedAlways)
-}
-
-func setPath(body core.Object, path, value string) {
-	name, sub, ok := strings.Cut(path, ".")
-	if !ok {
-		body.Set(name, value)
-		return
-	}
-	parent, _ := body.Get(name).(map[string]any)
-	if parent == nil {
-		parent = map[string]any{}
-	}
-	parent[sub] = value
-	body.Set(name, parent)
 }

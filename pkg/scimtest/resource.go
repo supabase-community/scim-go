@@ -3,9 +3,11 @@ package scimtest
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -15,17 +17,44 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+const (
+	typeSub     = "type"
+	valueSub    = "value"
+	placeholder = "scimtest"
+)
+
 type resource struct {
-	suite   *Suite
-	config  *core.ServiceProviderConfig
-	kind    core.ResourceType
-	schema  *core.Schema
-	fixture fixture
+	suite     *Suite
+	config    *core.ServiceProviderConfig
+	kind      core.ResourceType
+	schemas   core.Schemas
+	fixture   fixture
+	transport transport
+	searching int
+}
+
+func (r *resource) over(t *testing.T, tr transport) *resource {
+	t.Helper()
+
+	clone := *r
+	clone.transport = tr
+	if !tr.search {
+		return &clone
+	}
+	if r.searching == 0 {
+		r.searching = tr.send(t, r.client(), r.kind.Endpoint, url.Values{countParam: {"0"}}).StatusCode
+	}
+	if r.searching != http.StatusOK {
+		r.suite.todo(t, "POST %s/.search returned %d", r.kind.Endpoint, r.searching)
+	}
+	return &clone
 }
 
 func (r *resource) checkCreate(t *testing.T) {
 	t.Run("returns 201 with a Location", r.checkLocation)
 	t.Run("ignores a readOnly id", r.checkReadOnly)
+	t.Run("ignores other readOnly attributes", r.checkReadOnlyAttributes)
+	t.Run("assigns meta and ignores the client's", r.checkMeta)
 	t.Run("rejects a duplicate unique value", r.checkUniqueness)
 	t.Run("rejects a missing required attribute", r.checkRequired)
 }
@@ -36,6 +65,7 @@ func (r *resource) checkLocation(t *testing.T) {
 	if got := res.Header.Get("Location"); got == "" || got != location {
 		t.Errorf("scimtest: POST %s (RFC 7644 3.3): Location %q, want meta.location %q", r.kind.Endpoint, got, location)
 	}
+	r.expectLocated(t, res)
 }
 
 func (r *resource) checkReadOnly(t *testing.T) {
@@ -43,6 +73,37 @@ func (r *resource) checkReadOnly(t *testing.T) {
 	body.Set("id", "scimtest-readonly")
 	if _, created := r.createBody(t, body); idOf(created) == "scimtest-readonly" {
 		t.Errorf("scimtest: POST %s (RFC 7644 3.3): kept the readOnly id from the request", r.kind.Endpoint)
+	}
+}
+
+func (r *resource) checkReadOnlyAttributes(t *testing.T) {
+	attribute := r.attribute(t, "readOnly attribute", isReadOnly)
+	marker := "scimtest-readonly-" + newUnique()
+	body := r.body(t, newUnique())
+	body.Set(attribute.Name, readOnlyValue(attribute, marker))
+
+	_, created := r.createBody(t, body)
+	expectIgnored(t, "POST "+r.kind.Endpoint+" (RFC 7644 3.3)", created.Get(attribute.Name), marker)
+}
+
+// RFC 7643 Section 3.1: "meta" SHALL be ignored when provided by clients.
+func (r *resource) checkMeta(t *testing.T) {
+	forged := map[string]any{"resourceType": placeholder, "created": "2000-01-01T00:00:00Z", "lastModified": "2000-01-01T00:00:00Z", "location": "https://scimtest.invalid/scimtest", "version": `W/"scimtest"`}
+	body := r.body(t, newUnique())
+	body.Set("meta", forged)
+
+	_, created := r.createBody(t, body)
+	meta := metaOf(created)
+	for key, value := range forged {
+		if meta[key] == value {
+			t.Errorf("scimtest: POST %s (RFC 7643 3.1): kept the client's meta.%s %v", r.kind.Endpoint, key, value)
+		}
+	}
+	if kind, ok := meta["resourceType"]; ok && kind != string(r.kind.Name) {
+		t.Errorf("scimtest: POST %s (RFC 7643 3.1): meta.resourceType %v, want %s", r.kind.Endpoint, kind, r.kind.Name)
+	}
+	if meta["created"] != meta["lastModified"] {
+		t.Errorf("scimtest: POST %s (RFC 7643 3.1): meta.lastModified %v, want meta.created %v", r.kind.Endpoint, meta["lastModified"], meta["created"])
 	}
 }
 
@@ -79,6 +140,7 @@ func (r *resource) checkGet(t *testing.T) {
 	if got := idOf(Decode[core.Object](t, res)); got != idOf(created) {
 		t.Errorf("scimtest: GET %s (RFC 7644 3.4.1): id %q, want %q", r.path(created), got, idOf(created))
 	}
+	r.expectLocated(t, res)
 }
 
 func (r *resource) checkUnknown(t *testing.T) {
@@ -107,7 +169,29 @@ func (r *resource) checkNever(t *testing.T) {
 }
 
 func (r *resource) checkList(t *testing.T) {
-	list[core.Object](t, r.client(), r.kind.Endpoint)
+	t.Run("returns a ListResponse", func(t *testing.T) { r.list(t, url.Values{}) })
+	t.Run("returns totalResults 0 when nothing matches", r.checkListEmpty)
+	t.Run("locates every listed resource", r.checkListLocations)
+}
+
+func (r *resource) checkListEmpty(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	query := byID("scimtest-" + newUnique())
+
+	if page := r.list(t, query); page.TotalResults != 0 || len(page.Resources) != 0 {
+		t.Errorf("scimtest: %s (RFC 7644 3.4.2): totalResults %d with %d resources, want 0", r.transport.describe(r.kind.Endpoint, query), page.TotalResults, len(page.Resources))
+	}
+}
+
+func (r *resource) checkListLocations(t *testing.T) {
+	r.create(t, newUnique())
+	query := url.Values{}
+
+	for _, object := range r.list(t, query).Resources {
+		if location, ok := metaOf(object)["location"].(string); ok && !strings.HasSuffix(location, r.path(object)) {
+			t.Errorf("scimtest: %s (RFC 7643 3.1): meta.location %q, want the URI of %s", r.transport.describe(r.kind.Endpoint, query), location, r.path(object))
+		}
+	}
 }
 
 func (r *resource) checkFilter(t *testing.T) {
@@ -115,14 +199,83 @@ func (r *resource) checkFilter(t *testing.T) {
 	t.Run("rejects an invalid filter", r.checkFilterInvalid)
 	t.Run("rejects gt on a boolean", r.checkFilterBoolean)
 	t.Run("operators", r.checkFilterOperators)
+	t.Run("matches a value path within one value", r.checkFilterValuePath)
+	t.Run("compares a boolean", r.checkFilterBooleanEquals)
+	t.Run("compares meta attributes", r.checkFilterMeta)
+	t.Run("binds and tighter than or", r.checkFilterPrecedence)
+}
+
+func (r *resource) checkFilterValuePath(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	attribute := r.attribute(t, "multi-valued attribute with a canonical type and a value", func(a *core.Attribute) bool {
+		typed, value := a.SubAttributes.Lookup(typeSub), a.SubAttributes.Lookup(valueSub)
+		return a.MultiValued && a.Mutability == core.MutabilityReadWrite && typed != nil && len(typed.CanonicalValues) > 1 && value != nil && isFilterable(value)
+	})
+	kinds := attribute.SubAttribute(typeSub).CanonicalValues[:2]
+	unique := newUnique()
+	alpha, beta := "scimtest alpha "+unique, "scimtest beta "+unique
+	ids := make([]string, 0, 2)
+	for _, values := range [][]string{{alpha, beta}, {beta, alpha}} {
+		body := r.body(t, newUnique())
+		body.Set(attribute.Name, []any{map[string]any{typeSub: kinds[0], valueSub: values[0]}, map[string]any{typeSub: kinds[1], valueSub: values[1]}})
+		ids = append(ids, idOf(r.seed(t, body)))
+	}
+	filter := attribute.Name + "[type eq " + quoted(kinds[0]) + " and value eq " + quoted(alpha) + "]"
+
+	r.expectMatches(t, filter, ids, ids[:1])
+}
+
+func (r *resource) checkFilterBooleanEquals(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	attribute := r.attribute(t, "readWrite singular boolean attribute", func(a *core.Attribute) bool {
+		return a.Type == core.TypeBoolean && !a.MultiValued && a.Mutability == core.MutabilityReadWrite
+	})
+	ids := make([]string, 0, 2)
+	for _, value := range []bool{true, false} {
+		body := r.body(t, newUnique())
+		body.Set(attribute.Name, value)
+		ids = append(ids, idOf(r.seed(t, body)))
+	}
+
+	r.expectMatches(t, attribute.Name+" eq true", ids, ids[:1])
+	r.expectMatches(t, attribute.Name+" eq false", ids, ids[1:])
+	r.expectMatches(t, "not ("+attribute.Name+" eq true)", ids, ids[1:])
+}
+
+func (r *resource) checkFilterMeta(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	_, first := r.create(t, newUnique())
+	_, second := r.create(t, newUnique())
+	ids := []string{idOf(first), idOf(second)}
+	created, _ := metaOf(first)["created"].(string)
+	modified, _ := metaOf(first)["lastModified"].(string)
+
+	r.expectMatches(t, "meta.resourceType eq "+quoted(string(r.kind.Name)), ids, ids)
+	r.expectMatches(t, "meta.resourceType eq \"scimtest\"", ids, nil)
+	if metaOf(second)["created"] == created || metaOf(second)["lastModified"] == modified {
+		t.Skipf("n/a: both resources were created at %s", created)
+	}
+	r.expectMatches(t, "meta.lastModified gt "+quoted(modified), ids, ids[1:])
+	r.expectMatches(t, "meta.created le "+quoted(created), ids, ids[:1])
+}
+
+// RFC 7644 Section 3.4.2.2: "not" takes precedence over "and", which takes precedence over "or".
+func (r *resource) checkFilterPrecedence(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	ids := make([]string, 0, 3)
+	for range 3 {
+		_, created := r.create(t, newUnique())
+		ids = append(ids, idOf(created))
+	}
+
+	r.expectMatches(t, idFilter(ids[0])+" or "+idFilter(ids[1])+" and "+idFilter(ids[2]), ids, ids[:1])
+	r.expectMatches(t, "not ("+idFilter(ids[0])+") and "+idFilter(ids[1]), ids, ids[1:2])
 }
 
 func (r *resource) checkFilterBoolean(t *testing.T) {
 	supports(t, "filter", r.config.Filter.Supported)
 	attribute := r.attribute(t, "singular boolean attribute", func(a *core.Attribute) bool { return a.Type == core.TypeBoolean && !a.MultiValued })
-	path := r.kind.Endpoint + "?" + filterBy(attribute.Name+" gt true").Encode()
-
-	RequireError(t, r.client().Get(t, path), http.StatusBadRequest, scimerrors.InvalidFilter)
+	RequireError(t, r.send(t, filterBy(attribute.Name+" gt true")), http.StatusBadRequest, scimerrors.InvalidFilter)
 }
 
 func (r *resource) checkFilterOperators(t *testing.T) {
@@ -132,7 +285,7 @@ func (r *resource) checkFilterOperators(t *testing.T) {
 
 func (r *resource) checkFilterID(t *testing.T) {
 	if r.suite.unsupported(t, "filter", r.config.Filter.Supported) {
-		res := r.client().Get(t, r.kind.Endpoint+"?"+byID("scimtest-none").Encode())
+		res := r.send(t, byID("scimtest-none"))
 		expectStatus(t, res, http.StatusNotImplemented, "RFC 7644 3.12")
 		return
 	}
@@ -140,16 +293,14 @@ func (r *resource) checkFilterID(t *testing.T) {
 	query := byID(idOf(created))
 
 	if got := r.filtered(t, query); !slices.Equal(got, []string{idOf(created)}) {
-		t.Errorf("scimtest: GET %s?%s (RFC 7644 3.4.2.2): ids %v, want [%s]", r.kind.Endpoint, query.Encode(), got, idOf(created))
+		t.Errorf("scimtest: %s (RFC 7644 3.4.2.2): ids %v, want [%s]", r.transport.describe(r.kind.Endpoint, query), got, idOf(created))
 	}
 }
 
 func (r *resource) checkFilterInvalid(t *testing.T) {
 	supports(t, "filter", r.config.Filter.Supported)
 	r.suite.should(t, "RFC 7644 Table 9 400 invalidFilter for an invalid filter")
-	path := r.kind.Endpoint + "?filter=id+eq"
-
-	RequireError(t, r.client().Get(t, path), http.StatusBadRequest, scimerrors.InvalidFilter)
+	RequireError(t, r.send(t, filterBy("id eq")), http.StatusBadRequest, scimerrors.InvalidFilter)
 }
 
 func (r *resource) checkSort(t *testing.T) {
@@ -158,12 +309,12 @@ func (r *resource) checkSort(t *testing.T) {
 }
 
 func (r *resource) checkSortBy(t *testing.T) {
-	path := r.kind.Endpoint + "?sortBy=id"
+	query := url.Values{"sortBy": {"id"}}
 	if r.suite.unsupported(t, "sort", r.config.Sort.Supported) {
-		expectStatus(t, r.client().Get(t, path), http.StatusNotImplemented, "RFC 7644 3.12")
+		expectStatus(t, r.send(t, query), http.StatusNotImplemented, "RFC 7644 3.12")
 		return
 	}
-	list[core.Object](t, r.client(), path)
+	r.list(t, query)
 }
 
 func (r *resource) checkSortOrder(t *testing.T) {
@@ -182,6 +333,8 @@ func (r *resource) checkSortOrder(t *testing.T) {
 	query.Set("sortBy", attribute.Name)
 
 	r.expectIDs(t, query, ids, "RFC 7644 3.4.2.3")
+	query.Set("sortOrder", "ascending")
+	r.expectIDs(t, query, ids, "RFC 7644 3.4.2.3")
 	query.Set("sortOrder", "descending")
 	r.expectIDs(t, query, []string{ids[1], ids[0]}, "RFC 7644 3.4.2.3")
 }
@@ -190,15 +343,60 @@ func (r *resource) checkPagination(t *testing.T) {
 	r.create(t, newUnique())
 	r.create(t, newUnique())
 
-	t.Run("returns only totalResults for count 0", func(t *testing.T) { r.expectPage(t, "count=0", 0, 1) })
-	t.Run("treats a negative count as 0", func(t *testing.T) { r.expectPage(t, "count=-1", 0, 1) })
-	t.Run("returns no more than count", func(t *testing.T) { r.expectPage(t, "count=1", 1, 2) })
+	t.Run("returns only totalResults for count 0", func(t *testing.T) { r.expectPage(t, url.Values{countParam: {"0"}}, 0, 1) })
+	t.Run("treats a negative count as 0", func(t *testing.T) { r.expectPage(t, url.Values{countParam: {"-1"}}, 0, 1) })
+	t.Run("returns no more than count", func(t *testing.T) { r.expectPage(t, url.Values{countParam: {"1"}}, 1, 2) })
 	t.Run("treats a startIndex below 1 as 1", func(t *testing.T) {
-		page := list[core.Object](t, r.client(), r.kind.Endpoint+"?startIndex=0&count=1")
-		if page.StartIndex != 1 {
-			t.Errorf("scimtest: GET %s?startIndex=0 (RFC 7644 3.4.2.4): startIndex %d, want 1", r.kind.Endpoint, page.StartIndex)
+		query := url.Values{"startIndex": {"0"}, countParam: {"1"}}
+		if page := r.list(t, query); page.StartIndex != 1 {
+			t.Errorf("scimtest: %s (RFC 7644 3.4.2.4): startIndex %d, want 1", r.transport.describe(r.kind.Endpoint, query), page.StartIndex)
 		}
 	})
+	t.Run("walks every result once, page by page", r.checkPageWalk)
+	t.Run("returns no more than filter.maxResults", r.checkPageCap)
+}
+
+func (r *resource) checkPageWalk(t *testing.T) {
+	supports(t, "sort", r.config.Sort.Supported)
+	supports(t, "filter", r.config.Filter.Supported)
+	ids := make([]string, 0, 3)
+	for range 3 {
+		_, created := r.create(t, newUnique())
+		ids = append(ids, idOf(created))
+	}
+	query := byID(ids...)
+	query.Set("sortBy", "id")
+	query.Set(countParam, "3")
+	want := idsOf(r.list(t, query).Resources)
+
+	walked := make([]string, 0, len(ids))
+	for start := range ids {
+		page := maps.Clone(query)
+		page.Set("startIndex", strconv.Itoa(start+1))
+		page.Set(countParam, "1")
+		walked = append(walked, idsOf(r.list(t, page).Resources)...)
+	}
+	if !slices.Equal(walked, want) {
+		t.Errorf("scimtest: %s (RFC 7644 3.4.2.4): pages of 1 returned %v, want %v", r.transport.describe(r.kind.Endpoint, query), walked, want)
+	}
+}
+
+func (r *resource) checkPageCap(t *testing.T) {
+	if r.transport.search {
+		t.Skip("n/a: checked once, over GET")
+	}
+	most := r.config.Filter.MaxResults
+	if most <= 0 || most > 200 {
+		t.Skipf("n/a: filter.maxResults is %d", most)
+	}
+	for total := r.list(t, url.Values{countParam: {"0"}}).TotalResults; total <= most; total++ {
+		r.create(t, newUnique())
+	}
+	query := url.Values{countParam: {strconv.Itoa(most + 1)}}
+
+	if page := r.list(t, query); len(page.Resources) > most {
+		t.Errorf("scimtest: %s (RFC 7643 5): %d resources, want at most filter.maxResults %d", r.transport.describe(r.kind.Endpoint, query), len(page.Resources), most)
+	}
 }
 
 func (r *resource) checkAttributes(t *testing.T) {
@@ -220,21 +418,13 @@ func (r *resource) checkAttributes(t *testing.T) {
 	})
 }
 
-func (r *resource) checkSearch(t *testing.T) {
-	r.create(t, newUnique())
-	body := map[string]any{"schemas": []core.SchemaURI{protocol.SchemaSearchRequest}, "startIndex": 1, "count": 1}
-
-	res := r.client().Post(t, r.kind.Endpoint+"/.search", body)
-	if res.StatusCode != http.StatusOK {
-		r.suite.todo(t, "POST %s/.search returned %d", r.kind.Endpoint, res.StatusCode)
-	}
-	if page := Decode[protocol.ListResponse[core.Object]](t, res); !slices.Contains(page.Schemas, protocol.SchemaListResponse) || len(page.Resources) > 1 {
-		t.Errorf("scimtest: POST %s/.search (RFC 7644 3.4.3): schemas %v with %d resources, want a ListResponse of at most 1", r.kind.Endpoint, page.Schemas, len(page.Resources))
-	}
+func (r *resource) checkPatch(t *testing.T) {
+	patching{r}.run(t)
 }
 
 func (r *resource) checkReplace(t *testing.T) {
 	t.Run("replaces the resource", r.checkPut)
+	t.Run("ignores readOnly attributes", r.checkPutReadOnly)
 	t.Run("rejects a changed immutable attribute", r.checkImmutable)
 }
 
@@ -246,6 +436,29 @@ func (r *resource) checkPut(t *testing.T) {
 	expectStatus(t, res, http.StatusOK, "RFC 7644 3.5.1")
 	if got := idOf(Decode[core.Object](t, res)); got != idOf(created) {
 		t.Errorf("scimtest: PUT %s (RFC 7644 3.5.1): id %q, want %q", r.path(created), got, idOf(created))
+	}
+	r.expectLocated(t, res)
+}
+
+func (r *resource) checkPutReadOnly(t *testing.T) {
+	unique := newUnique()
+	_, created := r.create(t, unique)
+	marker := "scimtest-readonly-" + newUnique()
+	body := r.body(t, unique)
+	body.Set("id", marker)
+	attribute := find(r.schemas.Base(), isReadOnly)
+	if attribute != nil {
+		body.Set(attribute.Name, readOnlyValue(attribute, marker))
+	}
+
+	res := r.client().Put(t, r.path(created), body)
+	expectStatus(t, res, http.StatusOK, "RFC 7644 3.5.1")
+	replaced := Decode[core.Object](t, res)
+	if got := idOf(replaced); got != idOf(created) {
+		t.Errorf("scimtest: PUT %s (RFC 7644 3.5.1): id %q, want %q", r.path(created), got, idOf(created))
+	}
+	if attribute != nil {
+		expectIgnored(t, "PUT "+r.path(created)+" (RFC 7644 3.5.1)", replaced.Get(attribute.Name), marker)
 	}
 }
 
@@ -261,150 +474,185 @@ func (r *resource) checkImmutable(t *testing.T) {
 	RequireError(t, r.client().Put(t, r.path(created), body), http.StatusBadRequest, scimerrors.Mutability)
 }
 
-func (r *resource) checkPatch(t *testing.T) {
-	t.Run("replaces an attribute", r.checkPatchReplace)
-	t.Run("rejects removing a required attribute", r.checkPatchRequired)
-	t.Run("adds attributes without a path", r.checkPatchAdd)
-	t.Run("unassigns a removed attribute", r.checkPatchRemove)
-	t.Run("rejects a remove without a path", r.checkPatchNoPath)
-	t.Run("rejects a value filter without a match", r.checkPatchNoMatch)
-	t.Run("is atomic", r.checkPatchAtomic)
-	t.Run("rejects a body without the PatchOp schema", r.checkPatchSchema)
-}
-
-func (r *resource) checkPatchReplace(t *testing.T) {
-	if r.suite.unsupported(t, "patch", r.config.Patch.Supported) {
-		_, created := r.create(t, newUnique())
-		res := r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, "externalId", "scimtest")))
-		expectStatus(t, res, http.StatusNotImplemented, "RFC 7644 3.12")
-		return
-	}
-	attribute := find(r.schema, patchable)
-	if attribute == nil {
-		r.suite.todo(t, "%s has no readWrite singular string attribute to PATCH", r.kind.Name)
-	}
-	_, created := r.create(t, newUnique())
-	want := "scimtest " + newUnique()
-	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, attribute.Name, want))), created)
-	r.expectValue(t, created, attribute.Name, want)
-}
-
-func (r *resource) checkPatchRequired(t *testing.T) {
-	supports(t, "patch", r.config.Patch.Supported)
-	body := r.body(t, newUnique())
-	attribute := r.attribute(t, "required attribute in its fixture", required(body))
-	_, created := r.createBody(t, body)
-
-	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, attribute.Name, nil))), http.StatusBadRequest, scimerrors.Mutability)
-}
-
-func (r *resource) checkPatchAdd(t *testing.T) {
-	created, attribute := r.patchTarget(t)
-	want := "scimtest " + newUnique()
-
-	res := r.client().Patch(t, r.path(created), ops(op(patch.OpAdd, "", map[string]string{attribute.Name: want})))
-	r.expectPatched(t, res, created)
-	r.expectValue(t, created, attribute.Name, want)
-}
-
-func (r *resource) checkPatchRemove(t *testing.T) {
-	attribute := r.patchAttribute(t)
-	if attribute.Required {
-		t.Skipf("n/a: %s is required", attribute.Name)
-	}
-	body := r.body(t, newUnique())
-	body.Set(attribute.Name, "scimtest")
-	_, created := r.createBody(t, body)
-	if created.Get(attribute.Name) != "scimtest" {
-		t.Skipf("n/a: the server did not store %s", attribute.Name)
-	}
-
-	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, attribute.Name, nil))), created)
-	r.expectValue(t, created, attribute.Name, nil)
-}
-
-func (r *resource) checkPatchNoPath(t *testing.T) {
-	created, _ := r.patchTarget(t)
-
-	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, "", nil))), http.StatusBadRequest, scimerrors.NoTarget)
-}
-
-func (r *resource) checkPatchNoMatch(t *testing.T) {
-	created, _ := r.patchTarget(t)
-	attribute := r.attribute(t, "readWrite multi-valued complex attribute with a value", func(a *core.Attribute) bool {
-		return a.MultiValued && a.Type == core.TypeComplex && a.Mutability == core.MutabilityReadWrite && a.SubAttributes.Lookup("value") != nil
-	})
-	path := attribute.Name + `[value eq "scimtest-none"]`
-
-	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, path, map[string]string{"value": "scimtest"}))), http.StatusBadRequest, scimerrors.NoTarget)
-}
-
-func (r *resource) checkPatchAtomic(t *testing.T) {
-	created, attribute := r.patchTarget(t)
-	remove := r.attribute(t, "required attribute", required(created))
-
-	res := r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, attribute.Name, "scimtest "+newUnique()), op(patch.OpRemove, remove.Name, nil)))
-	if res.StatusCode < http.StatusBadRequest {
-		t.Fatalf("scimtest: PATCH %s (RFC 7644 3.5.2): status %d, want a failure for removing %s", r.path(created), res.StatusCode, remove.Name)
-	}
-	r.expectValue(t, created, attribute.Name, created.Get(attribute.Name))
-}
-
-func (r *resource) checkPatchSchema(t *testing.T) {
-	r.suite.should(t, "RFC 7644 Table 8 400 for a PATCH body without the PatchOp schema")
-	created, attribute := r.patchTarget(t)
-	body := ops(op(patch.OpReplace, attribute.Name, "scimtest"))
-	body.Schemas = nil
-
-	expectStatus(t, r.client().Patch(t, r.path(created), body), http.StatusBadRequest, "RFC 7644 3.5.2")
-}
-
 func (r *resource) checkDelete(t *testing.T) {
-	_, created := r.create(t, newUnique())
+	t.Run("returns 404 for every operation afterwards", r.checkDeleted)
+	t.Run("omits the resource from queries", r.checkDeletedUnlisted)
+	t.Run("accepts a new resource with the same unique values", r.checkDeletedReused)
+}
 
+// RFC 7644 Section 3.6: the service provider MUST return 404 for all operations associated with a deleted resource.
+func (r *resource) checkDeleted(t *testing.T) {
+	unique := newUnique()
+	_, created := r.create(t, unique)
+	path := r.path(created)
+
+	expectStatus(t, r.client().Delete(t, path), http.StatusNoContent, "RFC 7644 3.6")
+	RequireError(t, r.client().Get(t, path), http.StatusNotFound, "")
+	RequireError(t, r.client().Put(t, path, r.body(t, unique)), http.StatusNotFound, "")
+	if attribute := find(r.schemas.Base(), patchable); attribute != nil && r.config.Patch.Supported {
+		RequireError(t, r.client().Patch(t, path, ops(op(patch.OpReplace, attribute.Name, placeholder))), http.StatusNotFound, "")
+	}
+	RequireError(t, r.client().Delete(t, path), http.StatusNotFound, "")
+}
+
+func (r *resource) checkDeletedUnlisted(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	_, created := r.create(t, newUnique())
 	expectStatus(t, r.client().Delete(t, r.path(created)), http.StatusNoContent, "RFC 7644 3.6")
-	expectStatus(t, r.client().Get(t, r.path(created)), http.StatusNotFound, "RFC 7644 3.6")
+
+	query := byID(idOf(created))
+	if got := idsOf(r.list(t, query).Resources); len(got) != 0 {
+		t.Errorf("scimtest: %s (RFC 7644 3.6): ids %v, want none", r.transport.describe(r.kind.Endpoint, query), got)
+	}
+}
+
+func (r *resource) checkDeletedReused(t *testing.T) {
+	r.suite.should(t, "RFC 7644 3.6 a deleted resource is not considered in conflict calculation")
+	unique := newUnique()
+	_, created := r.create(t, unique)
+	expectStatus(t, r.client().Delete(t, r.path(created)), http.StatusNoContent, "RFC 7644 3.6")
+
+	r.create(t, unique)
 }
 
 func (r *resource) checkVersioning(t *testing.T) {
 	supports(t, "etag", r.config.ETag.Supported)
-	unique := newUnique()
-	res, created := r.create(t, unique)
-	etag := res.Header.Get("ETag")
-	if etag == "" {
-		t.Errorf("scimtest: POST %s (RFC 7644 3.14): no ETag header", r.kind.Endpoint)
+	t.Run("returns an ETag on create and read", r.checkETag)
+	t.Run("returns 304 for a current If-None-Match", r.checkIfNoneMatch)
+	t.Run("accepts a current If-Match and changes the version", r.checkIfMatch)
+	t.Run("rejects a stale If-Match", r.checkStaleIfMatch)
+}
+
+func (r *resource) checkETag(t *testing.T) {
+	res, created := r.create(t, newUnique())
+	etag := r.etag(t, res)
+	read := r.client().Get(t, r.path(created))
+	expectStatus(t, read, http.StatusOK, "RFC 7644 3.4.1")
+
+	if got := r.etag(t, read); got != etag {
+		t.Errorf("scimtest: GET %s (RFC 7644 3.14): ETag %q, want %q from the create", r.path(created), got, etag)
 	}
 	if version := metaOf(created)["version"]; r.suite.strict && version != etag {
 		t.Errorf("SHOULD: POST %s (RFC 7644 3.14): meta.version %v, want ETag %q", r.kind.Endpoint, version, etag)
 	}
-
-	stale := r.client().With(WithHeader("If-Match", `W/"scimtest-stale"`)).Put(t, r.path(created), r.body(t, unique))
-	expectStatus(t, stale, http.StatusPreconditionFailed, "RFC 7232 3.1")
 }
 
-func (r *resource) patchTarget(t *testing.T) (core.Object, *core.Attribute) {
-	t.Helper()
+// RFC 7232 Section 3.2: a GET whose If-None-Match matches the current version is answered with 304.
+func (r *resource) checkIfNoneMatch(t *testing.T) {
+	res, created := r.create(t, newUnique())
 
-	attribute := r.patchAttribute(t)
-	_, created := r.create(t, newUnique())
-	return created, attribute
+	read := r.client().With(WithHeader("If-None-Match", r.etag(t, res))).Get(t, r.path(created))
+	expectStatus(t, read, http.StatusNotModified, "RFC 7644 3.14")
 }
 
-func (r *resource) patchAttribute(t *testing.T) *core.Attribute {
+func (r *resource) checkIfMatch(t *testing.T) {
+	unique := newUnique()
+	res, created := r.create(t, unique)
+	etag := r.etag(t, res)
+	body := r.body(t, unique)
+	attribute := find(r.schemas.Base(), patchable)
+	if attribute != nil {
+		body.Set(attribute.Name, placeholder+" "+newUnique())
+	}
+
+	replaced := r.client().With(WithHeader("If-Match", etag)).Put(t, r.path(created), body)
+	expectStatus(t, replaced, http.StatusOK, "RFC 7644 3.14")
+	if got := r.etag(t, replaced); attribute != nil && got == etag {
+		t.Errorf("scimtest: PUT %s (RFC 7644 3.14): ETag %q did not change after %s changed", r.path(created), got, attribute.Name)
+	}
+}
+
+// RFC 7644 Section 3.12, Table 8: PUT, PATCH and DELETE fail with 412 when the resource has changed.
+func (r *resource) checkStaleIfMatch(t *testing.T) {
+	unique := newUnique()
+	_, created := r.create(t, unique)
+	stale := r.client().With(WithHeader("If-Match", `W/"scimtest-stale"`))
+
+	expectStatus(t, stale.Put(t, r.path(created), r.body(t, unique)), http.StatusPreconditionFailed, "RFC 7232 3.1")
+	if attribute := find(r.schemas.Base(), patchable); attribute != nil && r.config.Patch.Supported {
+		expectStatus(t, stale.Patch(t, r.path(created), ops(op(patch.OpReplace, attribute.Name, placeholder))), http.StatusPreconditionFailed, "RFC 7232 3.1")
+	}
+	expectStatus(t, stale.Delete(t, r.path(created)), http.StatusPreconditionFailed, "RFC 7232 3.1")
+	expectStatus(t, r.client().Get(t, r.path(created)), http.StatusOK, "RFC 7232 3.1")
+}
+
+func (r *resource) etag(t *testing.T, res *http.Response) string {
 	t.Helper()
 
-	supports(t, "patch", r.config.Patch.Supported)
-	return r.attribute(t, "readWrite singular string attribute", patchable)
+	etag := res.Header.Get("ETag")
+	if etag == "" {
+		t.Fatalf("scimtest: %s %s (RFC 7644 3.14): no ETag header", res.Request.Method, res.Request.URL.Path)
+	}
+	return etag
 }
 
 func (r *resource) attribute(t *testing.T, what string, match func(*core.Attribute) bool) *core.Attribute {
 	t.Helper()
 
-	attribute := find(r.schema, match)
+	attribute := find(r.schemas.Base(), match)
 	if attribute == nil {
 		t.Skipf("n/a: %s has no %s", r.kind.Name, what)
 	}
 	return attribute
+}
+
+func (r *resource) expectPatched(t *testing.T, res *http.Response, object core.Object) {
+	t.Helper()
+
+	if res.StatusCode != http.StatusNoContent && res.StatusCode != http.StatusOK {
+		t.Fatalf("scimtest: PATCH %s (RFC 7644 3.5.2): status %d, want 200 or 204", r.path(object), res.StatusCode)
+	}
+	if res.StatusCode == http.StatusOK {
+		r.expectLocated(t, res)
+	}
+}
+
+func (r *resource) expectValues(t *testing.T, object core.Object, name string, want ...string) {
+	t.Helper()
+
+	want = slices.Sorted(slices.Values(want))
+	if got := valuesIn(r.read(t, object), name); !slices.Equal(got, want) {
+		t.Errorf("scimtest: GET %s (RFC 7644 3.5.2): %s values %v, want %v", r.path(object), name, got, want)
+	}
+}
+
+// RFC 7643 Section 3.1: meta.location is the URI of the resource and MUST equal "Content-Location".
+func (r *resource) expectLocated(t *testing.T, res *http.Response) {
+	t.Helper()
+
+	object := Decode[core.Object](t, res)
+	location, _ := metaOf(object)["location"].(string)
+	where := res.Request.Method + " " + res.Request.URL.Path
+	if location != "" && !strings.HasSuffix(location, r.path(object)) {
+		t.Errorf("scimtest: %s (RFC 7643 3.1): meta.location %q, want the URI of %s", where, location, r.path(object))
+	}
+	if got := res.Header.Get("Content-Location"); got != location {
+		t.Errorf("scimtest: %s (RFC 7643 3.1): Content-Location %q, want meta.location %q", where, got, location)
+	}
+}
+
+func (r *resource) send(t *testing.T, query url.Values) *http.Response {
+	t.Helper()
+	return r.transport.send(t, r.client(), r.kind.Endpoint, query)
+}
+
+func (r *resource) list(t *testing.T, query url.Values) protocol.ListResponse[core.Object] {
+	t.Helper()
+
+	return r.page(t, query, r.send(t, query))
+}
+
+func (r *resource) page(t *testing.T, query url.Values, res *http.Response) protocol.ListResponse[core.Object] {
+	t.Helper()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("scimtest: %s (RFC 7644 3.4.2): status %d, want 200", r.transport.describe(r.kind.Endpoint, query), res.StatusCode)
+	}
+	page := Decode[protocol.ListResponse[core.Object]](t, res)
+	if !slices.Contains(page.Schemas, protocol.SchemaListResponse) {
+		t.Fatalf("scimtest: %s (RFC 7644 3.4.2): schemas %v, want %s", r.transport.describe(r.kind.Endpoint, query), page.Schemas, protocol.SchemaListResponse)
+	}
+	return page
 }
 
 func (r *resource) read(t *testing.T, object core.Object) core.Object {
@@ -415,50 +663,43 @@ func (r *resource) read(t *testing.T, object core.Object) core.Object {
 	return Decode[core.Object](t, res)
 }
 
-func (r *resource) expectPatched(t *testing.T, res *http.Response, object core.Object) {
-	t.Helper()
-
-	if res.StatusCode != http.StatusNoContent && res.StatusCode != http.StatusOK {
-		t.Fatalf("scimtest: PATCH %s (RFC 7644 3.5.2): status %d, want 200 or 204", r.path(object), res.StatusCode)
-	}
-}
-
-func (r *resource) expectValue(t *testing.T, object core.Object, name string, want any) {
-	t.Helper()
-
-	if got := r.read(t, object).Get(name); got != want {
-		t.Errorf("scimtest: GET %s (RFC 7644 3.5.2): %s is %v, want %v", r.path(object), name, got, want)
-	}
-}
-
 func (r *resource) filtered(t *testing.T, query url.Values) []string {
 	t.Helper()
 
-	path := r.kind.Endpoint + "?" + query.Encode()
-	res := r.client().Get(t, path)
+	res := r.send(t, query)
 	if res.StatusCode == http.StatusBadRequest {
 		RequireError(t, res, http.StatusBadRequest, scimerrors.InvalidFilter)
-		r.suite.todo(t, "GET %s returned 400 invalidFilter", path)
+		r.suite.todo(t, "%s returned 400 invalidFilter", r.transport.describe(r.kind.Endpoint, query))
 	}
-	expectStatus(t, res, http.StatusOK, "RFC 7644 3.4.2.2")
-	return idsOf(Decode[protocol.ListResponse[core.Object]](t, res).Resources)
+	return idsOf(r.page(t, query, res).Resources)
+}
+
+func (r *resource) expectMatches(t *testing.T, filter string, ours, want []string) {
+	t.Helper()
+
+	query := filterBy("(" + filter + ") and (" + idFilter(ours...) + ")")
+	query.Set(countParam, strconv.Itoa(len(ours)))
+	found := r.filtered(t, query)
+	got := slices.DeleteFunc(slices.Clone(ours), func(id string) bool { return !slices.Contains(found, id) })
+	if !slices.Equal(got, want) {
+		t.Errorf("scimtest: %s (RFC 7644 3.4.2.2)\n        want ids: %v\n        got ids:  %v", r.transport.describe(r.kind.Endpoint, query), want, got)
+	}
 }
 
 func (r *resource) expectIDs(t *testing.T, query url.Values, want []string, section string) {
 	t.Helper()
 
-	path := r.kind.Endpoint + "?" + query.Encode()
-	if got := idsOf(list[core.Object](t, r.client(), path).Resources); !slices.Equal(got, want) {
-		t.Errorf("scimtest: GET %s (%s): ids %v, want %v", path, section, got, want)
+	if got := idsOf(r.list(t, query).Resources); !slices.Equal(got, want) {
+		t.Errorf("scimtest: %s (%s): ids %v, want %v", r.transport.describe(r.kind.Endpoint, query), section, got, want)
 	}
 }
 
-func (r *resource) expectPage(t *testing.T, query string, most, total int) {
+func (r *resource) expectPage(t *testing.T, query url.Values, most, total int) {
 	t.Helper()
 
-	page := list[core.Object](t, r.client(), r.kind.Endpoint+"?"+query)
+	page := r.list(t, query)
 	if len(page.Resources) > most || page.TotalResults < total {
-		t.Errorf("scimtest: GET %s?%s (RFC 7644 3.4.2.4): %d resources of %d, want at most %d of at least %d", r.kind.Endpoint, query, len(page.Resources), page.TotalResults, most, total)
+		t.Errorf("scimtest: %s (RFC 7644 3.4.2.4): %d resources of %d, want at most %d of at least %d", r.transport.describe(r.kind.Endpoint, query), len(page.Resources), page.TotalResults, most, total)
 	}
 }
 
@@ -511,6 +752,16 @@ func (r *resource) post(t *testing.T, body core.Object) (*http.Response, core.Ob
 	return res, created
 }
 
+func (r *resource) seed(t *testing.T, body core.Object) core.Object {
+	t.Helper()
+
+	_, created := r.post(t, body)
+	if created == nil {
+		t.Skipf("n/a: the server rejected %v", body)
+	}
+	return created
+}
+
 func (r *resource) remove(path string) {
 	if res, err := r.client().send(context.Background(), http.MethodDelete, path, nil); err == nil {
 		_ = res.Body.Close()
@@ -523,7 +774,7 @@ func (r *resource) body(t *testing.T, unique string) core.Object {
 	if r.fixture == nil {
 		r.suite.todo(t, "no fixture for %s", r.kind.Name)
 	}
-	object, err := r.fixture(r.schema, unique)
+	object, err := r.fixture(r.schemas.Base(), unique)
 	if err != nil {
 		t.Fatalf("scimtest: %s fixture: %v", r.kind.Name, err)
 	}
@@ -559,6 +810,29 @@ func supports(t *testing.T, feature string, supported bool) {
 	if !supported {
 		t.Skipf("MAY: %s.supported is false", feature)
 	}
+}
+
+func expectIgnored(t *testing.T, where string, value any, marker string) {
+	t.Helper()
+
+	if raw, _ := json.Marshal(value); strings.Contains(string(raw), marker) {
+		t.Errorf("scimtest: %s: kept the readOnly value %s from the request", where, marker)
+	}
+}
+
+func isReadOnly(attribute *core.Attribute) bool {
+	return attribute.Mutability == core.MutabilityReadOnly
+}
+
+func readOnlyValue(attribute *core.Attribute, marker string) any {
+	value := any(marker)
+	if attribute.Type == core.TypeComplex {
+		value = map[string]any{valueSub: marker}
+	}
+	if attribute.MultiValued {
+		value = []any{value}
+	}
+	return value
 }
 
 func patchable(attribute *core.Attribute) bool {

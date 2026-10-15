@@ -22,23 +22,23 @@ type discovery struct {
 }
 
 type section struct {
-	name  string
-	check func(r *resource, t *testing.T)
+	name     string
+	check    func(r *resource, t *testing.T)
+	listings bool
 }
 
 var sections = []section{
-	{"3.3 Creating Resources", (*resource).checkCreate},
-	{"3.4.1 Retrieving a Known Resource", (*resource).checkRead},
-	{"3.4.2 Query Resources", (*resource).checkList},
-	{"3.4.2.2 Filtering", (*resource).checkFilter},
-	{"3.4.2.3 Sorting", (*resource).checkSort},
-	{"3.4.2.4 Pagination", (*resource).checkPagination},
-	{"3.4.2.5 Attributes", (*resource).checkAttributes},
-	{"3.4.3 Querying Resources Using HTTP POST", (*resource).checkSearch},
-	{"3.5.1 Replacing with PUT", (*resource).checkReplace},
-	{"3.5.2 Modifying with PATCH", (*resource).checkPatch},
-	{"3.6 Deleting Resources", (*resource).checkDelete},
-	{"3.14 Versioning Resources", (*resource).checkVersioning},
+	{"3.3 Creating Resources", (*resource).checkCreate, false},
+	{"3.4.1 Retrieving a Known Resource", (*resource).checkRead, false},
+	{"3.4.2 Query Resources", (*resource).checkList, true},
+	{"3.4.2.2 Filtering", (*resource).checkFilter, true},
+	{"3.4.2.3 Sorting", (*resource).checkSort, true},
+	{"3.4.2.4 Pagination", (*resource).checkPagination, true},
+	{"3.4.2.5 Attributes", (*resource).checkAttributes, false},
+	{"3.5.1 Replacing with PUT", (*resource).checkReplace, false},
+	{"3.5.2 Modifying with PATCH", (*resource).checkPatch, false},
+	{"3.6 Deleting Resources", (*resource).checkDelete, false},
+	{"3.14 Versioning Resources", (*resource).checkVersioning, false},
 }
 
 func NewSuite(c *Client, opts ...Option[*Suite]) *Suite {
@@ -68,16 +68,35 @@ func (s *Suite) Run(t *testing.T) {
 	d := s.discover(t)
 	resources := s.resources(d)
 	t.Run("RFC7644", func(t *testing.T) {
-		t.Run("4 Service Provider Configuration Endpoints", func(t *testing.T) { s.checkDiscovery(t, d) })
+		t.Run("4 Service Provider Configuration Endpoints", discovering{s, d, resources}.run)
 		for _, sec := range sections {
 			t.Run(sec.name, func(t *testing.T) {
 				for _, r := range resources {
-					t.Run(string(r.kind.Name), func(t *testing.T) { sec.check(r, t) })
+					t.Run(string(r.kind.Name), func(t *testing.T) { s.run(t, r, sec) })
 				}
 			})
 		}
 		t.Run("3.7 Bulk Operations", func(t *testing.T) { s.checkBulk(t, &d.config) })
 	})
+	t.Run("RFC7643", func(t *testing.T) {
+		t.Run("2.3.7 Reference", func(t *testing.T) {
+			for _, reference := range newReferencing(resources) {
+				t.Run(string(reference.source.kind.Name)+"."+reference.attribute.Name, reference.run)
+			}
+		})
+	})
+}
+
+func (s *Suite) run(t *testing.T, r *resource, sec section) {
+	t.Helper()
+
+	if !sec.listings {
+		sec.check(r, t)
+		return
+	}
+	for _, tr := range transports {
+		t.Run(tr.name, func(t *testing.T) { sec.check(r.over(t, tr), t) })
+	}
 }
 
 func (s *Suite) discover(t *testing.T) *discovery {
@@ -95,30 +114,33 @@ func (s *Suite) discover(t *testing.T) *discovery {
 func (s *Suite) resources(d *discovery) []*resource {
 	resources := make([]*resource, 0, len(d.kinds))
 	for _, kind := range d.kinds {
-		if schema := d.schemas.Lookup(kind.Schema); schema != nil {
-			resources = append(resources, &resource{suite: s, config: &d.config, kind: kind, schema: schema, fixture: s.fixtures[kind.Name]})
+		if schemas := d.schemasOf(kind); schemas != nil {
+			resources = append(resources, &resource{suite: s, config: &d.config, kind: kind, schemas: schemas, fixture: s.fixtures[kind.Name]})
 		}
 	}
 	return resources
 }
 
-func (s *Suite) checkDiscovery(t *testing.T, d *discovery) {
-	t.Helper()
+func (d *discovery) schemasOf(kind core.ResourceType) core.Schemas {
+	if d.schemas.Lookup(kind.Schema) == nil {
+		return nil
+	}
+	schemas := core.Schemas{}
+	for _, uri := range schemaURIsOf(kind) {
+		if schema := d.schemas.Lookup(uri); schema != nil {
+			schemas = append(schemas, schema)
+		}
+	}
+	return schemas
+}
 
-	if !slices.Contains(d.config.Schemas, core.SchemaServiceProviderConfig) {
-		t.Errorf("scimtest: GET /ServiceProviderConfig (RFC 7643 5): schemas %v, want %s", d.config.Schemas, core.SchemaServiceProviderConfig)
+func schemaURIsOf(kind core.ResourceType) []core.SchemaURI {
+	uris := make([]core.SchemaURI, 0, 1+len(kind.SchemaExtensions))
+	uris = append(uris, kind.Schema)
+	for _, extension := range kind.SchemaExtensions {
+		uris = append(uris, extension.Schema)
 	}
-	for _, kind := range d.kinds {
-		uris := []core.SchemaURI{kind.Schema}
-		for _, extension := range kind.SchemaExtensions {
-			uris = append(uris, extension.Schema)
-		}
-		for _, uri := range uris {
-			if d.schemas.Lookup(uri) == nil {
-				t.Errorf("scimtest: GET /Schemas (RFC 7643 6): %s of resource type %s is missing", uri, kind.Name)
-			}
-		}
-	}
+	return uris
 }
 
 func (s *Suite) checkBulk(t *testing.T, config *core.ServiceProviderConfig) {
