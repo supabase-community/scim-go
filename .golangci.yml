@@ -90,6 +90,12 @@ linters:
           arguments: [4]
   exclusions:
     rules:
+      - path: pkg/scimtest/
+        linters:
+          - bodyclose
+      - path: pkg/scimtest/resource\.go
+        linters:
+          - thelper
       - path: _test\.go
         linters:
           - bodyclose

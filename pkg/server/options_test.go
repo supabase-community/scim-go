@@ -14,6 +14,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimtest"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
@@ -54,40 +55,40 @@ func (r failingRepository) Update(context.Context, *core.User) (*core.User, erro
 func TestErrorHandlerReceivesTheCauseOfAnUnexpectedRepositoryError(t *testing.T) {
 	cause := errors.New("pgx: connection pool timeout")
 	var reported error
-	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+	srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 		server.ErrorHandler(func(_ *http.Request, err error) { reported = err }),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(failingRepository{cause: cause})),
 	))
 
-	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users"))
+	response := srv.Get(t, basePath+"/Users")
 
 	require.Equal(t, http.StatusInternalServerError, response.StatusCode)
 	assert.ErrorIs(t, reported, cause)
 }
 
 func TestDefaultCountAfterWithResource(t *testing.T) {
-	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+	srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
 		server.DefaultCount(1),
 	))
 	for _, name := range []string{"bjensen", "jsmith"} {
-		response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: name})))
+		response := srv.Post(t, basePath+"/Users", core.User{UserName: name})
 		require.Equal(t, http.StatusCreated, response.StatusCode)
 	}
 
-	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users"))
+	response := srv.Get(t, basePath+"/Users")
 
 	require.Equal(t, http.StatusOK, response.StatusCode)
-	assert.Equal(t, 1, ReadBodyAs[protocol.ListResponse[map[string]any]](t, response).ItemsPerPage)
+	assert.Equal(t, 1, scimtest.Decode[protocol.ListResponse[map[string]any]](t, response).ItemsPerPage)
 }
 
 func TestMaxBodySize(t *testing.T) {
-	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+	srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 		server.MaxBodySize(16),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
 	))
 
-	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, core.User{UserName: "bjensen"})))
+	response := srv.Post(t, basePath+"/Users", core.User{UserName: "bjensen"})
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode)
 }
@@ -105,7 +106,7 @@ func TestMaxPatchOperations(t *testing.T) {
 		for range operations {
 			request.Operations = append(request.Operations, patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Babs"`)})
 		}
-		return Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, WithRequestBodyAs(t, request))).StatusCode
+		return srv.Patch(t, basePath+"/Users/"+id, request).StatusCode
 	}
 
 	t.Run("accepts up to the default cap", func(t *testing.T) {
@@ -136,7 +137,7 @@ func TestMaxPatchFilterEvaluations(t *testing.T) {
 			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
 			Operations: []patch.Operation{{Op: patch.OpReplace, Path: `emails[value eq "b@example.com"].type`, Value: json.RawMessage(`"work"`)}},
 		}
-		return Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, WithRequestBodyAs(t, request))).StatusCode
+		return srv.Patch(t, basePath+"/Users/"+id, request).StatusCode
 	}
 
 	t.Run("accepts a request within the default budget", func(t *testing.T) {
@@ -160,7 +161,7 @@ func TestMaxPatchWriteBytes(t *testing.T) {
 			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
 			Operations: []patch.Operation{{Op: patch.OpReplace, Path: `emails[value eq "a@example.com"].value`, Value: encoded}},
 		}
-		return Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Users/"+id, WithRequestBodyAs(t, request))).StatusCode
+		return srv.Patch(t, basePath+"/Users/"+id, request).StatusCode
 	}
 
 	t.Run("accepts a request within the default budget", func(t *testing.T) {
@@ -180,18 +181,13 @@ func TestMaxPatchWriteBytes(t *testing.T) {
 		big, err := json.Marshal(strings.Repeat("x", 6000))
 		require.NoError(t, err)
 
-		request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-			WithBearerToken(validToken),
-			WithContentType(protocol.MediaType),
-			WithRequestBodyAs(t, protocol.PatchRequest{
-				Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
-				Operations: []patch.Operation{
-					{Op: patch.OpAdd, Path: "emails", Value: add},
-					{Op: patch.OpReplace, Path: `emails[type eq "a"].value`, Value: big},
-				},
-			}),
-		)
-		response := Response(t, srv, request)
+		response := srv.Patch(t, basePath+"/Users/"+id, protocol.PatchRequest{
+			Schemas: []core.SchemaURI{protocol.SchemaPatchOp},
+			Operations: []patch.Operation{
+				{Op: patch.OpAdd, Path: "emails", Value: add},
+				{Op: patch.OpReplace, Path: `emails[type eq "a"].value`, Value: big},
+			},
+		})
 
 		require.Equal(t, http.StatusRequestEntityTooLarge, response.StatusCode)
 	})
@@ -206,7 +202,7 @@ func TestMaxPatchWriteBytes(t *testing.T) {
 }
 
 func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
-	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+	srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(failingRepository{cause: errors.New("unreachable")})),
 	))
 
@@ -217,7 +213,7 @@ func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
 		"sortBy=unknown":             http.StatusBadRequest,
 	} {
 		t.Run(query, func(t *testing.T) {
-			response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users?"+query))
+			response := srv.Get(t, basePath+"/Users?"+query)
 
 			assert.Equal(t, status, response.StatusCode)
 		})
@@ -230,14 +226,14 @@ func TestWithRepository(t *testing.T) {
 	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
 	require.NoError(t, err)
 
-	srv := Server(t, server.New(basePath, fullServiceProviderConfig(), server.WithResource(
+	srv := newClient(t, server.New(basePath, fullServiceProviderConfig(), server.WithResource(
 		server.NewResource[*core.User]("User", "/Users", core.SchemaUser, attributes...).WithRepository(repository),
 	)))
 
-	response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users/"+existing.ID))
+	response := srv.Get(t, basePath+"/Users/"+existing.ID)
 
 	require.Equal(t, http.StatusOK, response.StatusCode)
-	assert.Equal(t, "bjensen", ReadBodyAs[core.User](t, response).UserName)
+	assert.Equal(t, "bjensen", scimtest.Decode[core.User](t, response).UserName)
 }
 
 func TestWithRepositoryFunc(t *testing.T) {
@@ -272,7 +268,7 @@ func TestWithAuthentication(t *testing.T) {
 		var reported error
 		srv := newTestServer(t, withOption(server.ErrorHandler(func(_ *http.Request, err error) { reported = err })))
 
-		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken(unreachableToken)))
+		response := srv.With(scimtest.WithBearerToken(unreachableToken)).Get(t, basePath+"/Users")
 
 		assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
 		assert.ErrorIs(t, reported, errUnreachable)
@@ -282,7 +278,7 @@ func TestWithAuthentication(t *testing.T) {
 		var reported error
 		srv := newTestServer(t, withOption(server.ErrorHandler(func(_ *http.Request, err error) { reported = err })))
 
-		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("wrong")))
+		response := srv.With(scimtest.WithBearerToken("wrong")).Get(t, basePath+"/Users")
 
 		assert.Equal(t, http.StatusUnauthorized, response.StatusCode)
 		assert.NoError(t, reported)
@@ -303,7 +299,7 @@ func TestWithAuthentication(t *testing.T) {
 			server.WithAuthentication(core.NewOAuthBearerToken(), track("second")),
 		)
 
-		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users"))
+		response := srv.Get(t, basePath+"/Users")
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, []string{"second", "first"}, calls)
@@ -313,32 +309,32 @@ func TestWithAuthentication(t *testing.T) {
 		var tenant string
 		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
 		repository := tenantRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), tenant: &tenant}
-		srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+		srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(repository)),
 			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(
 				func(ctx context.Context, _ string) (context.Context, error) {
 					return context.WithValue(ctx, tenantKey{}, "acme"), nil
 				},
 			)),
-		))
+		), authorized)
 
-		response := Response(t, srv, Request(t, srv, http.MethodGet, basePath+"/Users", WithBearerToken("anything")))
+		response := srv.With(scimtest.WithBearerToken("anything")).Get(t, basePath+"/Users")
 
 		require.Equal(t, http.StatusOK, response.StatusCode)
 		assert.Equal(t, "acme", tenant)
 	})
 }
 
-func newUserWithID(t *testing.T, user core.User, options ...server.Option[*server.Server]) (*httptest.Server, string) {
+func newUserWithID(t *testing.T, user core.User, options ...server.Option[*server.Server]) (*scimtest.Client, string) {
 	t.Helper()
 	srv := newUserServer(t, options...)
-	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Users", WithRequestBodyAs(t, user)))
+	response := srv.Post(t, basePath+"/Users", user)
 	require.Equal(t, http.StatusCreated, response.StatusCode)
-	return srv, ReadBodyAs[core.User](t, response).ID
+	return srv, scimtest.Decode[core.User](t, response).ID
 }
 
-func newUserServer(t *testing.T, options ...server.Option[*server.Server]) *httptest.Server {
+func newUserServer(t *testing.T, options ...server.Option[*server.Server]) *scimtest.Client {
 	t.Helper()
 	options = append(options, server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)))
-	return Server(t, server.New(basePath, fullServiceProviderConfig(), options...))
+	return newClient(t, server.New(basePath, fullServiceProviderConfig(), options...))
 }

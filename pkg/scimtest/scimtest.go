@@ -1,4 +1,4 @@
-// Package scimtest checks a SCIM implementation against the JSON examples of RFC 7643, Section 8.
+// Package scimtest tests a SCIM service provider over HTTP and against the JSON examples of RFC 7643, Section 8.
 package scimtest
 
 import (
@@ -8,6 +8,8 @@ import (
 
 //go:embed testdata
 var files embed.FS
+
+type Option[T any] func(T)
 
 type TB interface {
 	Helper()

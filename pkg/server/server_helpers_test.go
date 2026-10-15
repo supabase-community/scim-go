@@ -20,6 +20,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimtest"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
@@ -166,10 +167,10 @@ func plainGroups(repo server.Repository[*core.Group]) server.Repository[*core.Gr
 	return repo
 }
 
-func newTestServer(t *testing.T, options ...testOption) *httptest.Server {
+func newTestServer(t *testing.T, options ...testOption) *scimtest.Client {
 	t.Helper()
 
-	return Server(t, newTestHandler(t, options...))
+	return newClient(t, newTestHandler(t, options...), authorized)
 }
 
 func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
@@ -351,38 +352,27 @@ func gadgetAttributes() core.Attributes {
 	}
 }
 
-func create(t *testing.T, srv *httptest.Server, user *core.User) (id, etag string) {
+func create(t *testing.T, srv *scimtest.Client, user *core.User) (id, etag string) {
 	t.Helper()
 
-	request := Request(t, srv, http.MethodPost, basePath+"/Users",
-		WithBearerToken(validToken),
-		WithAcceptHeader(protocol.MediaType),
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, user),
-	)
-	response := Response(t, srv, request)
+	response := srv.With(scimtest.WithHeader("Accept", protocol.MediaType)).Post(t, basePath+"/Users", user)
 	require.Equal(t, http.StatusCreated, response.StatusCode)
 
-	created := ReadBodyAs[core.User](t, response)
+	created := scimtest.Decode[core.User](t, response)
 	return created.ID, response.Header.Get("ETag")
 }
 
-func createGroup(t *testing.T, srv *httptest.Server, group *core.Group) core.Group {
+func createGroup(t *testing.T, srv *scimtest.Client, group *core.Group) core.Group {
 	t.Helper()
 
-	request := Request(t, srv, http.MethodPost, basePath+"/Groups",
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, group),
-	)
-	response := Response(t, srv, request)
+	response := srv.Post(t, basePath+"/Groups", group)
 	require.Equal(t, http.StatusCreated, response.StatusCode)
-	return ReadBodyAs[core.Group](t, response)
+	return scimtest.Decode[core.Group](t, response)
 }
 
 type userIDs map[string]string
 
-func seedUsers(t *testing.T, srv *httptest.Server, names ...string) userIDs {
+func seedUsers(t *testing.T, srv *scimtest.Client, names ...string) userIDs {
 	t.Helper()
 
 	ids := userIDs{}
@@ -410,60 +400,46 @@ func (ids userIDs) operations(ops []patch.Operation) []patch.Operation {
 	return filled
 }
 
-func (ids userIDs) body(t *testing.T, value any) Option[*http.Request] {
+func (ids userIDs) body(t *testing.T, value any) []byte {
 	t.Helper()
 
 	raw, err := json.Marshal(value)
 	require.NoError(t, err)
-	return WithRequestBody([]byte(ids.fill(string(raw))))
+	return []byte(ids.fill(string(raw)))
 }
 
-func createWidget(t *testing.T, srv *httptest.Server, w *widget) map[string]any {
+func createWidget(t *testing.T, srv *scimtest.Client, w *widget) map[string]any {
 	t.Helper()
 
-	request := Request(t, srv, http.MethodPost, basePath+"/Widgets",
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, w),
-	)
-	response := Response(t, srv, request)
+	response := srv.Post(t, basePath+"/Widgets", w)
 	require.Equal(t, http.StatusCreated, response.StatusCode)
-	return ReadBodyAs[map[string]any](t, response)
+	return scimtest.Decode[map[string]any](t, response)
 }
 
-func patchUser(t *testing.T, srv *httptest.Server, id string, operations ...patch.Operation) core.User {
+func patchUser(t *testing.T, srv *scimtest.Client, id string, operations ...patch.Operation) core.User {
 	t.Helper()
 
-	request := Request(t, srv, http.MethodPatch, basePath+"/Users/"+id,
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, protocol.PatchRequest{
-			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-			Operations: operations,
-		}),
-	)
-	response := Response(t, srv, request)
+	response := srv.Patch(t, basePath+"/Users/"+id, patchOf(operations...))
 	require.Equal(t, http.StatusOK, response.StatusCode)
-	return ReadBodyAs[core.User](t, response)
+	return scimtest.Decode[core.User](t, response)
 }
 
-func patchRequest(t *testing.T, srv *httptest.Server, resource string, op patch.Operation, options ...Option[*http.Request]) *http.Request {
+func patchRequest(t *testing.T, srv *httptest.Server, resource string, op patch.Operation) *http.Request {
 	t.Helper()
-
-	return Request(t, srv, http.MethodPatch, basePath+"/"+resource, append(options,
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{op}}),
-	)...)
+	return rawRequest(t, srv, http.MethodPatch, basePath+"/"+resource, patchOf(op))
 }
 
-func assertFilterMatches(t *testing.T, srv *httptest.Server, filter, userName string) {
+func patchOf(operations ...patch.Operation) protocol.PatchRequest {
+	return protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: operations}
+}
+
+func assertFilterMatches(t *testing.T, srv *scimtest.Client, filter, userName string) {
 	t.Helper()
 
 	path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
-	response := Response(t, srv, Request(t, srv, http.MethodGet, path, WithBearerToken(validToken)))
+	response := srv.Get(t, path)
 	require.Equal(t, http.StatusOK, response.StatusCode, filter)
-	list := ReadBodyAs[protocol.ListResponse[*core.User]](t, response)
+	list := scimtest.Decode[protocol.ListResponse[*core.User]](t, response)
 	if userName == "" {
 		assert.Zero(t, list.TotalResults, filter)
 		return

@@ -12,16 +12,17 @@ import (
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase-community/scim-go/pkg/scimtest"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
 
 func TestResourceWithService(t *testing.T) {
 	events := &recorder{}
-	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+	srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
 			WithService(events.hooks().Wrap)),
-	))
+	), authorized)
 
 	created := createGroup(t, srv, &core.Group{DisplayName: "admins"})
 
@@ -37,21 +38,17 @@ func TestResourceWithValidators(t *testing.T) {
 		}
 		return nil
 	}
-	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+	srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
 			WithValidators(reserved)),
-	))
+	), authorized)
 
 	createGroup(t, srv, &core.Group{DisplayName: "admins"})
 
-	response := Response(t, srv, Request(t, srv, http.MethodPost, basePath+"/Groups",
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, &core.Group{DisplayName: "root"}),
-	))
+	response := srv.Post(t, basePath+"/Groups", &core.Group{DisplayName: "root"})
 	assert.Equal(t, http.StatusBadRequest, response.StatusCode)
-	assert.Equal(t, scimerrors.InvalidValue, ReadBodyAs[scimerrors.Error](t, response).ScimType)
+	assert.Equal(t, scimerrors.InvalidValue, scimtest.Decode[scimerrors.Error](t, response).ScimType)
 }
 
 func TestResourceValidatorsSeeTheFullProjection(t *testing.T) {
@@ -60,24 +57,20 @@ func TestResourceValidatorsSeeTheFullProjection(t *testing.T) {
 		returned = append(returned, protocol.ProjectionFrom(ctx).Returns("members"))
 		return nil
 	}
-	srv := Server(t, server.New(basePath, fullServiceProviderConfig(),
+	srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 		server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(validate)),
 		server.WithDatabase(server.NewDatabase()),
 		server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...)),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...).
 			WithValidators(record)),
-	))
+	), authorized)
 	ids := seedUsers(t, srv, "u-1")
 	created := createGroup(t, srv, &core.Group{DisplayName: "eng"})
 
-	response := Response(t, srv, Request(t, srv, http.MethodPatch, basePath+"/Groups/"+created.ID,
-		WithBearerToken(validToken),
-		WithContentType(protocol.MediaType),
-		WithRequestBodyAs(t, protocol.PatchRequest{
-			Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
-			Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-1","type":"User"}]`))}},
-		}),
-	))
+	response := srv.Patch(t, basePath+"/Groups/"+created.ID, protocol.PatchRequest{
+		Schemas:    []core.SchemaURI{protocol.SchemaPatchOp},
+		Operations: []patch.Operation{{Op: patch.OpAdd, Path: "members", Value: json.RawMessage(ids.fill(`[{"value":"u-1","type":"User"}]`))}},
+	})
 
 	require.Equal(t, http.StatusNoContent, response.StatusCode)
 	assert.Equal(t, []bool{true, true}, returned)
