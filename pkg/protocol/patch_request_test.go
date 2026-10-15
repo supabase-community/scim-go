@@ -65,6 +65,16 @@ func TestDecodePatchRequest(t *testing.T) {
 		require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
 	})
 
+	t.Run("rejects text that is not well formed UTF-8", func(t *testing.T) {
+		for _, text := range []string{"\xff", `\ud800`} {
+			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"add","path":"nickName","value":"` + text + `"}]}`
+
+			_, err := protocol.DecodePatchRequest(strings.NewReader(body))
+
+			require.ErrorIs(t, err, scimerrors.ErrInvalidSyntax(""))
+		}
+	})
+
 	// RFC 7643 Section 2.1: attribute names are case insensitive.
 	t.Run("rejects a name that repeats in another case", func(t *testing.T) {
 		for _, body := range []string{

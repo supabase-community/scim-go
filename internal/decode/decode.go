@@ -27,10 +27,7 @@ func JSON[T any](raw []byte) (T, error) {
 }
 
 func Value(raw []byte) (any, error) {
-	decoder := jsontext.NewDecoder(
-		bytes.NewBuffer(raw),
-		jsontext.AllowInvalidUTF8(true),
-	)
+	decoder := jsontext.NewDecoder(bytes.NewBuffer(raw))
 	out, err := read(decoder)
 	if err != nil {
 		return nil, err

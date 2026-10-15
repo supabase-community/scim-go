@@ -20,10 +20,8 @@ var documents = map[string]string{
 	"big int":         `{"id":12345678901234567890}`,
 	"escaped keys":    `{"a\\b":"c\"d","é":"\nA"}`,
 	"surrogate pair":  `{"emoji":"😀"}`,
-	"lone surrogate":  `{"bad":"\ud800"}`,
 	"null":            `{"x":null}`,
 	"empty":           `{"a":[],"o":{}}`,
-	"invalid utf8":    "{\"a\":\"b\xffc\"}",
 	"escaped html":    `{"displayName":"R\u0026D \u003cops\u003e"}`,
 	"booleans":        `[true,false]`,
 	"top level null":  `null`,
@@ -71,6 +69,18 @@ func TestValue(t *testing.T) {
 				_, err = decode.Value([]byte(raw))
 				assert.Error(t, err)
 			})
+		}
+	})
+
+	t.Run("rejects a type mismatch", func(t *testing.T) {
+		_, err := decode.JSON[int]([]byte(`"text"`))
+		assert.Error(t, err)
+	})
+
+	t.Run("rejects text that is not well formed UTF-8", func(t *testing.T) {
+		for _, raw := range []string{"{\"a\":\"b\xffc\"}", `{"bad":"\ud800"}`} {
+			_, err := decode.Value([]byte(raw))
+			assert.Error(t, err)
 		}
 	})
 
