@@ -1400,50 +1400,23 @@ func TestRFC7644Filtering(t *testing.T) {
 
 	// RFC 7644 Section 3.4.2.2: for complex attributes, a fully qualified sub-attribute MUST be specified.
 	t.Run("rejects a comparison on a complex attribute", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		for _, filter := range []string{`name eq "x"`, `addresses eq "x"`} {
-			path := basePath + "/Users?" + url.Values{"filter": {filter}}.Encode()
-			response := srv.Get(t, path)
-
-			require.Equal(t, http.StatusBadRequest, response.StatusCode, filter)
-			assert.Equal(t, scimerrors.InvalidFilter, scimtest.Decode[scimerrors.Error](t, response).ScimType, filter)
-		}
+		assertFilterRejected(t, newTestServer(t), scimerrors.InvalidFilter, `name eq "x"`, `addresses eq "x"`)
 	})
 
 	// RFC 7644 Section 3.4.2.2: the expression within square brackets MUST be a valid filter expression based upon sub-attributes of the parent attribute.
 	t.Run("rejects a value path filter whose inner expression is invalid", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		path := basePath + "/Users?" + url.Values{"filter": {`emails[bogus eq "x"]`}}.Encode()
-		response := srv.Get(t, path)
-
-		require.Equal(t, http.StatusBadRequest, response.StatusCode)
-		assert.Equal(t, scimerrors.InvalidFilter, scimtest.Decode[scimerrors.Error](t, response).ScimType)
+		assertFilterRejected(t, newTestServer(t), scimerrors.InvalidFilter, `emails[bogus eq "x"]`)
 	})
 
 	t.Run("rejects an operator or path the attribute does not support", func(t *testing.T) {
-		srv := newTestServer(t)
 		manager := string(core.SchemaEnterpriseUser) + ":manager"
 
-		for _, filter := range []string{`active sw "t"`, `active ew "e"`, `emails.primary co "t"`, `meta.created co "2"`, `meta.lastModified sw "2"`, `meta.lastModified ew "Z"`, manager + `[value eq "x"]`, manager + `.$ref pr`} {
-			response := srv.Get(t, basePath+"/Users?"+url.Values{"filter": {filter}}.Encode())
-
-			require.Equal(t, http.StatusBadRequest, response.StatusCode, filter)
-			assert.Equal(t, scimerrors.InvalidFilter, scimtest.Decode[scimerrors.Error](t, response).ScimType, filter)
-		}
+		assertFilterRejected(t, newTestServer(t), scimerrors.InvalidFilter, `active sw "t"`, `active ew "e"`, `emails.primary co "t"`, `meta.created co "2"`, `meta.lastModified sw "2"`, `meta.lastModified ew "Z"`, manager+`[value eq "x"]`, manager+`.$ref pr`)
 	})
 
 	// RFC 7644 Section 3.12, Table 9: invalidValue when the value is not compatible with the attribute type.
 	t.Run("rejects a value of the wrong type", func(t *testing.T) {
-		srv := newTestServer(t)
-
-		for _, filter := range []string{`userName eq 5`, `active eq "true"`, `meta.created eq "x"`} {
-			response := srv.Get(t, basePath+"/Users?"+url.Values{"filter": {filter}}.Encode())
-
-			require.Equal(t, http.StatusBadRequest, response.StatusCode, filter)
-			assert.Equal(t, scimerrors.InvalidValue, scimtest.Decode[scimerrors.Error](t, response).ScimType, filter)
-		}
+		assertFilterRejected(t, newTestServer(t), scimerrors.InvalidValue, `userName eq 5`, `active eq "true"`, `meta.created eq "x"`)
 	})
 
 	// RFC 7643 Section 3.1: "externalId" and "meta" are common attributes of every resource.

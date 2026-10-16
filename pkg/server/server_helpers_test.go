@@ -20,6 +20,7 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
+	"github.com/supabase-community/scim-go/pkg/scimerrors"
 	"github.com/supabase-community/scim-go/pkg/scimtest"
 	"github.com/supabase-community/scim-go/pkg/server"
 )
@@ -446,6 +447,17 @@ func assertFilterMatches(t *testing.T, srv *scimtest.Client, filter, userName st
 	}
 	require.Equal(t, 1, list.TotalResults, filter)
 	assert.Equal(t, userName, list.Resources[0].UserName, filter)
+}
+
+func assertFilterRejected(t *testing.T, srv *scimtest.Client, scimType scimerrors.ErrorType, filters ...string) {
+	t.Helper()
+
+	for _, filter := range filters {
+		response := srv.Get(t, basePath+"/Users?"+url.Values{"filter": {filter}}.Encode())
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode, filter)
+		assert.Equal(t, scimType, scimtest.Decode[scimerrors.Error](t, response).ScimType, filter)
+	}
 }
 
 func swapCase(s string) string {
