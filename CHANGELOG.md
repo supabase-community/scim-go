@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.21.0](https://github.com/supabase-community/scim-go/compare/v0.20.0...v0.21.0) (2026-10-16)
+
+
+### Features
+
+* **scimtest:** check readWrite sub-attributes beside readOnly ones, noTarget sub-attribute paths, populated projection, PUT of references and meta.resourceType ([2f8c34c](https://github.com/supabase-community/scim-go/commit/2f8c34c1f85dbbc75c6c48a7bbfda90161975849))
+
 ## [0.20.0](https://github.com/supabase-community/scim-go/compare/v0.19.0...v0.20.0) (2026-10-16)
 
 
