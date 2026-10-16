@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.26.0](https://github.com/supabase-community/scim-go/compare/v0.25.0...v0.26.0) (2026-10-16)
+
+
+### Features
+
+* **scimtest:** check a nested not ([61cf66a](https://github.com/supabase-community/scim-go/commit/61cf66ab7235716c4e7a0c95f57694e1e120f14e))
+* **scimtest:** check a replace without a path keeps the reference values it leaves out ([e709100](https://github.com/supabase-community/scim-go/commit/e709100d5b1fb5e7bcda564c0fa75fec78f8722f))
+* **scimtest:** check a value that is not unique is accepted twice on POST and PUT ([ae8d606](https://github.com/supabase-community/scim-go/commit/ae8d6061b588bde4dec7921faf5993036ba2c1fe))
+* **scimtest:** check deleting the target of a singular reference drops the reference ([31ee1e5](https://github.com/supabase-community/scim-go/commit/31ee1e5b77b986fc4283980e44c3617858ec9b59))
+* **scimtest:** check every operation on an unknown id returns 404 ([df0a800](https://github.com/supabase-community/scim-go/commit/df0a800b873b97aaacf908929c8ce609fb11bb25))
+* **scimtest:** check id and every meta attribute with every comparison operator ([0885815](https://github.com/supabase-community/scim-go/commit/0885815e28b08b5e63fb5fee2bb9f77d8c794329))
+* **scimtest:** check ne on a boolean and on a primary sub-attribute ([379f10e](https://github.com/supabase-community/scim-go/commit/379f10ee94352dbd8ca3b9976c9a088f17d169df))
+* **scimtest:** check ne, sw, not, or and pr inside a value path ([abf0c36](https://github.com/supabase-community/scim-go/commit/abf0c36eb43423b089682053bf9c436bc0cb511d))
+* **scimtest:** check null, ne and not against every unassigned filterable attribute ([95564b3](https://github.com/supabase-community/scim-go/commit/95564b3cf95dc56a2320b9cf6f50b1b4863193e0))
+* **scimtest:** check PATCH replaces a boolean by path ([2a8cc16](https://github.com/supabase-community/scim-go/commit/2a8cc16bfde627cedd7bb17a2d687789d3ac795f))
+* **scimtest:** check pr and a lowercase schema URN value path on reference values ([8c85fe3](https://github.com/supabase-community/scim-go/commit/8c85fe37d6519dfb7a473f007a14531018bdaf3d))
+
 ## [0.25.0](https://github.com/supabase-community/scim-go/compare/v0.24.0...v0.25.0) (2026-10-16)
 
 
