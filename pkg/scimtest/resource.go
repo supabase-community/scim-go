@@ -331,3 +331,27 @@ func compactBinary(attribute *core.Attribute, value any) {
 		}
 	}
 }
+
+func (r *resource) mistype(t *testing.T, body core.Object) {
+	t.Helper()
+
+	writable := func(kind core.AttributeType) func(*core.Attribute) bool {
+		return func(a *core.Attribute) bool {
+			return a.Type == kind && !a.MultiValued && a.Mutability == core.MutabilityReadWrite
+		}
+	}
+	if attribute := firstOf(r.schemas.Base().Attributes, writable(core.TypeBoolean)); attribute != nil {
+		body.Set(attribute.Name, placeholder)
+		return
+	}
+	body.Set(r.attribute(t, "readWrite singular boolean or string attribute", writable(core.TypeString)).Name, 5)
+}
+
+// RFC 7644 Section 3.12, Table 9: a value incompatible with the attribute type is invalidValue, or invalidSyntax for the body.
+func expectTypeError(t *testing.T, res *http.Response) {
+	t.Helper()
+
+	if body := RequireError(t, res, http.StatusBadRequest, ""); body.ScimType != scimerrors.InvalidValue && body.ScimType != scimerrors.InvalidSyntax {
+		t.Errorf("scimtest: %s %s (RFC 7644 3.12): scimType %q, want invalidValue or invalidSyntax", res.Request.Method, res.Request.URL.Path, body.ScimType)
+	}
+}

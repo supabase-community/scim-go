@@ -28,6 +28,7 @@ func (d discovering) run(t *testing.T) {
 	t.Run("returns a SCIM 404 for an unknown endpoint", d.checkUnknownEndpoint)
 	t.Run("advertises the RFC 7643 attribute characteristics", d.checkCharacteristics)
 	t.Run("rejects a request without credentials", d.checkUnauthenticated)
+	t.Run("rejects an invalid bearer token", d.checkInvalidToken)
 }
 
 func (d discovering) checkConfig(t *testing.T) {
@@ -101,10 +102,21 @@ func (d discovering) checkCharacteristics(t *testing.T) {
 
 // RFC 7644 Section 2: a 401 SHALL indicate the supported schemes with "WWW-Authenticate".
 func (d discovering) checkUnauthenticated(t *testing.T) {
+	d.expectChallenged(t, NewClient(d.suite.client.url))
+}
+
+// RFC 7644 Section 3.12, Table 8: 401 when the authorization header is invalid or missing.
+func (d discovering) checkInvalidToken(t *testing.T) {
+	d.expectChallenged(t, NewClient(d.suite.client.url, WithBearerToken("scimtest-invalid-"+newUnique())))
+}
+
+func (d discovering) expectChallenged(t *testing.T, c *Client) {
+	t.Helper()
+
 	if len(d.found.config.AuthenticationSchemes) == 0 || len(d.resources) == 0 {
 		t.Skip("n/a: no authenticationSchemes or no resource types are advertised")
 	}
-	res := NewClient(d.suite.client.url).Get(t, d.resources[0].kind.Endpoint)
+	res := c.Get(t, d.resources[0].kind.Endpoint)
 
 	RequireError(t, res, http.StatusUnauthorized, "")
 	if res.Header.Get("WWW-Authenticate") == "" {

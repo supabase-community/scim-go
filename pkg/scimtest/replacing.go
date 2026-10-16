@@ -22,6 +22,7 @@ func (r replacing) run(t *testing.T) {
 	t.Run("ignores readOnly attributes", r.checkPutReadOnly)
 	t.Run("rejects a changed immutable attribute", r.checkImmutable)
 	t.Run("rejects a missing required attribute", r.checkRequired)
+	t.Run("rejects a value of the wrong type", r.checkMistyped)
 	t.Run("rejects a duplicate unique value", r.checkUniqueness)
 }
 
@@ -166,4 +167,14 @@ func (r replacing) siblingValue(t *testing.T, parent, sub *core.Attribute) strin
 		return idOf(other)
 	}
 	return placeholder + " " + newUnique()
+}
+
+func (r replacing) checkMistyped(t *testing.T) {
+	r.suite.should(t, "RFC 7644 Table 9 400 invalidValue for a value of the wrong type")
+	unique := newUnique()
+	_, created := r.create(t, unique)
+	body := r.body(t, unique)
+	r.mistype(t, body)
+
+	expectTypeError(t, r.client().Put(t, r.path(created), body))
 }

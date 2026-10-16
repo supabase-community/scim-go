@@ -1,10 +1,12 @@
 package scimtest
 
 import (
+	"mime"
 	"net/http"
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/protocol"
 )
 
 type reading struct {
@@ -16,6 +18,7 @@ func (r reading) run(t *testing.T) {
 
 	t.Run("returns the resource", r.checkGet)
 	t.Run("returns 404 for an unknown id", r.checkUnknown)
+	t.Run("returns the SCIM media type", r.checkMediaType)
 	t.Run("never returns a returned:never attribute", r.checkNever)
 }
 
@@ -51,6 +54,18 @@ func (r reading) checkNever(t *testing.T) {
 	for _, object := range []core.Object{created, Decode[core.Object](t, read)} {
 		if object.Has(attribute.Name) {
 			t.Errorf("scimtest: %s %s (RFC 7643 7): returned the returned:never attribute %s", res.Request.Method, r.kind.Endpoint, attribute.Name)
+		}
+	}
+}
+
+// RFC 7644 Section 3.8: the format defaults to "application/scim+json".
+func (r reading) checkMediaType(t *testing.T) {
+	r.suite.should(t, "RFC 7644 3.8 responses default to application/scim+json")
+	res, created := r.create(t, newUnique())
+
+	for _, res := range []*http.Response{res, r.client().Get(t, r.path(created)), r.client().Get(t, r.kind.Endpoint)} {
+		if mediaType, _, _ := mime.ParseMediaType(res.Header.Get("Content-Type")); mediaType != protocol.MediaType {
+			t.Errorf("scimtest: %s %s (RFC 7644 3.8): Content-Type %q, want %q", res.Request.Method, res.Request.URL.Path, mediaType, protocol.MediaType)
 		}
 	}
 }

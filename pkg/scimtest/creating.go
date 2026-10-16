@@ -26,6 +26,7 @@ func (r creating) run(t *testing.T) {
 	t.Run("rejects an empty required attribute", r.checkEmptyRequired)
 	t.Run("rejects a unique value in another case", r.checkUniqueCase)
 	t.Run("accepts schemas in any order", r.checkSchemasOrder)
+	t.Run("rejects a value of the wrong type", r.checkMistyped)
 	t.Run("stores every value of a full resource", r.checkFull)
 }
 
@@ -156,4 +157,12 @@ func (r creating) checkFull(t *testing.T) {
 			t.Errorf("scimtest: GET %s (RFC 7643 2.2): %s %s is missing", r.path(created), sent.path, sent.literal())
 		}
 	}
+}
+
+func (r creating) checkMistyped(t *testing.T) {
+	r.suite.should(t, "RFC 7644 Table 9 400 invalidValue for a value of the wrong type")
+	body := r.body(t, newUnique())
+	r.mistype(t, body)
+
+	expectTypeError(t, r.client().Post(t, r.kind.Endpoint, body))
 }
