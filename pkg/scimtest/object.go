@@ -8,6 +8,33 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
+type holder struct {
+	prefix string
+	schema *core.Schema
+	object core.Object
+}
+
+type leaf struct {
+	path  string
+	value any
+}
+
+func (h holder) attributes() core.Attributes {
+	if h.prefix != "" {
+		return h.schema.Attributes
+	}
+	return append(commonTargets(), h.schema.Attributes...)
+}
+
+func (l leaf) literal() string {
+	data, _ := json.Marshal(l.value)
+	return string(data)
+}
+
+func (l leaf) key() string {
+	return strings.ToLower(l.path) + " " + l.literal()
+}
+
 func idOf(object core.Object) string {
 	id, _ := object.Get("id").(string)
 	return id
@@ -75,17 +102,6 @@ func isEmptyObject(value any) bool {
 	return value == nil || ok && len(object) == 0
 }
 
-type holder struct {
-	prefix string
-	schema *core.Schema
-	object core.Object
-}
-
-type leaf struct {
-	path  string
-	value any
-}
-
 func holders(schemas core.Schemas, object core.Object) []holder {
 	found := []holder{{"", schemas.Base(), object}}
 	for _, extension := range schemas.Extensions() {
@@ -106,13 +122,6 @@ func storedLeaves(schemas core.Schemas, object core.Object) []leaf {
 		}
 	}
 	return distinct(leaves)
-}
-
-func (h holder) attributes() core.Attributes {
-	if h.prefix != "" {
-		return h.schema.Attributes
-	}
-	return append(commonTargets(), h.schema.Attributes...)
 }
 
 func leavesOf(path string, attribute *core.Attribute, value any) []leaf {
@@ -149,15 +158,6 @@ func distinct(leaves []leaf) []leaf {
 		seen[l.key()] = true
 		return duplicate
 	})
-}
-
-func (l leaf) literal() string {
-	data, _ := json.Marshal(l.value)
-	return string(data)
-}
-
-func (l leaf) key() string {
-	return strings.ToLower(l.path) + " " + l.literal()
 }
 
 func keysOf(leaves []leaf) map[string]bool {
