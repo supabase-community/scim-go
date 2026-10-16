@@ -1,6 +1,7 @@
 package scimtest
 
 import (
+	"maps"
 	"net/http"
 	"slices"
 	"testing"
@@ -80,14 +81,17 @@ func (r replacing) putReadOnly(t *testing.T, o readOnly) {
 
 	marker := "scimtest-readonly-" + newUnique()
 	unique := newUnique()
-	_, created := r.create(t, unique)
-	body := r.body(t, unique)
-	o.set(body, marker)
 	sibling := o.sibling()
+	body := r.body(t, unique)
+	if sibling != nil {
+		r.setSibling(t, o, sibling, body)
+	}
+	_, created := r.createBody(t, body)
+	body = r.body(t, unique)
+	o.set(body, marker)
 	var want any
 	if sibling != nil {
-		want = r.siblingValue(o.attribute, sibling, created)
-		objectOf(o.holder(body).Get(o.attribute.Name))[sibling.Name] = want
+		want = r.setSibling(t, o, sibling, body)
 	}
 	body.Set(schemasAttr, r.schemaURIs(body))
 
@@ -138,9 +142,28 @@ func (r replacing) checkImmutable(t *testing.T) {
 	RequireError(t, r.client().Put(t, r.path(created), body), http.StatusBadRequest, scimerrors.Mutability)
 }
 
-func (r replacing) siblingValue(parent, sub *core.Attribute, created core.Object) string {
+func (r replacing) setSibling(t *testing.T, o readOnly, sibling *core.Attribute, body core.Object) string {
+	t.Helper()
+
+	value := r.siblingValue(t, o.attribute, sibling)
+	holder := o.holder(body)
+	parent := maps.Clone(objectOf(holder.Get(o.attribute.Name)))
+	if parent == nil {
+		parent = map[string]any{}
+	}
+	parent[sibling.Name] = value
+	holder.Set(o.attribute.Name, parent)
+	body.Set(schemasAttr, r.schemaURIs(body))
+	return value
+}
+
+// RFC 7643 Section 4.3: "manager" references the "id" attribute of another User.
+func (r replacing) siblingValue(t *testing.T, parent, sub *core.Attribute) string {
+	t.Helper()
+
 	if ref := parent.SubAttribute("$ref"); sub.Name == valueSub && ref != nil && slices.Contains(ref.ReferenceTypes, r.kind.Name.Reference()) {
-		return idOf(created)
+		_, other := r.create(t, newUnique())
+		return idOf(other)
 	}
 	return placeholder + " " + newUnique()
 }
