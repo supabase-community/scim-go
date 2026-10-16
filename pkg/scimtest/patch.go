@@ -35,6 +35,7 @@ func (r patching) run(t *testing.T) {
 	t.Run("rejects an unknown op", r.checkUnknownOp)
 	t.Run("rejects an unknown path", r.checkUnknownPath)
 	t.Run("rejects a readOnly id", r.checkReadOnly)
+	t.Run("never changes a readOnly attribute", r.checkReadOnlyKept)
 	t.Run("rejects a body without operations", r.checkEmpty)
 	t.Run("returns 200 with the requested attributes", r.checkProjected)
 	t.Run("replaces attributes without a path", r.checkReplaceWithoutPath)
@@ -245,6 +246,29 @@ func (r patching) checkUnknownPath(t *testing.T) {
 	created, _ := r.patchTarget(t)
 
 	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, "scimtest"+newUnique(), placeholder))), http.StatusBadRequest, scimerrors.InvalidPath)
+}
+
+// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute, so the server keeps its value.
+func (r patching) checkReadOnlyKept(t *testing.T) {
+	supports(t, "patch", r.config.Patch.Supported)
+	for _, o := range readOnlyIn(t, r.resource) {
+		marker := "scimtest-readonly-" + newUnique()
+		fragment := core.Object{}
+		o.set(fragment, marker)
+		for name, operation := range map[string]patch.Operation{
+			"a path":  op(patch.OpReplace, o.path(), marker),
+			"no path": op(patch.OpReplace, "", fragment),
+		} {
+			t.Run(o.path()+" with "+name, func(t *testing.T) {
+				_, created := r.create(t, newUnique())
+				res := r.client().Patch(t, r.path(created), ops(operation))
+				if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusNoContent && res.StatusCode != http.StatusBadRequest {
+					t.Fatalf("scimtest: PATCH %s (RFC 7644 3.5.2): status %d, want 200, 204 or 400", r.path(created), res.StatusCode)
+				}
+				expectIgnored(t, "GET "+r.path(created)+" (RFC 7644 3.5.2)", r.read(t, created), marker)
+			})
+		}
+	}
 }
 
 func (r patching) checkReadOnly(t *testing.T) {
