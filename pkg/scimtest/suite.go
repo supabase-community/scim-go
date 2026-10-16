@@ -21,26 +21,30 @@ type discovery struct {
 	schemas core.Schemas
 }
 
+type runner interface {
+	run(t *testing.T)
+}
+
 type section struct {
 	name     string
-	check    func(r *resource, t *testing.T)
+	check    func(r *resource) runner
 	listings bool
 }
 
 var sections = []section{
-	{"3.3 Creating Resources", (*resource).checkCreate, false},
-	{"3.4.1 Retrieving a Known Resource", (*resource).checkRead, false},
-	{"3.4.2 Query Resources", (*resource).checkList, true},
-	{"3.4.2.2 Filtering", (*resource).checkFilter, true},
-	{"3.4.2.3 Sorting", (*resource).checkSort, true},
-	{"3.4.2.4 Pagination", (*resource).checkPagination, true},
-	{"3.4.2.5 Attributes", (*resource).checkAttributes, false},
-	{"3.5.1 Replacing with PUT", (*resource).checkReplace, false},
-	{"3.5.2 Modifying with PATCH", (*resource).checkPatch, false},
-	{"3.6 Deleting Resources", (*resource).checkDelete, false},
+	{"3.3 Creating Resources", func(r *resource) runner { return creating{r} }, false},
+	{"3.4.1 Retrieving a Known Resource", func(r *resource) runner { return reading{r} }, false},
+	{"3.4.2 Query Resources", func(r *resource) runner { return listing{r} }, true},
+	{"3.4.2.2 Filtering", func(r *resource) runner { return filtering{r} }, true},
+	{"3.4.2.3 Sorting", func(r *resource) runner { return sorting{r} }, true},
+	{"3.4.2.4 Pagination", func(r *resource) runner { return paging{r} }, true},
+	{"3.4.2.5 Attributes", func(r *resource) runner { return projecting{r} }, false},
+	{"3.5.1 Replacing with PUT", func(r *resource) runner { return replacing{r} }, false},
+	{"3.5.2 Modifying with PATCH", func(r *resource) runner { return patching{r} }, false},
+	{"3.6 Deleting Resources", func(r *resource) runner { return deleting{r} }, false},
 }
 
-var versionSection = section{"3.14 Versioning Resources", (*resource).checkVersioning, false}
+var versionSection = section{"3.14 Versioning Resources", func(r *resource) runner { return versioning{r} }, false}
 
 func NewSuite(c *Client, opts ...Option[*Suite]) *Suite {
 	s := &Suite{client: c, fixtures: defaultFixtures()}
@@ -100,11 +104,11 @@ func (s *Suite) run(t *testing.T, r *resource, sec section) {
 	t.Helper()
 
 	if !sec.listings {
-		sec.check(r, t)
+		sec.check(r).run(t)
 		return
 	}
 	for _, tr := range transports {
-		t.Run(tr.name, func(t *testing.T) { sec.check(r.over(t, tr), t) })
+		t.Run(tr.name, func(t *testing.T) { sec.check(r.over(t, tr)).run(t) })
 	}
 }
 
@@ -190,16 +194,30 @@ func (s *Suite) should(t *testing.T, rule string) {
 	}
 }
 
-func list[T any](t *testing.T, c *Client, path string) protocol.ListResponse[T] {
+func get[T any](t *testing.T, c *Client, path, section string) T {
 	t.Helper()
 
 	res := c.Get(t, path)
-	expectStatus(t, res, http.StatusOK, "RFC 7644 3.4.2")
-	body := Decode[protocol.ListResponse[T]](t, res)
-	if !slices.Contains(body.Schemas, protocol.SchemaListResponse) {
-		t.Fatalf("scimtest: GET %s (RFC 7644 3.4.2): schemas %v, want %s", path, body.Schemas, protocol.SchemaListResponse)
+	expectStatus(t, res, http.StatusOK, section)
+	return Decode[T](t, res)
+}
+
+func list[T any](t *testing.T, c *Client, path string) protocol.ListResponse[T] {
+	t.Helper()
+	return listed[T](t, "GET "+path, c.Get(t, path))
+}
+
+func listed[T any](t *testing.T, where string, res *http.Response) protocol.ListResponse[T] {
+	t.Helper()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("scimtest: %s (RFC 7644 3.4.2): status %d, want 200", where, res.StatusCode)
 	}
-	return body
+	page := Decode[protocol.ListResponse[T]](t, res)
+	if !slices.Contains(page.Schemas, protocol.SchemaListResponse) {
+		t.Fatalf("scimtest: %s (RFC 7644 3.4.2): schemas %v, want %s", where, page.Schemas, protocol.SchemaListResponse)
+	}
+	return page
 }
 
 func expectStatus(t TB, res *http.Response, want int, section string) {

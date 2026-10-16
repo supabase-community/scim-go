@@ -114,10 +114,7 @@ func (d discovering) checkUnauthenticated(t *testing.T) {
 
 func (d discovering) get(t *testing.T, path string) map[string]any {
 	t.Helper()
-
-	res := d.suite.client.Get(t, path)
-	expectStatus(t, res, http.StatusOK, "RFC 7644 4")
-	return Decode[map[string]any](t, res)
+	return get[map[string]any](t, d.suite.client, path, "RFC 7644 4")
 }
 
 // RFC 7643 Section 2.2: an unstated characteristic takes its default.

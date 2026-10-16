@@ -3,7 +3,6 @@ package scimtest
 import (
 	"crypto/rand"
 	"encoding/json"
-	"path"
 	"strings"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -20,7 +19,7 @@ func defaultFixtures() map[core.ResourceTypeName]fixture {
 
 func golden(name string, drop ...string) fixture {
 	return func(schema *core.Schema, unique string) (core.Object, error) {
-		data, err := files.ReadFile(path.Join("testdata", name))
+		data, err := readGolden(name)
 		if err != nil {
 			return nil, err
 		}

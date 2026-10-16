@@ -51,7 +51,7 @@ func (r patching) checkReplaceByPath(t *testing.T) {
 		expectStatus(t, res, http.StatusNotImplemented, "RFC 7644 3.12")
 		return
 	}
-	attribute := find(r.schemas.Base(), patchable)
+	attribute := firstOf(r.schemas.Base().Attributes, patchable)
 	if attribute == nil {
 		r.suite.todo(t, "%s has no readWrite singular string attribute to PATCH", r.kind.Name)
 	}
@@ -101,14 +101,17 @@ func (r patching) checkNoPath(t *testing.T) {
 	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, "", nil))), http.StatusBadRequest, scimerrors.NoTarget)
 }
 
+// RFC 7644 Section 3.5.2.3: a value selection filter without a match SHALL fail with 400 noTarget.
 func (r patching) checkNoMatch(t *testing.T) {
 	created, _ := r.patchTarget(t)
 	attribute := r.attribute(t, "readWrite multi-valued complex attribute with a value", func(a *core.Attribute) bool {
 		return a.MultiValued && a.Type == core.TypeComplex && a.Mutability == core.MutabilityReadWrite && a.SubAttributes.Lookup(valueSub) != nil
 	})
-	path := attribute.Name + `[value eq "scimtest-none"]`
+	selector := attribute.Name + `[value eq "scimtest-none"]`
 
-	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, path, map[string]string{valueSub: placeholder}))), http.StatusBadRequest, scimerrors.NoTarget)
+	for path, value := range map[string]any{selector: map[string]string{valueSub: placeholder}, selector + "." + valueSub: placeholder} {
+		RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, path, value))), http.StatusBadRequest, scimerrors.NoTarget)
+	}
 }
 
 func (r patching) checkAtomic(t *testing.T) {
@@ -260,7 +263,7 @@ func (r patching) checkEmpty(t *testing.T) {
 // RFC 7644 Section 3.5.2: the server MUST return 200 OK if the "attributes" parameter is specified.
 func (r patching) checkProjected(t *testing.T) {
 	created, attribute := r.patchTarget(t)
-	other := find(r.schemas.Base(), func(a *core.Attribute) bool {
+	other := firstOf(r.schemas.Base().Attributes, func(a *core.Attribute) bool {
 		return a.Returned == core.ReturnedDefault && a.Name != attribute.Name && created.Has(a.Name)
 	})
 

@@ -50,54 +50,10 @@ func (r *resource) over(t *testing.T, tr transport) *resource {
 	return &clone
 }
 
-func (r *resource) checkCreate(t *testing.T) {
-	creating{r}.run(t)
-}
-
-func (r *resource) checkRead(t *testing.T) {
-	reading{r}.run(t)
-}
-
-func (r *resource) checkList(t *testing.T) {
-	listing{r}.run(t)
-}
-
-func (r *resource) checkFilter(t *testing.T) {
-	filtering{r}.run(t)
-}
-
-func (r *resource) checkSort(t *testing.T) {
-	sorting{r}.run(t)
-}
-
-func (r *resource) checkPagination(t *testing.T) {
-	paging{r}.run(t)
-}
-
-func (r *resource) checkAttributes(t *testing.T) {
-	projecting{r}.run(t)
-}
-
-func (r *resource) checkPatch(t *testing.T) {
-	patching{r}.run(t)
-}
-
-func (r *resource) checkReplace(t *testing.T) {
-	replacing{r}.run(t)
-}
-
-func (r *resource) checkDelete(t *testing.T) {
-	deleting{r}.run(t)
-}
-
-func (r *resource) checkVersioning(t *testing.T) {
-	versioning{r}.run(t)
-}
-
 func (r *resource) attribute(t *testing.T, what string, match func(*core.Attribute) bool) *core.Attribute {
 	t.Helper()
 
-	attribute := find(r.schemas.Base(), match)
+	attribute := firstOf(r.schemas.Base().Attributes, match)
 	if attribute == nil {
 		t.Skipf("n/a: %s has no %s", r.kind.Name, what)
 	}
@@ -122,7 +78,7 @@ func (r *resource) complexTarget(t *testing.T) (*core.Attribute, core.Object, st
 	})
 	subs := filterableSubs(attribute)
 	body := r.body(t, newUnique())
-	body.Set(attribute.Name, map[string]any{subs[0].Name: placeholder + " " + newUnique(), subs[1].Name: placeholder + " " + newUnique()})
+	body.Set(attribute.Name, filled(subs[:2]))
 	_, created := r.createBody(t, body)
 	return attribute, created, subs[0].Name, subs[1].Name
 }
@@ -179,23 +135,13 @@ func (r *resource) list(t *testing.T, query url.Values) protocol.ListResponse[co
 
 func (r *resource) page(t *testing.T, query url.Values, res *http.Response) protocol.ListResponse[core.Object] {
 	t.Helper()
-
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("scimtest: %s (RFC 7644 3.4.2): status %d, want 200", r.describe(query), res.StatusCode)
-	}
-	page := Decode[protocol.ListResponse[core.Object]](t, res)
-	if !slices.Contains(page.Schemas, protocol.SchemaListResponse) {
-		t.Fatalf("scimtest: %s (RFC 7644 3.4.2): schemas %v, want %s", r.describe(query), page.Schemas, protocol.SchemaListResponse)
-	}
-	return page
+	return listed[core.Object](t, r.describe(query), res)
 }
 
 func (r *resource) read(t *testing.T, object core.Object) core.Object {
 	t.Helper()
 
-	res := r.client().Get(t, r.path(object))
-	expectStatus(t, res, http.StatusOK, "RFC 7644 3.4.1")
-	return Decode[core.Object](t, res)
+	return get[core.Object](t, r.client(), r.path(object), "RFC 7644 3.4.1")
 }
 
 func (r *resource) filtered(t *testing.T, query url.Values) []string {

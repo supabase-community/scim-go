@@ -2,6 +2,7 @@ package scimtest
 
 import (
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -28,7 +29,7 @@ func (r replacing) checkPut(t *testing.T) {
 	unique := newUnique()
 	_, created := r.create(t, unique)
 	body := r.body(t, unique)
-	attribute := find(r.schemas.Base(), patchable)
+	attribute := firstOf(r.schemas.Base().Attributes, patchable)
 	want := placeholder + " " + newUnique()
 	if attribute != nil {
 		body.Set(attribute.Name, want)
@@ -70,20 +71,36 @@ func (r replacing) checkPutReadOnlyID(t *testing.T) {
 // RFC 7644 Section 3.5.1: readOnly values provided SHALL be ignored.
 func (r replacing) checkPutReadOnly(t *testing.T) {
 	for _, o := range readOnlyIn(t, r.resource) {
-		t.Run(o.path(), func(t *testing.T) {
-			marker := "scimtest-readonly-" + newUnique()
-			unique := newUnique()
-			_, created := r.create(t, unique)
-			body := r.body(t, unique)
-			o.set(body, marker)
-			body.Set(schemasAttr, r.schemaURIs(body))
+		t.Run(o.path(), func(t *testing.T) { r.putReadOnly(t, o) })
+	}
+}
 
-			res := r.client().Put(t, r.path(created), body)
-			expectStatus(t, res, http.StatusOK, "RFC 7644 3.5.1")
-			replaced := Decode[core.Object](t, res)
-			expectIgnored(t, "PUT "+r.path(created)+" (RFC 7644 3.5.1)", replaced, marker)
-			expectIgnored(t, "GET "+r.path(created)+" (RFC 7644 3.5.1)", r.read(t, created), marker)
-		})
+func (r replacing) putReadOnly(t *testing.T, o readOnly) {
+	t.Helper()
+
+	marker := "scimtest-readonly-" + newUnique()
+	unique := newUnique()
+	_, created := r.create(t, unique)
+	body := r.body(t, unique)
+	o.set(body, marker)
+	sibling := o.sibling()
+	var want any
+	if sibling != nil {
+		want = r.siblingValue(o.attribute, sibling, created)
+		objectOf(o.holder(body).Get(o.attribute.Name))[sibling.Name] = want
+	}
+	body.Set(schemasAttr, r.schemaURIs(body))
+
+	res := r.client().Put(t, r.path(created), body)
+	expectStatus(t, res, http.StatusOK, "RFC 7644 3.5.1")
+	for where, object := range map[string]core.Object{http.MethodPut: Decode[core.Object](t, res), http.MethodGet: r.read(t, created)} {
+		expectIgnored(t, where+" "+r.path(created)+" (RFC 7644 3.5.1)", object, marker)
+		if sibling == nil {
+			continue
+		}
+		if got := o.subValue(object, sibling.Name); got != want {
+			t.Errorf("scimtest: %s %s (RFC 7644 3.5.1): %s.%s is %v, want %v", where, r.path(created), o.attribute.Name, sibling.Name, got, want)
+		}
 	}
 }
 
@@ -119,4 +136,11 @@ func (r replacing) checkImmutable(t *testing.T) {
 	body.Set(attribute.Name, "scimtest "+newUnique())
 
 	RequireError(t, r.client().Put(t, r.path(created), body), http.StatusBadRequest, scimerrors.Mutability)
+}
+
+func (r replacing) siblingValue(parent, sub *core.Attribute, created core.Object) string {
+	if ref := parent.SubAttribute("$ref"); sub.Name == valueSub && ref != nil && slices.Contains(ref.ReferenceTypes, r.kind.Name.Reference()) {
+		return idOf(created)
+	}
+	return placeholder + " " + newUnique()
 }

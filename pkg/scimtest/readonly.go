@@ -42,15 +42,37 @@ func (o readOnly) path() string {
 }
 
 func (o readOnly) set(body core.Object, marker string) {
-	holder := body
-	if o.extension != "" {
-		holder = core.Object(objectOf(body.Get(string(o.extension))))
-		if holder == nil {
-			holder = core.Object{}
-		}
+	holder := o.holder(body)
+	holder.Set(o.attribute.Name, o.value(holder.Get(o.attribute.Name), marker))
+}
+
+func (o readOnly) holder(body core.Object) core.Object {
+	if o.extension == "" {
+		return body
+	}
+	holder := core.Object(objectOf(body.Get(string(o.extension))))
+	if holder == nil {
+		holder = core.Object{}
 		body.Set(string(o.extension), map[string]any(holder))
 	}
-	holder.Set(o.attribute.Name, o.value(holder.Get(o.attribute.Name), marker))
+	return holder
+}
+
+func (o readOnly) sibling() *core.Attribute {
+	if o.sub == nil || o.attribute.MultiValued {
+		return nil
+	}
+	return firstOf(o.attribute.SubAttributes, func(s *core.Attribute) bool {
+		return s.Mutability == core.MutabilityReadWrite && s.Type == core.TypeString
+	})
+}
+
+func (o readOnly) subValue(object core.Object, name string) any {
+	holder := object
+	if o.extension != "" {
+		holder = objectOf(object.Get(string(o.extension)))
+	}
+	return objectOf(holder[o.attribute.Name])[name]
 }
 
 func (o readOnly) value(current any, marker string) any {

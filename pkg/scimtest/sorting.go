@@ -48,9 +48,9 @@ func (r sorting) checkSubAttribute(t *testing.T) {
 	supports(t, "sort", r.config.Sort.Supported)
 	supports(t, "filter", r.config.Filter.Supported)
 	attribute := r.attribute(t, "readWrite singular complex attribute with a string sub-attribute", func(a *core.Attribute) bool {
-		return a.Type == core.TypeComplex && !a.MultiValued && a.Mutability == core.MutabilityReadWrite && subOf(a, isFilterable) != nil
+		return a.Type == core.TypeComplex && !a.MultiValued && a.Mutability == core.MutabilityReadWrite && firstOf(a.SubAttributes, isFilterable) != nil
 	})
-	sub := subOf(attribute, isFilterable)
+	sub := firstOf(attribute.SubAttributes, isFilterable)
 	unique := newUnique()
 	ids := []string{
 		r.withValue(t, attribute.Name, map[string]any{sub.Name: "scimtest b " + unique}),

@@ -48,7 +48,7 @@ func (r versioning) checkIfMatch(t *testing.T) {
 	res, created := r.create(t, unique)
 	etag := r.etag(t, res)
 	body := r.body(t, unique)
-	attribute := find(r.schemas.Base(), patchable)
+	attribute := firstOf(r.schemas.Base().Attributes, patchable)
 	if attribute != nil {
 		body.Set(attribute.Name, placeholder+" "+newUnique())
 	}
@@ -67,7 +67,7 @@ func (r versioning) checkStaleIfMatch(t *testing.T) {
 	stale := r.client().With(WithHeader("If-Match", `W/"scimtest-stale"`))
 
 	expectStatus(t, stale.Put(t, r.path(created), r.body(t, unique)), http.StatusPreconditionFailed, "RFC 7232 3.1")
-	if attribute := find(r.schemas.Base(), patchable); attribute != nil && r.config.Patch.Supported {
+	if attribute := firstOf(r.schemas.Base().Attributes, patchable); attribute != nil && r.config.Patch.Supported {
 		expectStatus(t, stale.Patch(t, r.path(created), ops(op(patch.OpReplace, attribute.Name, placeholder))), http.StatusPreconditionFailed, "RFC 7232 3.1")
 	}
 	expectStatus(t, stale.Delete(t, r.path(created)), http.StatusPreconditionFailed, "RFC 7232 3.1")

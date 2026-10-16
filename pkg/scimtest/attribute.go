@@ -7,16 +7,9 @@ import (
 	"github.com/supabase-community/scim-go/pkg/core"
 )
 
-func find(schema *core.Schema, match func(*core.Attribute) bool) *core.Attribute {
-	if i := slices.IndexFunc(schema.Attributes, match); i >= 0 {
-		return schema.Attributes[i]
-	}
-	return nil
-}
-
-func subOf(attribute *core.Attribute, match func(*core.Attribute) bool) *core.Attribute {
-	if i := slices.IndexFunc(attribute.SubAttributes, match); i >= 0 {
-		return attribute.SubAttributes[i]
+func firstOf(attributes core.Attributes, match func(*core.Attribute) bool) *core.Attribute {
+	if i := slices.IndexFunc(attributes, match); i >= 0 {
+		return attributes[i]
 	}
 	return nil
 }
@@ -38,7 +31,7 @@ func pathsOf(schema *core.Schema, match func(*core.Attribute) bool) map[string]*
 
 func extensionAttribute(schemas core.Schemas, match func(*core.Attribute) bool) (*core.Schema, *core.Attribute) {
 	for _, extension := range schemas.Extensions() {
-		if attribute := find(extension, match); attribute != nil {
+		if attribute := firstOf(extension.Attributes, match); attribute != nil {
 			return extension, attribute
 		}
 	}
@@ -51,6 +44,14 @@ func filterableSubs(attribute *core.Attribute) core.Attributes {
 
 func isReadOnly(attribute *core.Attribute) bool {
 	return attribute.Mutability == core.MutabilityReadOnly
+}
+
+func filled(subs core.Attributes) map[string]any {
+	value := map[string]any{}
+	for _, sub := range subs {
+		value[sub.Name] = placeholder + " " + newUnique()
+	}
+	return value
 }
 
 func readOnlyValue(attribute *core.Attribute, marker string) any {

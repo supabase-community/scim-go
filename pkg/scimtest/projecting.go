@@ -1,7 +1,6 @@
 package scimtest
 
 import (
-	"net/http"
 	"net/url"
 	"slices"
 	"testing"
@@ -20,8 +19,7 @@ type projection struct {
 func (r projecting) run(t *testing.T) {
 	t.Helper()
 
-	unique := newUnique()
-	body := r.body(t, unique)
+	body := r.populated(t)
 	attribute := r.attribute(t, "returned:default attribute in its fixture", func(a *core.Attribute) bool {
 		return a.Returned == core.ReturnedDefault && body.Has(a.Name)
 	})
@@ -30,8 +28,10 @@ func (r projecting) run(t *testing.T) {
 	t.Run("returns a requested attribute and id", func(t *testing.T) {
 		r.expectAttributes(t, r.path(created)+"?attributes="+attribute.Name, []string{"id", attribute.Name}, r.others(created, attribute.Name))
 	})
-	t.Run("removes an excluded attribute", func(t *testing.T) {
-		r.expectAttributes(t, r.path(created)+"?excludedAttributes="+attribute.Name, []string{"id"}, []string{attribute.Name})
+	t.Run("removes only the excluded attribute", func(t *testing.T) {
+		for _, name := range r.others(created, "") {
+			r.expectAttributes(t, r.path(created)+"?"+url.Values{excludedParam: {name}}.Encode(), append([]string{"id"}, r.others(created, name)...), []string{name})
+		}
 	})
 	t.Run("never excludes id", func(t *testing.T) {
 		r.expectAttributes(t, r.path(created)+"?excludedAttributes=id", []string{"id"}, nil)
@@ -111,6 +111,24 @@ func (r projecting) checkExtension(t *testing.T) {
 	}
 }
 
+func (r projecting) populated(t *testing.T) core.Object {
+	t.Helper()
+
+	body := r.body(t, newUnique())
+	for _, attribute := range r.schemas.Base().Attributes {
+		if body.Has(attribute.Name) || attribute.MultiValued || attribute.Mutability != core.MutabilityReadWrite || attribute.Returned != core.ReturnedDefault {
+			continue
+		}
+		if subs := filterableSubs(attribute); len(subs) > 0 {
+			body.Set(attribute.Name, filled(subs))
+		}
+	}
+	if extension, attribute := extensionAttribute(r.schemas, isFilterable); extension != nil {
+		r.withExtension(body, extension, attribute.Name, placeholder+" "+newUnique())
+	}
+	return body
+}
+
 func (r projecting) others(created core.Object, except string) []string {
 	others := []string{}
 	for _, attribute := range r.schemas.Base().Attributes {
@@ -126,17 +144,14 @@ func (r projecting) others(created core.Object, except string) []string {
 	return others
 }
 
-func (r projecting) get(t *testing.T, path string) core.Object {
-	t.Helper()
-
-	res := r.client().Get(t, path)
-	expectStatus(t, res, http.StatusOK, "RFC 7644 3.4.2.5")
-	return Decode[core.Object](t, res)
-}
-
 func (r projecting) expectAttributes(t *testing.T, path string, present, absent []string) {
 	t.Helper()
 	projection{present, absent}.expect(t, "GET "+path, r.get(t, path))
+}
+
+func (r projecting) get(t *testing.T, path string) core.Object {
+	t.Helper()
+	return get[core.Object](t, r.client(), path, "RFC 7644 3.4.2.5")
 }
 
 func (p projection) expect(t *testing.T, where string, got core.Object) {

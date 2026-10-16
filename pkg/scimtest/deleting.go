@@ -28,7 +28,7 @@ func (r deleting) checkDeleted(t *testing.T) {
 	expectStatus(t, r.client().Delete(t, path), http.StatusNoContent, "RFC 7644 3.6")
 	RequireError(t, r.client().Get(t, path), http.StatusNotFound, "")
 	RequireError(t, r.client().Put(t, path, r.body(t, unique)), http.StatusNotFound, "")
-	if attribute := find(r.schemas.Base(), patchable); attribute != nil && r.config.Patch.Supported {
+	if attribute := firstOf(r.schemas.Base().Attributes, patchable); attribute != nil && r.config.Patch.Supported {
 		RequireError(t, r.client().Patch(t, path, ops(op(patch.OpReplace, attribute.Name, placeholder))), http.StatusNotFound, "")
 	}
 	RequireError(t, r.client().Delete(t, path), http.StatusNotFound, "")

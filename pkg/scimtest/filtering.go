@@ -305,7 +305,7 @@ func presentValue(attribute *core.Attribute) any {
 	if attribute.Type != core.TypeComplex || attribute.Mutability != core.MutabilityReadWrite {
 		return nil
 	}
-	sub := subOf(attribute, isFilterable)
+	sub := firstOf(attribute.SubAttributes, isFilterable)
 	if sub == nil {
 		return nil
 	}

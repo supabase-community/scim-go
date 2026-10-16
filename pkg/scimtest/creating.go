@@ -74,7 +74,7 @@ func (r creating) checkMeta(t *testing.T) {
 			t.Errorf("scimtest: POST %s (RFC 7643 3.1): kept the client's meta.%s %v", r.kind.Endpoint, key, value)
 		}
 	}
-	if kind, ok := meta["resourceType"]; ok && kind != string(r.kind.Name) {
+	if kind, ok := meta["resourceType"]; (ok || r.suite.strict) && kind != string(r.kind.Name) {
 		t.Errorf("scimtest: POST %s (RFC 7643 3.1): meta.resourceType %v, want %s", r.kind.Endpoint, kind, r.kind.Name)
 	}
 	if meta["created"] != meta["lastModified"] {

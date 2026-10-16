@@ -20,10 +20,14 @@ type TB interface {
 func Golden(t TB, name string) []byte {
 	t.Helper()
 
-	data, err := files.ReadFile(path.Join("testdata", name))
+	data, err := readGolden(name)
 	if err != nil {
 		t.Fatalf("scimtest: %v", err)
 		return nil
 	}
 	return data
+}
+
+func readGolden(name string) ([]byte, error) {
+	return files.ReadFile(path.Join("testdata", name))
 }

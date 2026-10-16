@@ -41,6 +41,7 @@ func (r referencing) run(t *testing.T) {
 	t.Run("returns the values in a query", r.checkQueried)
 	t.Run("removes a value by filter", r.checkRemoveFiltered)
 	t.Run("replaces the values", r.checkReplace)
+	t.Run("replaces the values with PUT", r.checkPut)
 	t.Run("removes every value without a filter", r.checkRemoveAll)
 	t.Run("rejects a change to an immutable value", r.checkImmutable)
 	t.Run("lists the source on the readOnly inverse", r.checkInverse)
@@ -93,6 +94,14 @@ func (r referencing) checkReplace(t *testing.T) {
 	source := r.newSource(t, first)
 
 	r.patch(t, source, op(patch.OpReplace, r.attribute.Name, members(second)))
+	r.source.expectValues(t, source, r.attribute.Name, second)
+}
+
+// RFC 7644 Section 3.5.1: readWrite values provided SHALL replace the existing values.
+func (r referencing) checkPut(t *testing.T) {
+	first, second := r.newTarget(t), r.newTarget(t)
+	source := r.newSource(t, first)
+	expectStatus(t, r.source.client().Put(t, r.source.path(source), r.sourceBody(t, second)), http.StatusOK, "RFC 7644 3.5.1")
 	r.source.expectValues(t, source, r.attribute.Name, second)
 }
 
@@ -163,13 +172,20 @@ func (r referencing) newTarget(t *testing.T) string {
 func (r referencing) newSource(t *testing.T, ids ...string) core.Object {
 	t.Helper()
 
-	body := r.source.body(t, newUnique())
-	body.Set(r.attribute.Name, members(ids...))
+	body := r.sourceBody(t, ids...)
 	if r.optional {
 		return r.source.seed(t, body)
 	}
 	_, created := r.source.createBody(t, body)
 	return created
+}
+
+func (r referencing) sourceBody(t *testing.T, ids ...string) core.Object {
+	t.Helper()
+
+	body := r.source.body(t, newUnique())
+	body.Set(r.attribute.Name, members(ids...))
+	return body
 }
 
 func targetsOf(resources []*resource, targets []core.ReferenceType) []*resource {
