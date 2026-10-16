@@ -175,10 +175,11 @@ func (r referencing) checkInverse(t *testing.T) {
 	source := r.newSource(t, first)
 	target := core.Object{"id": first}
 
-	if got := valuesIn(r.target.read(t, target), r.inverse.Name); !slices.Contains(got, idOf(source)) {
+	read := r.target.read(t, target)
+	if got := valuesIn(read, r.inverse.Name); !slices.Contains(got, idOf(source)) {
 		t.Errorf("scimtest: GET %s (RFC 7643 4.1.2): %s %v, want %s", r.target.path(target), r.inverse.Name, got, idOf(source))
 	}
-	r.expectType(t, target, idOf(source), "direct")
+	r.expectType(t, read, idOf(source), "direct")
 	r.patch(t, source, op(patch.OpRemove, r.attribute.Name+"[value eq "+quoted(first)+"]", nil))
 	if got := valuesIn(r.target.read(t, target), r.inverse.Name); slices.Contains(got, idOf(source)) {
 		t.Errorf("scimtest: GET %s (RFC 7643 4.1.2): %s %v, want no %s", r.target.path(target), r.inverse.Name, got, idOf(source))
@@ -198,17 +199,18 @@ func (r referencing) checkIndirect(t *testing.T) {
 	r.patch(t, parent, op(patch.OpAdd, r.attribute.Name, members(idOf(child))))
 	target := core.Object{"id": first}
 
-	if element := elementWith(r.target.read(t, target), r.inverse.Name, idOf(parent)); element == nil {
+	read := r.target.read(t, target)
+	if elementWith(read, r.inverse.Name, idOf(parent)) == nil {
 		t.Skipf("n/a: %s lists direct memberships only", r.inverse.Name)
 	}
-	r.expectType(t, target, idOf(parent), "indirect")
+	r.expectType(t, read, idOf(parent), "indirect")
 }
 
 func (r referencing) expectType(t *testing.T, target core.Object, id, want string) {
 	t.Helper()
 
 	r.source.suite.should(t, "RFC 7643 4.1.2 groups.type is direct or indirect")
-	element := elementWith(r.target.read(t, target), r.inverse.Name, id)
+	element := elementWith(target, r.inverse.Name, id)
 	if kind, ok := element[typeSub]; ok && kind != want {
 		t.Errorf("scimtest: GET %s (RFC 7643 4.1.2): %s %s has type %v, want %s", r.target.path(target), r.inverse.Name, id, kind, want)
 	}
