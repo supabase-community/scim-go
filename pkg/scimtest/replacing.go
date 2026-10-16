@@ -24,6 +24,7 @@ func (r replacing) run(t *testing.T) {
 	t.Run("rejects a missing required attribute", r.checkRequired)
 	t.Run("rejects a value of the wrong type", r.checkMistyped)
 	t.Run("rejects a duplicate unique value", r.checkUniqueness)
+	t.Run("accepts a repeated value that is not unique", r.checkNotUnique)
 }
 
 // RFC 7644 Section 3.5.1: readWrite values provided SHALL replace the existing values.
@@ -129,6 +130,16 @@ func (r replacing) checkUniqueness(t *testing.T) {
 	_, created := r.create(t, newUnique())
 
 	RequireError(t, r.client().Put(t, r.path(created), r.body(t, taken)), http.StatusConflict, scimerrors.Uniqueness)
+}
+
+func (r replacing) checkNotUnique(t *testing.T) {
+	r.suite.should(t, "RFC 7643 2.2 a PUT may repeat another resource's uniqueness none value")
+	value := placeholder + " " + newUnique()
+	r.createBody(t, r.sharing(t, newUnique(), value))
+	unique := newUnique()
+	_, created := r.create(t, unique)
+
+	expectStatus(t, r.client().Put(t, r.path(created), r.sharing(t, unique, value)), http.StatusOK, "RFC 7644 3.5.1")
 }
 
 func (r replacing) checkImmutable(t *testing.T) {

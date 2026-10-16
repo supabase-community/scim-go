@@ -22,6 +22,7 @@ func (r creating) run(t *testing.T) {
 	t.Run("ignores other readOnly attributes", r.checkReadOnlyAttributes)
 	t.Run("assigns meta and ignores the client's", r.checkMeta)
 	t.Run("rejects a duplicate unique value", r.checkUniqueness)
+	t.Run("accepts a repeated value that is not unique", r.checkNotUnique)
 	t.Run("rejects a missing required attribute", r.checkRequired)
 	t.Run("rejects an empty required attribute", r.checkEmptyRequired)
 	t.Run("rejects a unique value in another case", r.checkUniqueCase)
@@ -92,6 +93,14 @@ func (r creating) checkUniqueness(t *testing.T) {
 
 	res, _ := r.post(t, r.body(t, unique))
 	RequireError(t, res, http.StatusConflict, scimerrors.Uniqueness)
+}
+
+func (r creating) checkNotUnique(t *testing.T) {
+	r.suite.should(t, "RFC 7643 2.2 a uniqueness none value is accepted twice")
+	value := placeholder + " " + newUnique()
+	r.createBody(t, r.sharing(t, newUnique(), value))
+
+	r.createBody(t, r.sharing(t, newUnique(), value))
 }
 
 func (r creating) checkRequired(t *testing.T) {

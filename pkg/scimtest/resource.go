@@ -278,6 +278,18 @@ func (r *resource) build(t *testing.T, fx fixture, unique string) core.Object {
 	return object
 }
 
+// RFC 7643 Section 3.1: the server does not enforce uniqueness of "externalId".
+func (r *resource) sharing(t *testing.T, unique, value string) core.Object {
+	t.Helper()
+
+	body := r.body(t, unique)
+	body.Set("externalId", value)
+	if attribute := firstOf(r.schemas.Base().Attributes, func(a *core.Attribute) bool { return patchable(a) && body.Has(a.Name) }); attribute != nil {
+		body.Set(attribute.Name, value)
+	}
+	return body
+}
+
 func (r *resource) withExtension(body core.Object, extension *core.Schema, name string, value any) {
 	body.Set(string(extension.ID), map[string]any{name: value})
 	body.Set(schemasAttr, r.schemaURIs(body))
