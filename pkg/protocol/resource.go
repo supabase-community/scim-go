@@ -5,6 +5,7 @@ import (
 	"encoding/json/jsontext"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -53,7 +54,7 @@ func wellFormedNames(node any) bool {
 		return wellFormedFields(object)
 	}
 	if list, ok := node.([]any); ok {
-		return wellFormedElements(list)
+		return !slices.ContainsFunc(list, func(element any) bool { return !wellFormedNames(element) })
 	}
 	return true
 }
@@ -62,7 +63,7 @@ func wellFormedFields(fields core.Object) bool {
 	seen := make(map[string]struct{}, len(fields))
 	for name, element := range fields {
 		folded := strings.ToLower(name)
-		if _, repeated := seen[folded]; repeated || !ascii(name) || !wellFormedNames(element) {
+		if _, repeated := seen[folded]; repeated || strings.ContainsFunc(name, nonASCII) || !wellFormedNames(element) {
 			return false
 		}
 		seen[folded] = struct{}{}
@@ -70,22 +71,8 @@ func wellFormedFields(fields core.Object) bool {
 	return true
 }
 
-func wellFormedElements(elements []any) bool {
-	for _, element := range elements {
-		if !wellFormedNames(element) {
-			return false
-		}
-	}
-	return true
-}
-
-func ascii(name string) bool {
-	for i := range len(name) {
-		if name[i] >= utf8.RuneSelf {
-			return false
-		}
-	}
-	return true
+func nonASCII(r rune) bool {
+	return r >= utf8.RuneSelf
 }
 
 func fromDocument[T any](document core.Object) (T, error) {

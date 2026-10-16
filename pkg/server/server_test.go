@@ -3,6 +3,7 @@ package server_test
 import (
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -2398,16 +2399,16 @@ func TestRFC7644Attributes(t *testing.T) {
 		require.Equal(t, http.StatusOK, status)
 		resources := as[[]any](t, body["Resources"])
 		require.Len(t, resources, 1)
-		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(as[map[string]any](t, resources[0])))
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, slices.Collect(maps.Keys(as[map[string]any](t, resources[0]))))
 	})
 
 	// RFC 7644 Section 3.9: each resource MUST contain the minimum set and any attributes explicitly requested by "attributes".
 	t.Run("ignores requested attributes the schema does not declare", func(t *testing.T) {
 		_, body := get(t, "/Users/"+id+"?attributes=bogus")
-		assert.ElementsMatch(t, []string{"schemas", "id"}, keysOf(body))
+		assert.ElementsMatch(t, []string{"schemas", "id"}, slices.Collect(maps.Keys(body)))
 
 		_, body = get(t, "/Users/"+id+"?attributes=bogus,userName,userName")
-		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(body))
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, slices.Collect(maps.Keys(body)))
 
 		_, body = get(t, "/Users/"+id+"?excludedAttributes=bogus")
 		assert.Equal(t, "bjensen", body["userName"])
@@ -2455,7 +2456,7 @@ func TestRFC7644Attributes(t *testing.T) {
 	t.Run("shapes the resource returned by a create", func(t *testing.T) {
 		response := srv.Post(t, basePath+"/Users?attributes=userName", core.User{UserName: "jsmith", Emails: []core.Email{{Value: "a@example.com"}}})
 		require.Equal(t, http.StatusCreated, response.StatusCode)
-		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(scimtest.Decode[map[string]any](t, response)))
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, slices.Collect(maps.Keys(scimtest.Decode[map[string]any](t, response))))
 	})
 
 	// RFC 7644 Section 3.9: clients MAY request a partial representation on any operation that returns a resource.
@@ -2505,7 +2506,7 @@ func TestRFC7644Attributes(t *testing.T) {
 	t.Run("shapes the resource returned by a replace", func(t *testing.T) {
 		response := srv.Put(t, basePath+"/Users/"+id+"?attributes=userName", core.User{UserName: "bjensen", Emails: []core.Email{{Value: "bjensen@example.com"}}})
 		require.Equal(t, http.StatusOK, response.StatusCode)
-		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, keysOf(scimtest.Decode[map[string]any](t, response)))
+		assert.ElementsMatch(t, []string{"schemas", "id", "userName"}, slices.Collect(maps.Keys(scimtest.Decode[map[string]any](t, response))))
 	})
 
 	// RFC 7644 Section 3.9: attributes and excludedAttributes shape the resource representation that is returned.
