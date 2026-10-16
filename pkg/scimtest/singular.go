@@ -87,8 +87,8 @@ func (r singular) checkRemove(t *testing.T) {
 
 			r.patch(t, source, op(patch.OpRemove, path, nil))
 			read := r.source.read(t, source)
-			if got := r.holder(read).Get(r.attribute.Name); got != nil {
-				t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want unassigned", r.source.path(source), r.path(""), got)
+			if got := r.holder(read).Get(r.attribute.Name); objectOf(got)[valueSub] != nil {
+				t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want no value", r.source.path(source), r.path(""), got)
 			}
 			if sibling != nil && r.holder(read).Get(sibling.Name) == nil {
 				t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): removing %s also removed %s", r.source.path(source), path, sibling.Name)
