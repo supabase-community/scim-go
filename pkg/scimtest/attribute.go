@@ -91,6 +91,10 @@ func isReference(attribute *core.Attribute) bool {
 	return len(attribute.ReferenceTargets()) > 0
 }
 
+func isWritableBoolean(attribute *core.Attribute) bool {
+	return attribute.Type == core.TypeBoolean && !attribute.MultiValued && attribute.Mutability == core.MutabilityReadWrite
+}
+
 func isUnique(attribute *core.Attribute) bool {
 	return attribute.Uniqueness != "" && attribute.Uniqueness != core.UniquenessNone
 }

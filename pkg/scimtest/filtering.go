@@ -129,9 +129,7 @@ func (r filtering) checkValuePath(t *testing.T) {
 
 func (r filtering) checkBooleanEquals(t *testing.T) {
 	supports(t, "filter", r.config.Filter.Supported)
-	attribute := r.attribute(t, "readWrite singular boolean attribute", func(a *core.Attribute) bool {
-		return a.Type == core.TypeBoolean && !a.MultiValued && a.Mutability == core.MutabilityReadWrite
-	})
+	attribute := r.attribute(t, "readWrite singular boolean attribute", isWritableBoolean)
 	ids := make([]string, 0, 2)
 	for _, value := range []bool{true, false} {
 		body := r.body(t, newUnique())
