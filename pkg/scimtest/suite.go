@@ -195,6 +195,7 @@ func (s *Suite) should(t *testing.T, rule string) {
 	if !s.strict {
 		t.Skip("SHOULD: " + rule)
 	}
+	t.Log("SHOULD: " + rule)
 }
 
 func get[T any](t *testing.T, c *Client, path, section string) T {

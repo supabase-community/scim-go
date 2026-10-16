@@ -393,5 +393,13 @@ echo "== RFC 7644 7.5.2 Disclosure of Sensitive Information in URIs =="
 call GET "/Users?filter=$(uri 'password eq "hunter2"')"
 expect "RFC 7644 7.5.2" "rejects a GET filter on the password" "403 sensitive false" "$status $(field .scimType) $(has "$body" hunter2)"
 
+echo "== scimt conformance =="
+if bin/scimt -url "$BASE_URL" -token "$TOKEN" -strict >"$tmp/scimt.log"; then
+	passed=$((passed + 1))
+else
+	cat "$tmp/scimt.log"
+	failed=$((failed + 1))
+fi
+
 echo "== $passed passed, $failed failed =="
 [[ $failed -eq 0 ]]

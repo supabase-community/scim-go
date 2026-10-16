@@ -20,6 +20,12 @@ curl -X POST http://localhost:8080/scim/v2/Users \
   -d '{"userName":"bjensen"}'
 ```
 
+Check any SCIM server against the RFCs with `scimt`:
+
+```
+go run github.com/supabase-community/scim-go/cmd/scimt@latest -url https://host/scim/v2 -token secret -strict
+```
+
 `scimd` is a demo of the library. It is not meant for production. Prebuilt binaries for Linux, macOS, and Windows are on the [releases page](https://github.com/supabase-community/scim-go/releases).
 
 | Variable            | Purpose                                          | Default    |

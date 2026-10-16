@@ -1,8 +1,18 @@
 version: 2
 project_name: scimd
 builds:
-  - main: ./cmd/scimd
+  - id: scimd
+    main: ./cmd/scimd
     binary: scimd
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+  - id: scimt
+    main: ./cmd/scimt
+    binary: scimt
     env:
       - CGO_ENABLED=0
     goos: [linux, darwin, windows]
