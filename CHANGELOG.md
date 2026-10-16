@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.27.0](https://github.com/supabase-community/scim-go/compare/v0.26.0...v0.27.0) (2026-10-16)
+
+
+### Features
+
+* **scimt:** add a CLI that prints an RFC conformance report ([c5aacc7](https://github.com/supabase-community/scim-go/commit/c5aacc7180d686bf4efb61b9f3c72514b102e7b6))
+* **scimtest:** check 405 Allow, unknown UUID, PATCH order, projection, null filters and held members ([49ae071](https://github.com/supabase-community/scim-go/commit/49ae071c7bb85030ce276e498f14bac2d1657dac))
+
+
+### Bug Fixes
+
+* **patch:** stop panicking on duplicate values in one add ([5484008](https://github.com/supabase-community/scim-go/commit/548400800faeecc304bf76ca7df3e2ff07a20ee5))
+* **scimtest:** harden the client and align checks with the RFC text ([fbb659f](https://github.com/supabase-community/scim-go/commit/fbb659f1a630139acd12477629c2517f440e76e1))
+
 ## [0.26.0](https://github.com/supabase-community/scim-go/compare/v0.25.0...v0.26.0) (2026-10-16)
 
 
