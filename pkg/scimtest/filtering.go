@@ -148,21 +148,23 @@ func (r filtering) checkMeta(t *testing.T) {
 	_, first := r.create(t, newUnique())
 	_, second := r.create(t, newUnique())
 	ids := []string{idOf(first), idOf(second)}
-	created, _ := metaOf(first)["created"].(string)
-	modified, _ := metaOf(first)["lastModified"].(string)
-
 	r.expectMatches(t, "meta.resourceType eq "+quoted(string(r.kind.Name)), ids, ids)
 	r.expectMatches(t, "meta.resourceType eq \"scimtest\"", ids, nil)
-	if metaOf(second)["created"] == created || metaOf(second)["lastModified"] == modified {
-		t.Skipf("n/a: both resources were created at %s", created)
+	r.expectMatches(t, "meta.resourceType ne "+quoted(string(r.kind.Name)), ids, nil)
+	for _, name := range []string{"created", "lastModified"} {
+		earlier, _ := metaOf(first)[name].(string)
+		later, _ := metaOf(second)[name].(string)
+		if earlier == later {
+			t.Skipf("n/a: both resources have meta.%s %s", name, earlier)
+		}
+		path := "meta." + name
+		r.expectMatches(t, path+" gt "+quoted(earlier), ids, ids[1:])
+		r.expectMatches(t, path+" ge "+quoted(earlier), ids, ids)
+		r.expectMatches(t, path+" eq "+quoted(earlier), ids, ids[:1])
+		r.expectMatches(t, path+" ne "+quoted(earlier), ids, ids[1:])
+		r.expectMatches(t, path+" le "+quoted(earlier), ids, ids[:1])
+		r.expectMatches(t, path+" lt "+quoted(later), ids, ids[:1])
 	}
-	later, _ := metaOf(second)["created"].(string)
-	r.expectMatches(t, "meta.lastModified gt "+quoted(modified), ids, ids[1:])
-	r.expectMatches(t, "meta.created le "+quoted(created), ids, ids[:1])
-	r.expectMatches(t, "meta.created eq "+quoted(created), ids, ids[:1])
-	r.expectMatches(t, "meta.created ne "+quoted(created), ids, ids[1:])
-	r.expectMatches(t, "meta.created ge "+quoted(created), ids, ids)
-	r.expectMatches(t, "meta.created lt "+quoted(later), ids, ids[:1])
 }
 
 // RFC 7644 Section 3.4.2.2: "not" takes precedence over "and", which takes precedence over "or".
