@@ -46,7 +46,7 @@ func (r filtering) run(t *testing.T) {
 	t.Run("forbids a GET filter on a returned:never attribute", r.checkSensitive)
 	t.Run("finds every stored value by eq and pr", r.checkStored)
 	t.Run("compares an unassigned value with null", r.checkNull)
-	t.Run("folds non-ASCII case", r.checkUnicodeCase)
+	t.Run("folds non-ASCII case in userName", r.checkUnicodeCase)
 }
 
 func (r filtering) checkID(t *testing.T) {
@@ -355,18 +355,17 @@ func (r filtering) checkNull(t *testing.T) {
 	r.expectMatches(t, attribute.Name+" ne null", ids, ids[:1])
 }
 
-// RFC 7644 Section 3.4.2.2: caseExact false compares without case, including non-ASCII letters.
+// RFC 7644 Section 5: userName is compared with the PRECIS rules of RFC 7613, which fold case.
 func (r filtering) checkUnicodeCase(t *testing.T) {
-	r.suite.should(t, "RFC 7644 3.4.2.2 caseExact false folds non-ASCII case")
 	supports(t, "filter", r.config.Filter.Supported)
-	attribute := r.attribute(t, "readWrite singular case-insensitive string attribute", func(a *core.Attribute) bool { return patchable(a) && !a.CaseExact })
+	attribute := r.attribute(t, "userName attribute", func(a *core.Attribute) bool { return a.Name == "userName" })
 	unique := newUnique()
 	body := r.body(t, newUnique())
-	body.Set(attribute.Name, "scimtest \u00c9mile "+unique)
+	body.Set(attribute.Name, "\u00c9mile."+unique)
 	id := idOf(r.seed(t, body))
 
 	for _, op := range []string{"eq", "sw", "co"} {
-		r.expectMatches(t, attribute.Name+" "+op+" "+quoted("SCIMTEST \u00e9MILE "+strings.ToUpper(unique)), []string{id}, []string{id})
+		r.expectMatches(t, attribute.Name+" "+op+" "+quoted("\u00e9MILE."+strings.ToUpper(unique)), []string{id}, []string{id})
 	}
 }
 
