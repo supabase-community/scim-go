@@ -29,6 +29,7 @@ type resource struct {
 	kind      core.ResourceType
 	schemas   core.Schemas
 	fixture   fixture
+	full      fixture
 	transport transport
 	searching int
 }
@@ -240,7 +241,32 @@ func (r *resource) body(t *testing.T, unique string) core.Object {
 	if r.fixture == nil {
 		r.suite.todo(t, "no fixture for %s", r.kind.Name)
 	}
-	object, err := r.fixture(r.schemas.Base(), unique)
+	return r.build(t, r.fixture, unique)
+}
+
+func (r *resource) fullBody(t *testing.T) core.Object {
+	t.Helper()
+
+	if r.full == nil {
+		t.Skipf("n/a: no full fixture for %s", r.kind.Name)
+	}
+	body := r.build(t, r.full, newUnique())
+	for _, h := range holders(r.schemas, body) {
+		for _, attribute := range h.schema.Attributes {
+			if isReference(attribute) {
+				h.object.Remove(attribute.Name)
+			}
+			compactBinary(attribute, h.object.Get(attribute.Name))
+		}
+	}
+	body.Set(schemasAttr, r.schemaURIs(body))
+	return body
+}
+
+func (r *resource) build(t *testing.T, fx fixture, unique string) core.Object {
+	t.Helper()
+
+	object, err := fx(r.schemas.Base(), unique)
 	if err != nil {
 		t.Fatalf("scimtest: %s fixture: %v", r.kind.Name, err)
 	}
@@ -293,4 +319,15 @@ func expectIgnored(t *testing.T, where string, value any, marker string) {
 
 func patchable(attribute *core.Attribute) bool {
 	return isFilterable(attribute) && !isUnique(attribute)
+}
+
+// RFC 7643 Section 2.3.6: binary values MUST be base64, so drop the spaces of the Section 8.3 example.
+func compactBinary(attribute *core.Attribute, value any) {
+	for _, element := range elementsOf(value) {
+		for _, sub := range attribute.SubAttributes {
+			if text, ok := core.Object(element).Get(sub.Name).(string); ok && sub.Type == core.TypeBinary {
+				core.Object(element).Set(sub.Name, strings.Join(strings.Fields(text), ""))
+			}
+		}
+	}
 }

@@ -26,6 +26,7 @@ func (r creating) run(t *testing.T) {
 	t.Run("rejects an empty required attribute", r.checkEmptyRequired)
 	t.Run("rejects a unique value in another case", r.checkUniqueCase)
 	t.Run("accepts schemas in any order", r.checkSchemasOrder)
+	t.Run("stores every value of a full resource", r.checkFull)
 }
 
 func (r creating) checkLocation(t *testing.T) {
@@ -141,5 +142,18 @@ func (r creating) checkSchemasOrder(t *testing.T) {
 	_, created := r.createBody(t, body)
 	if got := core.Object(objectOf(r.read(t, created).Get(string(extension.ID)))).Get(attribute.Name); got != value {
 		t.Errorf("scimtest: POST %s (RFC 7643 3): with schemas %v, %s:%s is %v, want %v", r.kind.Endpoint, uris, extension.ID, attribute.Name, got, value)
+	}
+}
+
+func (r creating) checkFull(t *testing.T) {
+	r.suite.should(t, "RFC 7643 2.2 readWrite and immutable values are stored and returned")
+	body := r.fullBody(t)
+	_, created := r.createBody(t, body)
+	stored := keysOf(storedLeaves(r.schemas, r.read(t, created)))
+
+	for _, sent := range storedLeaves(r.schemas, body) {
+		if !stored[sent.key()] {
+			t.Errorf("scimtest: GET %s (RFC 7643 2.2): %s %s is missing", r.path(created), sent.path, sent.literal())
+		}
 	}
 }

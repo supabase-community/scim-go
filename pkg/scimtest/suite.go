@@ -12,6 +12,7 @@ import (
 type Suite struct {
 	client   *Client
 	fixtures map[core.ResourceTypeName]fixture
+	full     map[core.ResourceTypeName]fixture
 	strict   bool
 }
 
@@ -47,7 +48,7 @@ var sections = []section{
 var versionSection = section{"3.14 Versioning Resources", func(r *resource) runner { return versioning{r} }, false}
 
 func NewSuite(c *Client, opts ...Option[*Suite]) *Suite {
-	s := &Suite{client: c, fixtures: defaultFixtures()}
+	s := &Suite{client: c, fixtures: defaultFixtures(), full: fullFixtures()}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -128,7 +129,7 @@ func (s *Suite) resources(d *discovery) []*resource {
 	resources := make([]*resource, 0, len(d.kinds))
 	for _, kind := range d.kinds {
 		if schemas := d.schemasOf(kind); schemas != nil {
-			resources = append(resources, &resource{suite: s, config: &d.config, kind: kind, schemas: schemas, fixture: s.fixtures[kind.Name]})
+			resources = append(resources, &resource{suite: s, config: &d.config, kind: kind, schemas: schemas, fixture: s.fixtures[kind.Name], full: s.full[kind.Name]})
 		}
 	}
 	return resources

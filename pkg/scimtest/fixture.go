@@ -17,6 +17,13 @@ func defaultFixtures() map[core.ResourceTypeName]fixture {
 	}
 }
 
+func fullFixtures() map[core.ResourceTypeName]fixture {
+	return map[core.ResourceTypeName]fixture{
+		"User":  golden(RFC7643EnterpriseUser),
+		"Group": golden(RFC7643Group, "members"),
+	}
+}
+
 func golden(name string, drop ...string) fixture {
 	return func(schema *core.Schema, unique string) (core.Object, error) {
 		data, err := readGolden(name)

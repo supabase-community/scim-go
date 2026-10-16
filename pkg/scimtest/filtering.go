@@ -44,6 +44,7 @@ func (r filtering) run(t *testing.T) {
 	t.Run("matches pr only when a value is present", r.checkPresent)
 	t.Run("treats attribute names and operators as case-insensitive", r.checkNameCase)
 	t.Run("forbids a GET filter on a returned:never attribute", r.checkSensitive)
+	t.Run("finds every stored value by eq and pr", r.checkStored)
 }
 
 func (r filtering) checkID(t *testing.T) {
@@ -290,6 +291,24 @@ func (r filtering) checkSensitive(t *testing.T) {
 	RequireError(t, r.send(t, filterBy(attribute.Name+` eq "scimtest"`)), http.StatusForbidden, "")
 }
 
+// RFC 7644 Section 3.4.2.2: eq matches an identical value and pr matches any non-empty value.
+func (r filtering) checkStored(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	_, full := r.createBody(t, r.fullBody(t))
+	_, base := r.create(t, newUnique())
+	ids := []string{idOf(full), idOf(base)}
+	others := keysOf(storedLeaves(r.schemas, r.read(t, base)))
+	paths := map[string]bool{}
+
+	for _, l := range storedLeaves(r.schemas, r.read(t, full)) {
+		r.expectMatches(t, l.path+" eq "+l.literal(), ids, matching(ids, others[l.key()]))
+		if !paths[l.path] {
+			paths[l.path] = true
+			r.expectMatches(t, l.path+" pr", ids, matching(ids, hasPath(others, l.path)))
+		}
+	}
+}
+
 func compares(op, value, operand string, caseExact bool) bool {
 	if !caseExact {
 		value, operand = strings.ToLower(value), strings.ToLower(operand)
@@ -313,4 +332,11 @@ func presentValue(attribute *core.Attribute) any {
 		return []any{map[string]any{sub.Name: value}}
 	}
 	return map[string]any{sub.Name: value}
+}
+
+func matching(ids []string, both bool) []string {
+	if both {
+		return ids
+	}
+	return ids[:1]
 }

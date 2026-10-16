@@ -2,6 +2,7 @@ package scimtest
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -78,6 +79,19 @@ func isFilterable(attribute *core.Attribute) bool {
 	return attribute.Type == core.TypeString && !attribute.MultiValued &&
 		attribute.Mutability == core.MutabilityReadWrite && len(attribute.CanonicalValues) == 0 &&
 		(attribute.Returned == core.ReturnedDefault || attribute.Returned == core.ReturnedAlways)
+}
+
+func isStored(attribute *core.Attribute) bool {
+	return (attribute.Mutability == core.MutabilityReadWrite || attribute.Mutability == core.MutabilityImmutable) &&
+		(attribute.Returned == core.ReturnedDefault || attribute.Returned == core.ReturnedAlways) && !strings.HasPrefix(attribute.Name, "$")
+}
+
+// RFC 7643 Section 2.3.7: a "$ref" whose referenceTypes name resource types points at other SCIM resources.
+func isReference(attribute *core.Attribute) bool {
+	ref := attribute.SubAttribute("$ref")
+	return attribute.Type == core.TypeComplex && ref != nil && slices.ContainsFunc(ref.ReferenceTypes, func(target core.ReferenceType) bool {
+		return target != core.ReferenceExternal && target != core.ReferenceURI
+	})
 }
 
 func isUnique(attribute *core.Attribute) bool {
