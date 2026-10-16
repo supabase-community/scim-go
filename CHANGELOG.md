@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0](https://github.com/supabase-community/scim-go/compare/v0.19.0...v0.20.0) (2026-10-16)
+
+
+### Features
+
+* **scimtest:** check PUT, sorting, filter, projection, uniqueness, PATCH, search and reference rules from RFC 7643 and 7644 ([bad2acc](https://github.com/supabase-community/scim-go/commit/bad2acc836eeb46e74b5b1c8158cc0754e377481))
+
 ## [0.19.0](https://github.com/supabase-community/scim-go/compare/v0.18.0...v0.19.0) (2026-10-16)
 
 
