@@ -370,17 +370,26 @@ func (r filtering) checkStored(t *testing.T) {
 
 // RFC 7643 Section 2.5: unassigned and null are equivalent in state.
 func (r filtering) checkNull(t *testing.T) {
-	r.suite.should(t, "RFC 7643 2.5 eq null matches an unassigned attribute")
+	r.suite.should(t, "RFC 7643 2.5 an unassigned attribute is null")
 	supports(t, "filter", r.config.Filter.Supported)
-	attribute := r.attribute(t, "optional readWrite singular string attribute", func(a *core.Attribute) bool { return patchable(a) && !a.Required })
-	assigned := r.body(t, newUnique())
-	assigned.Set(attribute.Name, "scimtest "+newUnique())
-	unassigned := r.body(t, newUnique())
-	unassigned.Remove(attribute.Name)
-	ids := []string{idOf(r.seed(t, assigned)), idOf(r.seed(t, unassigned))}
+	for _, target := range filterTargets(r.schemas) {
+		t.Run(target.path, func(t *testing.T) {
+			value := "scimtest " + newUnique()
+			assigned, unassigned := r.body(t, newUnique()), r.body(t, newUnique())
+			target.set(assigned, value)
+			target.unset(unassigned)
+			ids := make([]string, 0, 2)
+			for _, body := range []core.Object{assigned, unassigned} {
+				body.Set(schemasAttr, r.schemaURIs(body))
+				ids = append(ids, idOf(r.seed(t, body)))
+			}
 
-	r.expectMatches(t, attribute.Name+" eq null", ids, ids[1:])
-	r.expectMatches(t, attribute.Name+" ne null", ids, ids[:1])
+			r.expectMatches(t, target.path+" eq null", ids, ids[1:])
+			r.expectMatches(t, target.path+" ne null", ids, ids[:1])
+			r.expectMatches(t, target.compare("ne", value), ids, ids[1:])
+			r.expectMatches(t, "not ("+target.compare("eq", value)+")", ids, ids[1:])
+		})
+	}
 }
 
 // RFC 7644 Section 5: userName is compared with the PRECIS rules of RFC 7613, which fold case.

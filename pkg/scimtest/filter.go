@@ -18,6 +18,7 @@ type filterCase struct {
 type filterTarget struct {
 	path      string
 	set       func(body core.Object, value string)
+	unset     func(body core.Object)
 	caseExact bool
 	unique    string
 	alpha     string
@@ -152,7 +153,7 @@ func attributeTargets(attributes core.Attributes, prefix string, holder func(cor
 		if isFilterable(attribute) {
 			targets = append(targets, &filterTarget{path: prefix + attribute.Name, caseExact: attribute.CaseExact, set: func(body core.Object, value string) {
 				holder(body).Set(attribute.Name, value)
-			}})
+			}, unset: unsetter(holder, attribute)})
 		}
 		targets = append(targets, subTargets(attribute, prefix, holder)...)
 	}
@@ -166,7 +167,7 @@ func subTargets(attribute *core.Attribute, prefix string, holder func(core.Objec
 	var targets []*filterTarget
 	for _, sub := range attribute.SubAttributes {
 		if isFilterable(sub) {
-			targets = append(targets, &filterTarget{path: prefix + attribute.Name + "." + sub.Name, caseExact: sub.CaseExact, set: subSetter(holder, attribute, sub)})
+			targets = append(targets, &filterTarget{path: prefix + attribute.Name + "." + sub.Name, caseExact: sub.CaseExact, set: subSetter(holder, attribute, sub), unset: unsetter(holder, attribute)})
 		}
 	}
 	return targets
@@ -186,4 +187,8 @@ func subSetter(holder func(core.Object) core.Object, attribute, sub *core.Attrib
 		parent[sub.Name] = value
 		holder(body).Set(attribute.Name, parent)
 	}
+}
+
+func unsetter(holder func(core.Object) core.Object, attribute *core.Attribute) func(core.Object) {
+	return func(body core.Object) { holder(body).Remove(attribute.Name) }
 }
