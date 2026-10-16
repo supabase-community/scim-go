@@ -3,8 +3,6 @@ package scimtest
 import (
 	"net/http"
 	"testing"
-
-	"github.com/supabase-community/scim-go/pkg/patch"
 )
 
 type deleting struct {
@@ -26,12 +24,7 @@ func (r deleting) checkDeleted(t *testing.T) {
 	path := r.path(created)
 
 	expectStatus(t, r.client().Delete(t, path), http.StatusNoContent, "RFC 7644 3.6")
-	RequireError(t, r.client().Get(t, path), http.StatusNotFound, "")
-	RequireError(t, r.client().Put(t, path, r.body(t, unique)), http.StatusNotFound, "")
-	if attribute := firstOf(r.schemas.Base().Attributes, patchable); attribute != nil && r.config.Patch.Supported {
-		RequireError(t, r.client().Patch(t, path, ops(op(patch.OpReplace, attribute.Name, placeholder))), http.StatusNotFound, "")
-	}
-	RequireError(t, r.client().Delete(t, path), http.StatusNotFound, "")
+	r.expectNotFound(t, path, r.body(t, unique))
 }
 
 func (r deleting) checkDeletedUnlisted(t *testing.T) {

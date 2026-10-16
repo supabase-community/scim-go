@@ -17,7 +17,7 @@ func (r reading) run(t *testing.T) {
 	t.Helper()
 
 	t.Run("returns the resource", r.checkGet)
-	t.Run("returns 404 for an unknown id", r.checkUnknown)
+	t.Run("returns 404 for every operation on an unknown id", r.checkUnknown)
 	t.Run("returns the SCIM media type", r.checkMediaType)
 	t.Run("never returns a returned:never attribute", r.checkNever)
 }
@@ -34,7 +34,7 @@ func (r reading) checkGet(t *testing.T) {
 }
 
 func (r reading) checkUnknown(t *testing.T) {
-	RequireError(t, r.client().Get(t, r.kind.Endpoint+"/scimtest-"+newUnique()), http.StatusNotFound, "")
+	r.expectNotFound(t, r.kind.Endpoint+"/scimtest-"+newUnique(), r.body(t, newUnique()))
 }
 
 func (r reading) checkNever(t *testing.T) {

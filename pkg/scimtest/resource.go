@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/patch"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
@@ -101,6 +102,18 @@ func (r *resource) expectValues(t *testing.T, object core.Object, name string, w
 	if got := valuesIn(r.read(t, object), name); !slices.Equal(got, want) {
 		t.Errorf("scimtest: GET %s (RFC 7644 3.5.2): %s values %v, want %v", r.path(object), name, got, want)
 	}
+}
+
+// RFC 7644 Section 3.12: 404 when the specified resource does not exist.
+func (r *resource) expectNotFound(t *testing.T, path string, body core.Object) {
+	t.Helper()
+
+	RequireError(t, r.client().Get(t, path), http.StatusNotFound, "")
+	RequireError(t, r.client().Put(t, path, body), http.StatusNotFound, "")
+	if attribute := firstOf(r.schemas.Base().Attributes, patchable); attribute != nil && r.config.Patch.Supported {
+		RequireError(t, r.client().Patch(t, path, ops(op(patch.OpReplace, attribute.Name, placeholder))), http.StatusNotFound, "")
+	}
+	RequireError(t, r.client().Delete(t, path), http.StatusNotFound, "")
 }
 
 // RFC 7643 Section 3.1: meta.location is the URI of the resource and MUST equal "Content-Location".
