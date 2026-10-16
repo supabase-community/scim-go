@@ -26,8 +26,10 @@ func (r projecting) run(t *testing.T) {
 	})
 	_, created := r.createBody(t, body)
 
-	t.Run("returns a requested attribute and id", func(t *testing.T) {
-		r.expectAttributes(t, r.path(created)+"?attributes="+attribute.Name, []string{"id", attribute.Name}, r.others(created, attribute.Name))
+	t.Run("returns only the requested attribute and id", func(t *testing.T) {
+		for _, name := range r.others(created, "") {
+			r.expectAttributes(t, r.path(created)+"?"+url.Values{attributesParam: {name}}.Encode(), []string{"id", name}, r.others(created, name))
+		}
 	})
 	t.Run("removes only the excluded attribute", func(t *testing.T) {
 		for _, name := range r.others(created, "") {

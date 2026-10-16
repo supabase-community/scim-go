@@ -2,6 +2,7 @@ package scimtest
 
 import (
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -55,7 +56,9 @@ func (r referencing) run(t *testing.T) {
 
 	t.Run("stores the referenced values", r.checkStored)
 	t.Run("adds values", r.checkAdd)
+	t.Run("keeps the resource as is when adding a held value", r.checkAddHeld)
 	t.Run("returns the values in a query", r.checkQueried)
+	t.Run("projects the values with attributes and excludedAttributes", r.checkProjected)
 	t.Run("finds the source by a value", r.checkFiltered)
 	t.Run("finds the source by a value type", r.checkTypeFiltered)
 	t.Run("removes a value by filter", r.checkRemoveFiltered)
@@ -76,6 +79,19 @@ func (r referencing) checkStored(t *testing.T) {
 	r.source.expectValues(t, source, r.attribute.Name, first)
 }
 
+// RFC 7644 Section 3.4.2.5: attributes and excludedAttributes name a reference like any other attribute.
+func (r referencing) checkProjected(t *testing.T) {
+	source := r.newSource(t, r.newTarget(t))
+	name := r.attribute.Name
+	for param, want := range map[string]projection{
+		attributesParam: {[]string{"id", name}, nil},
+		excludedParam:   {[]string{"id"}, []string{name}},
+	} {
+		path := r.source.path(source) + "?" + url.Values{param: {name}}.Encode()
+		want.expect(t, "GET "+path, get[core.Object](t, r.source.client(), path, "RFC 7644 3.4.2.5"))
+	}
+}
+
 func (r referencing) checkAdd(t *testing.T) {
 	r.patchable(t)
 	first, second := r.newTarget(t), r.newTarget(t)
@@ -83,6 +99,19 @@ func (r referencing) checkAdd(t *testing.T) {
 
 	r.patch(t, source, op(patch.OpAdd, r.attribute.Name, members(second)))
 	r.source.expectValues(t, source, r.attribute.Name, first, second)
+}
+
+// RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made.
+func (r referencing) checkAddHeld(t *testing.T) {
+	r.source.suite.should(t, "RFC 7644 3.5.2.1 adding a held value changes nothing")
+	r.patchable(t)
+	held := r.newTarget(t)
+	source := r.newSource(t, held)
+	before := metaOf(r.source.read(t, source))["lastModified"]
+
+	r.patch(t, source, op(patch.OpAdd, r.attribute.Name, members(held)))
+	r.source.expectValues(t, source, r.attribute.Name, held)
+	r.source.expectLastModified(t, source, before)
 }
 
 func (r referencing) checkQueried(t *testing.T) {

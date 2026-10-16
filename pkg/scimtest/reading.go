@@ -4,6 +4,7 @@ import (
 	"mime"
 	"net/http"
 	"testing"
+	"uuid"
 
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
@@ -33,8 +34,11 @@ func (r reading) checkGet(t *testing.T) {
 	r.expectLocated(t, res)
 }
 
+// RFC 7644 Section 3.12: 404 when the resource does not exist, whatever shape its id has.
 func (r reading) checkUnknown(t *testing.T) {
-	r.expectNotFound(t, r.kind.Endpoint+"/scimtest-"+newUnique(), r.body(t, newUnique()))
+	for _, id := range []string{"scimtest-" + newUnique(), uuid.NewV4().String()} {
+		t.Run(id, func(t *testing.T) { r.expectNotFound(t, r.kind.Endpoint+"/"+id, r.body(t, newUnique())) })
+	}
 }
 
 func (r reading) checkNever(t *testing.T) {

@@ -31,6 +31,7 @@ func (r patching) run(t *testing.T) {
 	t.Run("adds an unassigned attribute on replace", r.checkReplaceUnassigned)
 	t.Run("keeps meta.lastModified when adding the current value", r.checkUnchanged)
 	t.Run("adds and removes multi-valued values", r.checkValues)
+	t.Run("applies several operations in order", r.checkOrder)
 	t.Run("keeps a single primary value", r.checkPrimary)
 	t.Run("adds the extension schema with an extension attribute", r.checkExtension)
 	t.Run("rejects an unknown op", r.checkUnknownOp)
@@ -179,9 +180,16 @@ func (r patching) checkUnchanged(t *testing.T) {
 	_, created := r.createBody(t, body)
 
 	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpAdd, attribute.Name, current))), created)
-	if got, want := metaOf(r.read(t, created))["lastModified"], metaOf(created)["lastModified"]; got != want {
-		t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.1): meta.lastModified %v, want %v", r.path(created), got, want)
-	}
+	r.expectLastModified(t, created, metaOf(created)["lastModified"])
+}
+
+func (r patching) createValued(t *testing.T, attribute *core.Attribute, value string) core.Object {
+	t.Helper()
+
+	body := r.body(t, newUnique())
+	body.Set(attribute.Name, []any{map[string]any{valueSub: value}})
+	_, created := r.createBody(t, body)
+	return created
 }
 
 // RFC 7644 Section 3.5.2.2: a multi-valued attribute without values SHALL be considered unassigned.
@@ -189,9 +197,7 @@ func (r patching) checkValues(t *testing.T) {
 	attribute := r.valued(t)
 	unique := newUnique()
 	first, second := email("first", unique), email("second", unique)
-	body := r.body(t, newUnique())
-	body.Set(attribute.Name, []any{map[string]any{valueSub: first}})
-	_, created := r.createBody(t, body)
+	created := r.createValued(t, attribute, first)
 
 	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpAdd, attribute.Name, []any{map[string]any{valueSub: second}}))), created)
 	r.expectValues(t, created, attribute.Name, first, second)
@@ -201,6 +207,20 @@ func (r patching) checkValues(t *testing.T) {
 	if read := r.read(t, created); read.Has(attribute.Name) {
 		t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want unassigned", r.path(created), attribute.Name, read.Get(attribute.Name))
 	}
+}
+
+// RFC 7644 Section 3.5.2: operations are applied sequentially in the order they appear.
+func (r patching) checkOrder(t *testing.T) {
+	attribute := r.valued(t)
+	unique := newUnique()
+	first, second := email("first", unique), email("second", unique)
+	created := r.createValued(t, attribute, first)
+
+	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(
+		op(patch.OpAdd, attribute.Name, []any{map[string]any{valueSub: second}}),
+		op(patch.OpRemove, attribute.Name+"[value eq "+quoted(second)+"]", nil),
+	)), created)
+	r.expectValues(t, created, attribute.Name, first)
 }
 
 // RFC 7644 Section 3.5.2: setting "primary" to true SHALL set "primary" to false for the other values.

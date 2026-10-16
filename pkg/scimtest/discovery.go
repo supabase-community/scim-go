@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -29,6 +30,7 @@ func (d discovering) run(t *testing.T) {
 	t.Run("advertises the RFC 7643 attribute characteristics", d.checkCharacteristics)
 	t.Run("rejects a request without credentials", d.checkUnauthenticated)
 	t.Run("rejects an invalid bearer token", d.checkInvalidToken)
+	t.Run("rejects a write with a SCIM 405 that lists Allow", d.checkMethodNotAllowed)
 }
 
 func (d discovering) checkConfig(t *testing.T) {
@@ -108,6 +110,29 @@ func (d discovering) checkUnauthenticated(t *testing.T) {
 // RFC 7644 Section 3.12, Table 8: 401 when the authorization header is invalid or missing.
 func (d discovering) checkInvalidToken(t *testing.T) {
 	d.expectChallenged(t, NewClient(d.suite.client.url, WithBearerToken("scimtest-invalid-"+newUnique())))
+}
+
+// RFC 9110 Section 15.5.6: a 405 MUST send an Allow header. RFC 7644 Section 4 makes these endpoints read-only.
+func (d discovering) checkMethodNotAllowed(t *testing.T) {
+	for _, path := range []string{"/ServiceProviderConfig", "/ResourceTypes", "/Schemas"} {
+		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+			t.Run(method+" "+path, func(t *testing.T) { d.expectNotAllowed(t, method, path) })
+		}
+	}
+}
+
+func (d discovering) expectNotAllowed(t *testing.T, method, path string) {
+	t.Helper()
+
+	res := d.suite.client.Send(t, method, path, nil)
+	if res.StatusCode == http.StatusNotImplemented {
+		return
+	}
+	RequireError(t, res, http.StatusMethodNotAllowed, "")
+	allow := res.Header.Get("Allow")
+	if allow == "" || slices.Contains(strings.Split(strings.ReplaceAll(allow, " ", ""), ","), method) {
+		t.Errorf("scimtest: %s %s (RFC 9110 15.5.6): Allow %q, want the methods it accepts without %s", method, path, allow, method)
+	}
 }
 
 func (d discovering) expectChallenged(t *testing.T, c *Client) {

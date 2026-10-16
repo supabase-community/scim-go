@@ -157,6 +157,15 @@ func (r *resource) read(t *testing.T, object core.Object) core.Object {
 	return get[core.Object](t, r.client(), r.path(object), "RFC 7644 3.4.1")
 }
 
+// RFC 7644 Section 3.5.2.1: a PATCH that changes nothing SHALL NOT change the modify timestamp.
+func (r *resource) expectLastModified(t *testing.T, object core.Object, want any) {
+	t.Helper()
+
+	if got := metaOf(r.read(t, object))["lastModified"]; got != want {
+		t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.1): meta.lastModified %v, want %v", r.path(object), got, want)
+	}
+}
+
 func (r *resource) filtered(t *testing.T, query url.Values) []string {
 	t.Helper()
 

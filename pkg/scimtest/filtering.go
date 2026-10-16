@@ -46,6 +46,7 @@ func (r filtering) run(t *testing.T) {
 	t.Run("forbids a GET filter on a returned:never attribute", r.checkSensitive)
 	t.Run("finds every stored value by eq and pr", r.checkStored)
 	t.Run("compares an unassigned value with null", r.checkNull)
+	t.Run("survives an operator the grammar allows on null", r.checkNullOperand)
 	t.Run("folds non-ASCII case in userName", r.checkUnicodeCase)
 	t.Run("maps full-width characters in userName", r.checkUnicodeWidth)
 }
@@ -365,6 +366,29 @@ func (r filtering) checkStored(t *testing.T) {
 		if !paths[l.path] {
 			paths[l.path] = true
 			r.expectMatches(t, l.path+" pr", ids, matching(ids, hasPath(others, l.path)))
+		}
+	}
+}
+
+// RFC 7644 Section 3.4.2.2: the grammar allows null as the operand of any comparison, so a server must not fail on one.
+func (r filtering) checkNullOperand(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	_, created := r.create(t, newUnique())
+	targets := filterTargets(r.schemas)
+	known := idFilter(idOf(created))
+	for _, op := range []string{"co", "sw", "ew", "gt", "ge", "lt", "le"} {
+		clauses := make([]string, 0, len(targets)+1)
+		clauses = append(clauses, known)
+		for _, target := range targets {
+			clauses = append(clauses, target.path+" "+op+" null")
+		}
+		query := filterBy(strings.Join(clauses, " or "))
+		res := r.send(t, query)
+		if res.StatusCode == http.StatusBadRequest {
+			continue
+		}
+		if got := idsOf(r.page(t, query, res).Resources); !slices.Contains(got, idOf(created)) {
+			t.Errorf("scimtest: %s (RFC 7644 3.4.2.2): ids %v, want %s in them", r.describe(query), got, idOf(created))
 		}
 	}
 }
