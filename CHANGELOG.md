@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.0](https://github.com/supabase-community/scim-go/compare/v0.18.0...v0.19.0) (2026-10-16)
+
+
+### Features
+
+* **scimtest:** check search, filters, paging, meta, versioning, delete, PATCH, references and discovery ([c0a7111](https://github.com/supabase-community/scim-go/commit/c0a7111bcca45dd2edf5a0a45e4920806fd848c0))
+* **scimtest:** check totalResults, listed ids and members, invalidSyntax, missing schema attributes, externalId and canonical types ([1a9794e](https://github.com/supabase-community/scim-go/commit/1a9794ef382fbaedbb70846cd3284b9728dcad1d))
+
 ## [0.18.0](https://github.com/supabase-community/scim-go/compare/v0.17.1...v0.18.0) (2026-10-15)
 
 
