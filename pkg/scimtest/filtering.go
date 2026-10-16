@@ -64,7 +64,11 @@ func (r filtering) checkID(t *testing.T) {
 func (r filtering) checkInvalid(t *testing.T) {
 	supports(t, "filter", r.config.Filter.Supported)
 	r.suite.should(t, "RFC 7644 Table 9 400 invalidFilter for an invalid filter")
-	RequireError(t, r.send(t, filterBy("id eq")), http.StatusBadRequest, scimerrors.InvalidFilter)
+	for _, filter := range []string{`id eq`, `id co`, `(id pr`, `id pr)`, `id pr and`, `not id pr`, `id[value[id pr]]`, `id.$ref pr`} {
+		t.Run(filter, func(t *testing.T) {
+			RequireError(t, r.send(t, filterBy(filter)), http.StatusBadRequest, scimerrors.InvalidFilter)
+		})
+	}
 }
 
 // RFC 7644 Section 3.4.2.2: gt, ge, lt and le on a boolean or binary SHALL fail with invalidFilter.
@@ -150,8 +154,13 @@ func (r filtering) checkMeta(t *testing.T) {
 	if metaOf(second)["created"] == created || metaOf(second)["lastModified"] == modified {
 		t.Skipf("n/a: both resources were created at %s", created)
 	}
+	later, _ := metaOf(second)["created"].(string)
 	r.expectMatches(t, "meta.lastModified gt "+quoted(modified), ids, ids[1:])
 	r.expectMatches(t, "meta.created le "+quoted(created), ids, ids[:1])
+	r.expectMatches(t, "meta.created eq "+quoted(created), ids, ids[:1])
+	r.expectMatches(t, "meta.created ne "+quoted(created), ids, ids[1:])
+	r.expectMatches(t, "meta.created ge "+quoted(created), ids, ids)
+	r.expectMatches(t, "meta.created lt "+quoted(later), ids, ids[:1])
 }
 
 // RFC 7644 Section 3.4.2.2: "not" takes precedence over "and", which takes precedence over "or".
@@ -161,6 +170,7 @@ func (r filtering) checkPrecedence(t *testing.T) {
 
 	r.expectMatches(t, idFilter(ids[0])+" or "+idFilter(ids[1])+" and "+idFilter(ids[2]), ids, ids[:1])
 	r.expectMatches(t, "not ("+idFilter(ids[0])+") and "+idFilter(ids[1]), ids, ids[1:2])
+	r.expectMatches(t, "("+idFilter(ids[0])+" or "+idFilter(ids[1])+") and "+idFilter(ids[1]), ids, ids[1:2])
 }
 
 func (r filtering) checkCanonicalTypes(t *testing.T) {
@@ -266,6 +276,7 @@ func (r filtering) checkNameCase(t *testing.T) {
 
 	r.expectMatches(t, `ID EQ `+quoted(ids[0]), ids, ids[:1])
 	r.expectMatches(t, `Id Eq `+quoted(ids[0])+` oR iD eQ `+quoted(ids[1]), ids, ids)
+	r.checkBaseURN(t)
 	extension, attribute := extensionAttribute(r.schemas, isFilterable)
 	if extension == nil {
 		return
@@ -277,6 +288,24 @@ func (r filtering) checkNameCase(t *testing.T) {
 	path := strings.ToUpper(string(extension.ID)) + ":" + strings.ToUpper(attribute.Name)
 
 	r.expectMatches(t, path+" eq "+quoted(value), []string{id}, []string{id})
+}
+
+// RFC 7644 Section 3.10: clients MAY prefix a core attribute with its schema URN, and every facet is case insensitive.
+func (r filtering) checkBaseURN(t *testing.T) {
+	t.Helper()
+
+	attribute := firstOf(r.schemas.Base().Attributes, patchable)
+	if attribute == nil {
+		return
+	}
+	body := r.body(t, newUnique())
+	value := "scimtest " + newUnique()
+	body.Set(attribute.Name, value)
+	id := idOf(r.seed(t, body))
+	urn := string(r.kind.Schema) + ":" + attribute.Name
+
+	r.expectMatches(t, urn+" eq "+quoted(value), []string{id}, []string{id})
+	r.expectMatches(t, strings.ToUpper(urn)+" eq "+quoted(value), []string{id}, []string{id})
 }
 
 // RFC 7644 Section 7.5.2: a GET filter with sensitive information SHOULD be answered with 403.

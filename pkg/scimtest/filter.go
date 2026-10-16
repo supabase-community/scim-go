@@ -52,6 +52,10 @@ var filterCases = []filterCase{
 	{op: "lt case", expr: func(f *filterTarget) string { return f.compare("lt", strings.ToUpper(f.beta)) }, want: []int{0}, fold: true},
 	{op: "le", expr: func(f *filterTarget) string { return f.compare("le", f.beta) }, want: []int{0, 1}},
 	{op: "le case", expr: func(f *filterTarget) string { return f.compare("le", strings.ToUpper(f.beta)) }, want: []int{0, 1}, fold: true},
+	{op: "co literal percent", expr: func(f *filterTarget) string { return f.compare("co", "%") }, want: []int{}},
+	{op: "co literal backslash", expr: func(f *filterTarget) string { return f.compare("co", `\`) }, want: []int{}},
+	{op: "sw literal underscore", expr: func(f *filterTarget) string { return f.compare("sw", "scimtest_alpha") }, want: []int{}},
+	{op: "ew literal percent", expr: func(f *filterTarget) string { return f.compare("ew", "%"+f.unique) }, want: []int{}},
 	{op: "not", expr: func(f *filterTarget) string { return "not (" + f.compare("eq", f.alpha) + ")" }, want: []int{1}},
 }
 
