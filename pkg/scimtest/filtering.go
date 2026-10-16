@@ -47,6 +47,7 @@ func (r filtering) run(t *testing.T) {
 	t.Run("finds every stored value by eq and pr", r.checkStored)
 	t.Run("compares an unassigned value with null", r.checkNull)
 	t.Run("folds non-ASCII case in userName", r.checkUnicodeCase)
+	t.Run("maps full-width characters in userName", r.checkUnicodeWidth)
 }
 
 func (r filtering) checkID(t *testing.T) {
@@ -359,15 +360,26 @@ func (r filtering) checkNull(t *testing.T) {
 
 // RFC 7644 Section 5: userName is compared with the PRECIS rules of RFC 7613, which fold case.
 func (r filtering) checkUnicodeCase(t *testing.T) {
+	r.expectUserName(t, "\u00c9mile.", "\u00e9MILE.", "eq", "sw", "co")
+}
+
+// RFC 8265 Section 3.3.1: UsernameCaseMapped maps fullwidth code points to their decomposition.
+func (r filtering) checkUnicodeWidth(t *testing.T) {
+	r.expectUserName(t, "\uff22\uff2aensen.", "bjensen.", "eq")
+}
+
+func (r filtering) expectUserName(t *testing.T, stored, query string, ops ...string) {
+	t.Helper()
+
 	supports(t, "filter", r.config.Filter.Supported)
 	attribute := r.attribute(t, "userName attribute", func(a *core.Attribute) bool { return a.Name == "userName" })
 	unique := newUnique()
 	body := r.body(t, newUnique())
-	body.Set(attribute.Name, "\u00c9mile."+unique)
+	body.Set(attribute.Name, stored+unique)
 	id := idOf(r.seed(t, body))
 
-	for _, op := range []string{"eq", "sw", "co"} {
-		r.expectMatches(t, attribute.Name+" "+op+" "+quoted("\u00e9MILE."+strings.ToUpper(unique)), []string{id}, []string{id})
+	for _, op := range ops {
+		r.expectMatches(t, attribute.Name+" "+op+" "+quoted(query+strings.ToUpper(unique)), []string{id}, []string{id})
 	}
 }
 

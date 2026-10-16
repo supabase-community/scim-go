@@ -3,6 +3,9 @@ package core
 import (
 	"slices"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/supabase-community/scim-go/internal/username"
 )
 
 // Attribute describes one attribute of a schema, per RFC 7643, Section 7.
@@ -126,16 +129,28 @@ func (a *Attribute) Coerce(value any) (any, bool) {
 	return a.Type.coerce(value)
 }
 
-// Fold lowercases a string value unless it is case exact; binary and reference values always are, per RFC 7643, Sections 2.3.6 and 2.3.7.
+// Fold prepares a string value for comparison: userName by PRECIS per RFC 7644, Section 5, other strings lowercased unless case exact per RFC 7643, Sections 2.3.6 and 2.3.7.
 func (a *Attribute) Fold(value any) any {
 	s, ok := value.(string)
-	if !ok || a.CaseExact || a.Type == TypeBinary || a.Type == TypeReference {
+	if !ok || a.Type == TypeBinary || a.Type == TypeReference {
+		return value
+	}
+	if a.isUserName() && strings.IndexFunc(s, func(r rune) bool { return r >= utf8.RuneSelf }) >= 0 {
+		if prepared, err := username.Prepare(s, a.CaseExact); err == nil {
+			return prepared
+		}
+	}
+	if a.CaseExact {
 		return value
 	}
 	if lower := strings.ToLower(s); lower != s {
 		return lower
 	}
 	return value
+}
+
+func (a *Attribute) isUserName() bool {
+	return a.Type == TypeString && strings.EqualFold(a.Name, "userName")
 }
 
 func elements(name string, value *Attribute, types ...string) *Attribute {

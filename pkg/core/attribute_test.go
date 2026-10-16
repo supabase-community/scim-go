@@ -318,7 +318,7 @@ func TestAttributeCoerce(t *testing.T) {
 
 func TestAttributeFold(t *testing.T) {
 	t.Run("lowercases a string that is not case exact", func(t *testing.T) {
-		assert.Equal(t, "bjensen", core.NewAttribute("userName", core.TypeString).Fold("BJensen"))
+		assert.Equal(t, "babs jensen", core.NewAttribute("displayName", core.TypeString).Fold("Babs Jensen"))
 	})
 
 	t.Run("preserves a case exact string", func(t *testing.T) {
@@ -329,6 +329,25 @@ func TestAttributeFold(t *testing.T) {
 	t.Run("preserves binary and reference values", func(t *testing.T) {
 		assert.Equal(t, "QUJD", core.NewAttribute("x509", core.TypeBinary).Fold("QUJD"))
 		assert.Equal(t, "https://Example.com/Users/A", core.NewAttribute("$ref", core.TypeReference).Fold("https://Example.com/Users/A"))
+	})
+}
+
+func TestAttributeFoldUserName(t *testing.T) {
+	userName := core.NewAttribute("userName", core.TypeString)
+	exact := core.NewAttribute("userName", core.TypeString).AsCaseExact()
+
+	t.Run("prepares a non-ASCII userName with PRECIS", func(t *testing.T) {
+		assert.Equal(t, "bjensen", userName.Fold("\uff22Jensen"))
+		assert.Equal(t, "\u00c9mile", exact.Fold("E\u0301mile"))
+	})
+
+	t.Run("folds an ASCII userName like any other string", func(t *testing.T) {
+		assert.Equal(t, "bjensen", userName.Fold("BJensen"))
+		assert.Equal(t, "BJensen", exact.Fold("BJensen"))
+	})
+
+	t.Run("lowercases a value PRECIS rejects", func(t *testing.T) {
+		assert.Equal(t, "\u00e9mile ", userName.Fold("\u00c9mile "))
 	})
 }
 
