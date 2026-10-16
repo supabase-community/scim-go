@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.0](https://github.com/supabase-community/scim-go/compare/v0.21.0...v0.22.0) (2026-10-16)
+
+
+### Features
+
+* **scimtest:** check PUT replaces a reference with the id of another resource ([bf0ca83](https://github.com/supabase-community/scim-go/commit/bf0ca83a072da208cf9602d48497844f2a234d56))
+
 ## [0.21.0](https://github.com/supabase-community/scim-go/compare/v0.20.0...v0.21.0) (2026-10-16)
 
 
