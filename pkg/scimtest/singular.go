@@ -1,6 +1,7 @@
 package scimtest
 
 import (
+	"net/http"
 	"net/url"
 	"testing"
 
@@ -49,6 +50,7 @@ func (r singular) run(t *testing.T) {
 	t.Run("finds the source by the value", r.checkFiltered)
 	t.Run("replaces the value", r.checkReplace)
 	t.Run("removes the value and keeps the other attributes", r.checkRemove)
+	t.Run("drops a deleted target and keeps the other attributes", r.checkDeletedTarget)
 	t.Run("returns only the requested value", r.checkProjected)
 }
 
@@ -82,19 +84,21 @@ func (r singular) checkRemove(t *testing.T) {
 	supports(t, "patch", r.source.config.Patch.Supported)
 	for _, path := range []string{r.path(""), r.path(valueSub)} {
 		t.Run(path, func(t *testing.T) {
-			sibling := r.sibling()
 			source := r.newSource(t, r.newTarget(t))
 
 			r.patch(t, source, op(patch.OpRemove, path, nil))
-			read := r.source.read(t, source)
-			if got := r.holder(read).Get(r.attribute.Name); objectOf(got)[valueSub] != nil {
-				t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want no value", r.source.path(source), r.path(""), got)
-			}
-			if sibling != nil && r.holder(read).Get(sibling.Name) == nil {
-				t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): removing %s also removed %s", r.source.path(source), path, sibling.Name)
-			}
+			r.expectUnassigned(t, source, "PATCH", "RFC 7644 3.5.2.2")
 		})
 	}
+}
+
+func (r singular) checkDeletedTarget(t *testing.T) {
+	r.source.suite.should(t, "RFC 7644 3.6 a deleted resource is omitted from the values that reference it")
+	id := r.newTarget(t)
+	source := r.newSource(t, id)
+
+	expectStatus(t, r.target.client().Delete(t, r.target.path(core.Object{"id": id})), http.StatusNoContent, "RFC 7644 3.6")
+	r.expectUnassigned(t, source, "DELETE", "RFC 7644 3.6")
 }
 
 // RFC 7644 Section 3.10: a sub-attribute of an extension attribute is named by its schema URI and path.
@@ -138,6 +142,18 @@ func (r singular) expectValue(t *testing.T, source core.Object, id string) {
 	got := core.Object(objectOf(r.holder(r.source.read(t, source)).Get(r.attribute.Name)))
 	if got.Get(valueSub) != id {
 		t.Errorf("scimtest: GET %s (RFC 7643 2.3.7): %s is %v, want value %s", r.source.path(source), r.path(""), map[string]any(got), id)
+	}
+}
+
+func (r singular) expectUnassigned(t *testing.T, source core.Object, method, section string) {
+	t.Helper()
+
+	read := r.source.read(t, source)
+	if got := r.holder(read).Get(r.attribute.Name); objectOf(got)[valueSub] != nil {
+		t.Errorf("scimtest: %s then GET %s (%s): %s is %v, want no value", method, r.source.path(source), section, r.path(""), got)
+	}
+	if sibling := r.sibling(); sibling != nil && r.holder(read).Get(sibling.Name) == nil {
+		t.Errorf("scimtest: %s then GET %s (%s): %s is gone, want it kept", method, r.source.path(source), section, sibling.Name)
 	}
 }
 
