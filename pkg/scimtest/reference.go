@@ -59,6 +59,7 @@ func (r referencing) run(t *testing.T) {
 	t.Run("finds the source by a value type", r.checkTypeFiltered)
 	t.Run("removes a value by filter", r.checkRemoveFiltered)
 	t.Run("replaces the values", r.checkReplace)
+	t.Run("keeps the values a replace without a path leaves out", r.checkReplaceOthers)
 	t.Run("replaces the values with PUT", r.checkPut)
 	t.Run("removes every value without a filter", r.checkRemoveAll)
 	t.Run("rejects a change to an immutable value", r.checkImmutable)
@@ -146,6 +147,23 @@ func (r referencing) checkReplace(t *testing.T) {
 
 	r.patch(t, source, op(patch.OpReplace, r.attribute.Name, members(second)))
 	r.source.expectValues(t, source, r.attribute.Name, second)
+}
+
+// RFC 7644 Section 3.5.2.3: without a path, "value" SHALL contain the attributes to replace.
+func (r referencing) checkReplaceOthers(t *testing.T) {
+	r.patchable(t)
+	sibling := r.source.attribute(t, "readWrite singular string attribute", patchable)
+	ids := slices.Sorted(slices.Values([]string{r.newTarget(t), r.newTarget(t)}))
+	source := r.newSource(t, ids...)
+
+	res := r.source.client().Patch(t, r.source.path(source), ops(op(patch.OpReplace, "", map[string]string{sibling.Name: placeholder + " " + newUnique()})))
+	r.source.expectPatched(t, res, source)
+	if res.StatusCode == http.StatusOK {
+		if got := valuesIn(Decode[core.Object](t, res), r.attribute.Name); !slices.Equal(got, ids) {
+			t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2): %s values %v, want %v", r.source.path(source), r.attribute.Name, got, ids)
+		}
+	}
+	r.source.expectValues(t, source, r.attribute.Name, ids...)
 }
 
 // RFC 7644 Section 3.5.1: readWrite values provided SHALL replace the existing values.
