@@ -1,5 +1,7 @@
 package core
 
+import "slices"
+
 // Attribute describes one attribute of a schema, per RFC 7643, Section 7.
 type Attribute struct {
 	Name            string          `json:"name"`
@@ -101,6 +103,17 @@ func (a *Attribute) With(subAttributes ...*Attribute) *Attribute {
 
 func (a *Attribute) SubAttribute(name string) *Attribute {
 	return a.SubAttributes.Lookup(name)
+}
+
+// ReferenceTargets lists the resource types a "$ref" sub-attribute points at, per RFC 7643, Section 2.3.7.
+func (a *Attribute) ReferenceTargets() []ReferenceType {
+	ref := a.SubAttribute("$ref")
+	if a.Type != TypeComplex || ref == nil {
+		return nil
+	}
+	return slices.DeleteFunc(slices.Clone(ref.ReferenceTypes), func(target ReferenceType) bool {
+		return target == ReferenceExternal || target == ReferenceURI
+	})
 }
 
 func (a *Attribute) Coerce(value any) (any, bool) {

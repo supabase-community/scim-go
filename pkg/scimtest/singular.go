@@ -28,10 +28,10 @@ func newSingulars(resources []*resource) []singular {
 func singularsIn(resources []*resource, source *resource, schema *core.Schema) []singular {
 	found := []singular{}
 	for _, attribute := range schema.Attributes {
-		if !isReference(attribute) || attribute.MultiValued || attribute.Mutability != core.MutabilityReadWrite {
+		if attribute.MultiValued || attribute.Mutability != core.MutabilityReadWrite {
 			continue
 		}
-		if targets := targetsOf(resources, attribute.SubAttribute("$ref").ReferenceTypes); len(targets) > 0 {
+		if targets := targetsOf(resources, attribute.ReferenceTargets()); len(targets) > 0 {
 			found = append(found, singular{source: source, target: targets[0], extension: extensionOf(source.schemas, schema), attribute: attribute})
 		}
 	}

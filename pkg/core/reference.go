@@ -1,7 +1,5 @@
 package core
 
-import "slices"
-
 // ReferenceAttribute is a complex attribute whose "$ref" points at other SCIM resources, per RFC 7643, Section 2.3.7.
 type ReferenceAttribute struct {
 	*Attribute
@@ -13,20 +11,10 @@ func (s Schemas) ReferenceAttributes() []ReferenceAttribute {
 	references := []ReferenceAttribute{}
 	for _, schema := range s {
 		for _, attribute := range schema.Attributes {
-			if targets := referenceTargets(attribute); len(targets) > 0 {
+			if targets := attribute.ReferenceTargets(); len(targets) > 0 {
 				references = append(references, ReferenceAttribute{Attribute: attribute, Targets: targets})
 			}
 		}
 	}
 	return references
-}
-
-func referenceTargets(attribute *Attribute) []ReferenceType {
-	ref := attribute.SubAttribute("$ref")
-	if attribute.Type != TypeComplex || ref == nil {
-		return nil
-	}
-	return slices.DeleteFunc(slices.Clone(ref.ReferenceTypes), func(target ReferenceType) bool {
-		return target == ReferenceExternal || target == ReferenceURI
-	})
 }

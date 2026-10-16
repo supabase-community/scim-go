@@ -173,7 +173,7 @@ func (r referencing) checkInverse(t *testing.T) {
 func (r referencing) checkIndirect(t *testing.T) {
 	r.source.suite.should(t, "RFC 7643 4.1.2 a membership through a nested group is typed indirect")
 	r.patchable(t)
-	if r.inverse == nil || len(targetsOf([]*resource{r.source}, referenceTargetsOf(r.attribute))) == 0 {
+	if r.inverse == nil || len(targetsOf([]*resource{r.source}, r.attribute.ReferenceTargets())) == 0 {
 		t.Skipf("n/a: %s.%s cannot nest %s", r.source.kind.Name, r.attribute.Name, r.source.kind.Name)
 	}
 	first := r.newTarget(t)

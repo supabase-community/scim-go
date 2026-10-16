@@ -88,17 +88,7 @@ func isStored(attribute *core.Attribute) bool {
 
 // RFC 7643 Section 2.3.7: a "$ref" whose referenceTypes name resource types points at other SCIM resources.
 func isReference(attribute *core.Attribute) bool {
-	return len(referenceTargetsOf(attribute)) > 0
-}
-
-func referenceTargetsOf(attribute *core.Attribute) []core.ReferenceType {
-	ref := attribute.SubAttribute("$ref")
-	if attribute.Type != core.TypeComplex || ref == nil {
-		return nil
-	}
-	return slices.DeleteFunc(slices.Clone(ref.ReferenceTypes), func(target core.ReferenceType) bool {
-		return target == core.ReferenceExternal || target == core.ReferenceURI
-	})
+	return len(attribute.ReferenceTargets()) > 0
 }
 
 func isUnique(attribute *core.Attribute) bool {
