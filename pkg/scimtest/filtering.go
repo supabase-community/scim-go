@@ -152,18 +152,20 @@ func (r filtering) checkMeta(t *testing.T) {
 	r.expectMatches(t, "meta.resourceType eq \"scimtest\"", ids, nil)
 	r.expectMatches(t, "meta.resourceType ne "+quoted(string(r.kind.Name)), ids, nil)
 	for _, name := range []string{"created", "lastModified"} {
-		earlier, _ := metaOf(first)[name].(string)
-		later, _ := metaOf(second)[name].(string)
-		if earlier == later {
-			t.Skipf("n/a: both resources have meta.%s %s", name, earlier)
-		}
-		path := "meta." + name
-		r.expectMatches(t, path+" gt "+quoted(earlier), ids, ids[1:])
-		r.expectMatches(t, path+" ge "+quoted(earlier), ids, ids)
-		r.expectMatches(t, path+" eq "+quoted(earlier), ids, ids[:1])
-		r.expectMatches(t, path+" ne "+quoted(earlier), ids, ids[1:])
-		r.expectMatches(t, path+" le "+quoted(earlier), ids, ids[:1])
-		r.expectMatches(t, path+" lt "+quoted(later), ids, ids[:1])
+		t.Run(name, func(t *testing.T) {
+			earlier, _ := metaOf(first)[name].(string)
+			later, _ := metaOf(second)[name].(string)
+			if earlier == later {
+				t.Skipf("n/a: both resources have meta.%s %s", name, earlier)
+			}
+			path := "meta." + name
+			r.expectMatches(t, path+" gt "+quoted(earlier), ids, ids[1:])
+			r.expectMatches(t, path+" ge "+quoted(earlier), ids, ids)
+			r.expectMatches(t, path+" eq "+quoted(earlier), ids, ids[:1])
+			r.expectMatches(t, path+" ne "+quoted(earlier), ids, ids[1:])
+			r.expectMatches(t, path+" le "+quoted(earlier), ids, ids[:1])
+			r.expectMatches(t, path+" lt "+quoted(later), ids, ids[:1])
+		})
 	}
 }
 
@@ -280,7 +282,7 @@ func (r filtering) checkNameCase(t *testing.T) {
 
 	r.expectMatches(t, `ID EQ `+quoted(ids[0]), ids, ids[:1])
 	r.expectMatches(t, `Id Eq `+quoted(ids[0])+` oR iD eQ `+quoted(ids[1]), ids, ids)
-	r.checkBaseURN(t)
+	t.Run("prefixes a core attribute with its schema URN", r.checkBaseURN)
 	extension, attribute := extensionAttribute(r.schemas, isFilterable)
 	if extension == nil {
 		return
@@ -296,8 +298,6 @@ func (r filtering) checkNameCase(t *testing.T) {
 
 // RFC 7644 Section 3.10: clients MAY prefix a core attribute with its schema URN, and every facet is case insensitive.
 func (r filtering) checkBaseURN(t *testing.T) {
-	t.Helper()
-
 	attribute := firstOf(r.schemas.Base().Attributes, patchable)
 	if attribute == nil {
 		return
