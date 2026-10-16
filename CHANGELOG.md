@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.24.0](https://github.com/supabase-community/scim-go/compare/v0.23.0...v0.24.0) (2026-10-16)
+
+
+### Features
+
+* **scimtest:** check a value path filter on the canonical type of a reference ([552d16a](https://github.com/supabase-community/scim-go/commit/552d16a82d00007293123bcd765eaab6ac541e3a))
+* **scimtest:** check every dateTime operator on meta.created and meta.lastModified and ne on meta.resourceType ([8bd900b](https://github.com/supabase-community/scim-go/commit/8bd900b0ad05eaf2ef20f90ecc361b229024fb08))
+* **scimtest:** check every value of the RFC 7643 full user is stored and found by eq and pr ([a82f855](https://github.com/supabase-community/scim-go/commit/a82f855f2db366587b7f31d6212a8f9cd879a409))
+* **scimtest:** check filter grammar errors, grouping, literal wildcards, the core schema URN prefix and dateTime operators ([5d39512](https://github.com/supabase-community/scim-go/commit/5d39512aac0625d5de4097d5014404ff695f8d87))
+* **scimtest:** check filters on reference values and the direct or indirect groups type ([29f6c9d](https://github.com/supabase-community/scim-go/commit/29f6c9dbcb321b7df432fea110c2d31d640c2d6e))
+* **scimtest:** check null comparisons, non-ASCII case folding and mutually exclusive projection ([35caade](https://github.com/supabase-community/scim-go/commit/35caade3019f4b78eae38b18434f0e0a00851b6c))
+* **scimtest:** check PATCH never changes a readOnly attribute ([9171b6c](https://github.com/supabase-community/scim-go/commit/9171b6cc1f78a7a2d55233340eddfb3e73f0c000))
+* **scimtest:** check singular and extension references such as manager ([7fbcb15](https://github.com/supabase-community/scim-go/commit/7fbcb158c553874a5a03448ee8455f2d570f12b0))
+* **scimtest:** check the SCIM media type, values of the wrong type and invalid bearer tokens ([07446cc](https://github.com/supabase-community/scim-go/commit/07446cc287103f55338804cd2c79897fc9d92b45))
+
+
+### Bug Fixes
+
+* **scimtest:** accept a reference without a value after removing it instead of requiring nothing left ([ebf4965](https://github.com/supabase-community/scim-go/commit/ebf49659a784c71725373048660f9ac57ff45a25))
+* **scimtest:** build the full body over the suite fixture and drop unadvertised extensions ([d8ecc2e](https://github.com/supabase-community/scim-go/commit/d8ecc2e342327db2823022eacf491954c57ec63e))
+* **scimtest:** require PRECIS case folding on userName instead of every case-insensitive attribute ([5f31866](https://github.com/supabase-community/scim-go/commit/5f318669d7a7e15d481785a7d791bc17ce88f1b8))
+* **scimtest:** run the groups type, schema URN prefix and meta dateTime checks as subtests so a skip hides nothing else ([f030bab](https://github.com/supabase-community/scim-go/commit/f030bab93e85932f33a59be6db5a3ff22e4ab9e4))
+
 ## [0.23.0](https://github.com/supabase-community/scim-go/compare/v0.22.0...v0.23.0) (2026-10-16)
 
 
