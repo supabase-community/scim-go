@@ -103,7 +103,7 @@ func (r referencing) checkAdd(t *testing.T) {
 
 // RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made.
 func (r referencing) checkAddHeld(t *testing.T) {
-	r.source.suite.should(t, "RFC 7644 3.5.2.1 adding a held value changes nothing")
+	r.source.suite.should(t, "RFC 7644 3.5.2.1 SHOULD: adding a held value succeeds and changes nothing")
 	r.patchable(t)
 	held := r.newTarget(t)
 	source := r.newSource(t, held)
@@ -125,11 +125,11 @@ func (r referencing) checkQueried(t *testing.T) {
 		t.Fatalf("scimtest: %s (RFC 7644 3.4.2): %d resources, want 1", r.source.describe(query), len(page.Resources))
 	}
 	if got, want := valuesIn(page.Resources[0], r.attribute.Name), slices.Sorted(slices.Values(ids)); !slices.Equal(got, want) {
-		t.Errorf("scimtest: %s (RFC 7643 2.3.7): %s values %v, want %v", r.source.describe(query), r.attribute.Name, got, want)
+		t.Errorf("scimtest: %s (RFC 7644 3.4.2): %s values %v, want %v", r.source.describe(query), r.attribute.Name, got, want)
 	}
 }
 
-// RFC 7644 Section 3.4.2.2: a filter matches a sub-attribute of any value, alone or in a value path.
+// RFC 7644 Sections 3.4.2.2 and 3.10: a filter matches a sub-attribute of any value, alone or in a value path, with names case insensitive.
 func (r referencing) checkFiltered(t *testing.T) {
 	supports(t, "filter", r.source.config.Filter.Supported)
 	first, second := r.newTarget(t), r.newTarget(t)
@@ -150,7 +150,7 @@ func (r referencing) checkFiltered(t *testing.T) {
 	}
 }
 
-// RFC 7644 Section 3.4.2.2: a value path filter matches the canonical type of a value.
+// RFC 7643 Section 4.1.2: a value path filter on "type" matches a canonical type of a value.
 func (r referencing) checkTypeFiltered(t *testing.T) {
 	supports(t, "filter", r.source.config.Filter.Supported)
 	kind := string(r.target.kind.Name)
@@ -213,7 +213,7 @@ func (r referencing) checkRemoveAll(t *testing.T) {
 	source := r.newSource(t, r.newTarget(t), r.newTarget(t))
 
 	r.patch(t, source, op(patch.OpRemove, r.attribute.Name, nil))
-	if read := r.source.read(t, source); read.Has(r.attribute.Name) {
+	if read := r.source.read(t, source); !unassigned(read, r.attribute.Name) {
 		t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want unassigned", r.source.path(source), r.attribute.Name, read.Get(r.attribute.Name))
 	}
 }
@@ -285,7 +285,7 @@ func (r referencing) expectType(t *testing.T, target core.Object, id, want strin
 }
 
 func (r referencing) checkDeletedTarget(t *testing.T) {
-	r.source.suite.should(t, "RFC 7644 3.6 a deleted resource is omitted from the values that reference it")
+	r.source.suite.should(t, "RFC 7643 2.3.7 MAY: referential integrity drops a deleted target from referencing values")
 	first, second := r.newTarget(t), r.newTarget(t)
 	source := r.newSource(t, first, second)
 

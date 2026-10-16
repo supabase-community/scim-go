@@ -104,7 +104,7 @@ func (r *resource) expectValues(t *testing.T, object core.Object, name string, w
 	}
 }
 
-// RFC 7644 Section 3.12: 404 when the specified resource does not exist.
+// RFC 7644 Section 3.12, Table 8: 404 when the specified resource does not exist, and Section 3.6 makes it a MUST after a DELETE.
 func (r *resource) expectNotFound(t *testing.T, path string, body core.Object) {
 	t.Helper()
 
@@ -251,7 +251,9 @@ func (r *resource) seed(t *testing.T, body core.Object) core.Object {
 }
 
 func (r *resource) remove(path string) {
-	if res, err := r.client().send(context.Background(), http.MethodDelete, path, nil); err == nil {
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+	if res, err := r.client().send(ctx, http.MethodDelete, path, nil); err == nil {
 		_ = res.Body.Close()
 	}
 }
@@ -372,7 +374,6 @@ func patchable(attribute *core.Attribute) bool {
 	return isFilterable(attribute) && !isUnique(attribute)
 }
 
-// RFC 7643 Section 2.3.6: binary values MUST be base64, so drop the spaces of the Section 8.3 example.
 func dropReferences(schemas core.Schemas, body core.Object) {
 	for _, h := range holders(schemas, body) {
 		for _, attribute := range h.schema.Attributes {
@@ -384,6 +385,7 @@ func dropReferences(schemas core.Schemas, body core.Object) {
 	}
 }
 
+// RFC 7643 Section 2.3.6: binary values MUST be base64, so drop the spaces of the Section 8.2 and 8.3 examples.
 func compactBinary(attribute *core.Attribute, value any) {
 	for _, element := range elementsOf(value) {
 		for _, sub := range attribute.SubAttributes {

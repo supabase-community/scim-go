@@ -35,6 +35,17 @@ func (l leaf) key() string {
 	return strings.ToLower(l.path) + " " + l.literal()
 }
 
+// RFC 7643 Section 2.5: an absent attribute, null and an empty array are equivalent in state.
+func unassigned(object core.Object, name string) bool {
+	switch value := object.Get(name).(type) {
+	case nil:
+		return true
+	case []any:
+		return len(value) == 0
+	}
+	return false
+}
+
 func idOf(object core.Object) string {
 	id, _ := object.Get("id").(string)
 	return id

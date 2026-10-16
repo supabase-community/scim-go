@@ -53,8 +53,9 @@ func (r filtering) run(t *testing.T) {
 
 func (r filtering) checkID(t *testing.T) {
 	if r.suite.unsupported(t, "filter", r.config.Filter.Supported) {
+		r.suite.should(t, "RFC 7644 Table 8 501 for an unsupported filter")
 		res := r.send(t, byID("scimtest-none"))
-		expectStatus(t, res, http.StatusNotImplemented, "RFC 7644 3.12")
+		expectStatus(t, res, http.StatusNotImplemented, "RFC 7644 Table 8")
 		return
 	}
 	_, created := r.create(t, newUnique())
@@ -259,7 +260,7 @@ func (r filtering) checkCanonicalType(t *testing.T, attribute *core.Attribute) {
 	r.expectMatches(t, path+" pr", ids, ids)
 }
 
-// RFC 7643 Section 2.4: an unspecified "primary" SHALL be assumed to be false.
+// RFC 7643 Section 2.4: an unspecified "primary" SHALL be assumed to be false. RFC 7644 Section 3.4.2.2: a filter on a defaulted attribute SHALL use the value returned to the client.
 func (r filtering) checkPrimaryDefault(t *testing.T) {
 	supports(t, "filter", r.config.Filter.Supported)
 	attribute := r.attribute(t, "readWrite multi-valued attribute with a value and a primary", hasPrimary)
@@ -304,7 +305,7 @@ func (r filtering) checkPresent(t *testing.T) {
 }
 
 func (r filtering) checkNameCase(t *testing.T) {
-	r.suite.should(t, "RFC 7644 3.4.2.2 attribute names and operators are case insensitive")
+	r.suite.should(t, "RFC 7644 3.4.2.2 and 3.10 attribute names, URNs and operators are case insensitive")
 	supports(t, "filter", r.config.Filter.Supported)
 	ids := r.createIDs(t, 2)
 
@@ -370,7 +371,7 @@ func (r filtering) checkStored(t *testing.T) {
 	}
 }
 
-// RFC 7644 Section 3.4.2.2: the grammar allows null as the operand of any comparison, so a server must not fail on one.
+// RFC 7644 Section 3.4.2.2: compValue allows null with any compareOp. A server MAY reject it with 400 invalidFilter (Table 9) but MUST NOT fail with 5xx or drop a match.
 func (r filtering) checkNullOperand(t *testing.T) {
 	supports(t, "filter", r.config.Filter.Supported)
 	_, created := r.create(t, newUnique())
@@ -385,6 +386,7 @@ func (r filtering) checkNullOperand(t *testing.T) {
 		query := filterBy(strings.Join(clauses, " or "))
 		res := r.send(t, query)
 		if res.StatusCode == http.StatusBadRequest {
+			RequireError(t, res, http.StatusBadRequest, scimerrors.InvalidFilter)
 			continue
 		}
 		if got := idsOf(r.page(t, query, res).Resources); !slices.Contains(got, idOf(created)) {
@@ -393,7 +395,7 @@ func (r filtering) checkNullOperand(t *testing.T) {
 	}
 }
 
-// RFC 7643 Section 2.5: unassigned and null are equivalent in state.
+// RFC 7643 Section 2.5: unassigned and null are equivalent in state. The ne and not forms are inferred from RFC 7644 Table 3.
 func (r filtering) checkNull(t *testing.T) {
 	r.suite.should(t, "RFC 7643 2.5 an unassigned attribute is null")
 	supports(t, "filter", r.config.Filter.Supported)
@@ -419,10 +421,14 @@ func (r filtering) checkNull(t *testing.T) {
 
 // RFC 7644 Section 5: userName is compared with the PRECIS rules of RFC 7613, which fold case.
 func (r filtering) checkUnicodeCase(t *testing.T) {
-	r.expectUserName(t, "\u00c9mile.", "\u00e9MILE.", "eq", "sw", "co")
+	r.expectUserName(t, "\u00c9mile.", "\u00e9MILE.", "eq")
+	t.Run("sw and co", func(t *testing.T) {
+		r.suite.should(t, "RFC 7643 2.2 substring operators ignore case when caseExact is false")
+		r.expectUserName(t, "\u00c9mile.", "\u00e9MILE.", "sw", "co")
+	})
 }
 
-// RFC 8265 Section 3.3.1: UsernameCaseMapped maps fullwidth code points to their decomposition.
+// RFC 7613 Section 3.2.1 (RFC 8265 Section 3.3.1): fullwidth characters map to their decomposition.
 func (r filtering) checkUnicodeWidth(t *testing.T) {
 	r.expectUserName(t, "\uff22\uff2aensen.", "bjensen.", "eq")
 }

@@ -34,8 +34,9 @@ func (r reading) checkGet(t *testing.T) {
 	r.expectLocated(t, res)
 }
 
-// RFC 7644 Section 3.12: 404 when the resource does not exist, whatever shape its id has.
+// RFC 7644 Section 3.12, Table 8: 404 when the resource does not exist, whatever shape its id has.
 func (r reading) checkUnknown(t *testing.T) {
+	r.suite.should(t, "RFC 7644 3.12 Table 8 404 for a resource that never existed")
 	for _, id := range []string{"scimtest-" + newUnique(), uuid.NewV4().String()} {
 		t.Run(id, func(t *testing.T) { r.expectNotFound(t, r.kind.Endpoint+"/"+id, r.body(t, newUnique())) })
 	}

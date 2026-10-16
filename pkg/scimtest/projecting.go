@@ -119,7 +119,7 @@ func (r projecting) checkExtension(t *testing.T) {
 func (r projecting) checkExclusive(t *testing.T, created core.Object, name string) {
 	t.Helper()
 
-	r.suite.should(t, "RFC 7644 3.9 400 for both attributes and excludedAttributes")
+	r.suite.should(t, "RFC 7644 3.9 attributes and excludedAttributes are mutually exclusive, so 400 (status inferred from Table 8)")
 	path := r.path(created) + "?" + url.Values{attributesParam: {name}, excludedParam: {name}}.Encode()
 
 	RequireError(t, r.client().Get(t, path), http.StatusBadRequest, "")

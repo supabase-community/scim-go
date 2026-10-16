@@ -4,14 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/supabase-community/scim-go/pkg/protocol"
+)
+
+const (
+	requestTimeout = 30 * time.Second
+	maxBody        = 16 << 20
 )
 
 type Client struct {
@@ -21,7 +28,7 @@ type Client struct {
 }
 
 func NewClient(url string, opts ...Option[*Client]) *Client {
-	c := &Client{url: strings.TrimRight(url, "/"), http: http.DefaultClient}
+	c := &Client{url: strings.TrimRight(url, "/"), http: &http.Client{Timeout: requestTimeout}}
 	for _, opt := range opts {
 		opt(c)
 	}
@@ -94,14 +101,25 @@ func (c *Client) Send(tb testing.TB, method, path string, body any) *http.Respon
 		tb.Fatalf("scimtest: %s %s: %v", method, path, err)
 		return nil
 	}
-	data, err := io.ReadAll(response.Body)
+	data, err := io.ReadAll(io.LimitReader(response.Body, maxBody+1))
 	_ = response.Body.Close()
+	if err == nil && len(data) > maxBody {
+		err = fmt.Errorf("response body is larger than %d bytes", maxBody)
+	}
 	if err != nil {
 		tb.Fatalf("scimtest: %s %s: %v", method, path, err)
 		return nil
 	}
 	response.Body = io.NopCloser(bytes.NewReader(data))
 	return response
+}
+
+func (c *Client) anonymous() *Client {
+	transport := http.DefaultTransport
+	if shared, ok := c.http.Transport.(*http.Transport); ok {
+		transport = shared
+	}
+	return NewClient(c.url, WithHTTPClient(&http.Client{Transport: transport, Timeout: c.http.Timeout}))
 }
 
 func (c *Client) send(ctx context.Context, method, path string, body any) (*http.Response, error) {

@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"slices"
+	"strconv"
 
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -37,6 +38,7 @@ func RequireError(t TB, res *http.Response, status int, scimType scimerrors.Erro
 		t.Fatalf("scimtest: %s: status %d, want %d", where, res.StatusCode, status)
 		return scimerrors.Error{}
 	}
+	// RFC 7644 Section 3.1: SCIM uses a media type of "application/scim+json".
 	if mediaType, _, _ := mime.ParseMediaType(res.Header.Get("Content-Type")); mediaType != protocol.MediaType {
 		t.Fatalf("scimtest: %s: Content-Type %q, want %q", where, mediaType, protocol.MediaType)
 		return scimerrors.Error{}
@@ -45,6 +47,9 @@ func RequireError(t TB, res *http.Response, status int, scimType scimerrors.Erro
 	body := Decode[scimerrors.Error](t, res)
 	if !slices.Contains(body.Schemas, protocol.SchemaError) {
 		t.Fatalf("scimtest: %s: schemas %v, want %s", where, body.Schemas, protocol.SchemaError)
+	}
+	if body.Status != strconv.Itoa(status) {
+		t.Fatalf("scimtest: %s (RFC 7644 3.12): status %q, want %q", where, body.Status, strconv.Itoa(status))
 	}
 	if scimType != "" && body.ScimType != scimType {
 		t.Fatalf("scimtest: %s: scimType %q, want %q", where, body.ScimType, scimType)

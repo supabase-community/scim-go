@@ -49,9 +49,10 @@ func (r patching) run(t *testing.T) {
 
 func (r patching) checkReplaceByPath(t *testing.T) {
 	if r.suite.unsupported(t, "patch", r.config.Patch.Supported) {
+		r.suite.should(t, "RFC 7644 3.12 Table 8 501 for an unsupported PATCH")
 		_, created := r.create(t, newUnique())
 		res := r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, "externalId", placeholder)))
-		expectStatus(t, res, http.StatusNotImplemented, "RFC 7644 3.12")
+		expectStatus(t, res, http.StatusNotImplemented, "RFC 7644 3.12 Table 8")
 		return
 	}
 	attribute := firstOf(r.schemas.Base().Attributes, patchable)
@@ -140,12 +141,12 @@ func (r patching) checkAtomic(t *testing.T) {
 }
 
 func (r patching) checkSchema(t *testing.T) {
-	r.suite.should(t, "RFC 7644 Table 9 400 invalidSyntax for a PATCH body without the PatchOp schema")
+	r.suite.should(t, "RFC 7644 3.5.2 and Table 8 400 for a PATCH body without the PatchOp schema")
 	created, attribute := r.patchTarget(t)
 	body := ops(op(patch.OpReplace, attribute.Name, placeholder))
 	body.Schemas = nil
 
-	RequireError(t, r.client().Patch(t, r.path(created), body), http.StatusBadRequest, scimerrors.InvalidSyntax)
+	RequireError(t, r.client().Patch(t, r.path(created), body), http.StatusBadRequest, "")
 }
 
 func (r patching) checkAddByPath(t *testing.T) {
@@ -204,7 +205,7 @@ func (r patching) checkValues(t *testing.T) {
 	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, attribute.Name+"[value eq "+quoted(second)+"]", nil))), created)
 	r.expectValues(t, created, attribute.Name, first)
 	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, attribute.Name+"[value eq "+quoted(first)+"]", nil))), created)
-	if read := r.read(t, created); read.Has(attribute.Name) {
+	if read := r.read(t, created); !unassigned(read, attribute.Name) {
 		t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want unassigned", r.path(created), attribute.Name, read.Get(attribute.Name))
 	}
 }
@@ -265,22 +266,26 @@ func (r patching) checkExtension(t *testing.T) {
 	}
 }
 
+// RFC 7644 Table 8: 400 when the request violates the schema, and 3.5.2 limits "op" to add, remove or replace.
 func (r patching) checkUnknownOp(t *testing.T) {
 	created, attribute := r.patchTarget(t)
 	body := ops(op(patch.OpReplace, attribute.Name, placeholder))
 	body.Operations[0].Op = "scimtest"
 
-	RequireError(t, r.client().Patch(t, r.path(created), body), http.StatusBadRequest, scimerrors.InvalidSyntax)
+	RequireError(t, r.client().Patch(t, r.path(created), body), http.StatusBadRequest, "")
 }
 
 func (r patching) checkUnknownPath(t *testing.T) {
-	r.suite.should(t, "RFC 7644 Table 9 400 invalidPath for a path to an undefined attribute")
+	r.suite.should(t, "RFC 7644 Table 9 400 invalidPath or noTarget for a path to an undefined attribute")
 	created, _ := r.patchTarget(t)
 
-	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, "scimtest"+newUnique(), placeholder))), http.StatusBadRequest, scimerrors.InvalidPath)
+	body := RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, "scimtest"+newUnique(), placeholder))), http.StatusBadRequest, "")
+	if body.ScimType != scimerrors.InvalidPath && body.ScimType != scimerrors.NoTarget {
+		t.Errorf("scimtest: PATCH %s (RFC 7644 Table 9): scimType %q, want invalidPath or noTarget", r.path(created), body.ScimType)
+	}
 }
 
-// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute, so the server keeps its value.
+// RFC 7644 Section 3.5.2: a client MUST NOT modify a readOnly attribute, so its stored value is unchanged.
 func (r patching) checkReadOnlyKept(t *testing.T) {
 	supports(t, "patch", r.config.Patch.Supported)
 	for _, o := range readOnlyIn(t, r.resource) {
@@ -303,6 +308,7 @@ func (r patching) checkReadOnlyKept(t *testing.T) {
 	}
 }
 
+// RFC 7644 Section 3.5.2: an operation incompatible with readOnly mutability SHALL return an error, and Table 9 names it "mutability" with 400.
 func (r patching) checkReadOnly(t *testing.T) {
 	created, _ := r.patchTarget(t)
 
@@ -310,10 +316,10 @@ func (r patching) checkReadOnly(t *testing.T) {
 }
 
 func (r patching) checkEmpty(t *testing.T) {
-	r.suite.should(t, "RFC 7644 Table 9 400 invalidSyntax for a PATCH body without operations")
+	r.suite.should(t, "RFC 7644 3.5.2 and Table 8 400 for a PATCH body without Operations")
 	created, _ := r.patchTarget(t)
 
-	RequireError(t, r.client().Patch(t, r.path(created), ops()), http.StatusBadRequest, scimerrors.InvalidSyntax)
+	RequireError(t, r.client().Patch(t, r.path(created), ops()), http.StatusBadRequest, "")
 }
 
 // RFC 7644 Section 3.5.2: the server MUST return 200 OK if the "attributes" parameter is specified.
@@ -353,8 +359,8 @@ func (r patching) checkReplaceFiltered(t *testing.T) {
 	r.expectValues(t, created, attribute.Name, second, third)
 }
 
+// RFC 7644 Section 3.5.2.3: the matching sub-attribute of all matching records is replaced.
 func (r patching) checkReplaceFilteredSub(t *testing.T) {
-	r.suite.should(t, "RFC 7644 3.5.2.3 a value path with a sub-attribute replaces that sub-attribute of the matching values")
 	attribute, created, first, second := r.twoValues(t)
 	third := email("third", newUnique())
 	path := attribute.Name + "[value eq " + quoted(first) + "]." + valueSub
@@ -363,8 +369,8 @@ func (r patching) checkReplaceFilteredSub(t *testing.T) {
 	r.expectValues(t, created, attribute.Name, second, third)
 }
 
+// RFC 7644 Section 3.5.2.3: sub-attributes not specified in "value" are left unchanged.
 func (r patching) checkReplaceComplex(t *testing.T) {
-	r.suite.should(t, "RFC 7644 3.5.2.3 sub-attributes a complex replace leaves out are left unchanged")
 	supports(t, "patch", r.config.Patch.Supported)
 	attribute, created, kept, replaced := r.complexTarget(t)
 	want := placeholder + " " + newUnique()
@@ -383,7 +389,7 @@ func (r patching) checkRemoveSub(t *testing.T) {
 
 	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, attribute.Name+"."+removed, nil))), created)
 	got := core.Object(objectOf(r.read(t, created).Get(attribute.Name)))
-	if got.Has(removed) || !got.Has(kept) {
+	if !unassigned(got, removed) || unassigned(got, kept) {
 		t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want %s unassigned and %s kept", r.path(created), attribute.Name, map[string]any(got), removed, kept)
 	}
 }

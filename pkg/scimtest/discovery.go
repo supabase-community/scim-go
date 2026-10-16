@@ -43,7 +43,7 @@ func (d discovering) checkSchemas(t *testing.T) {
 	for _, kind := range d.found.kinds {
 		for _, uri := range schemaURIsOf(kind) {
 			if d.found.schemas.Lookup(uri) == nil {
-				t.Errorf("scimtest: GET /Schemas (RFC 7643 6): %s of resource type %s is missing", uri, kind.Name)
+				t.Errorf("scimtest: GET /Schemas (RFC 7644 4): %s of resource type %s is missing", uri, kind.Name)
 			}
 		}
 	}
@@ -102,17 +102,17 @@ func (d discovering) checkCharacteristics(t *testing.T) {
 	}
 }
 
-// RFC 7644 Section 2: a 401 SHALL indicate the supported schemes with "WWW-Authenticate".
+// RFC 7644 Section 2: the provider SHALL indicate its schemes via "WWW-Authenticate". RFC 9110 Section 15.5.2: a 401 MUST send it.
 func (d discovering) checkUnauthenticated(t *testing.T) {
-	d.expectChallenged(t, NewClient(d.suite.client.url))
+	d.expectChallenged(t, d.suite.client.anonymous())
 }
 
 // RFC 7644 Section 3.12, Table 8: 401 when the authorization header is invalid or missing.
 func (d discovering) checkInvalidToken(t *testing.T) {
-	d.expectChallenged(t, NewClient(d.suite.client.url, WithBearerToken("scimtest-invalid-"+newUnique())))
+	d.expectChallenged(t, d.suite.client.anonymous().With(WithBearerToken("scimtest-invalid-"+newUnique())))
 }
 
-// RFC 9110 Section 15.5.6: a 405 MUST send an Allow header. RFC 7644 Section 4 makes these endpoints read-only.
+// RFC 9110 Section 15.5.6: a 405 MUST send an Allow header. RFC 7643 Sections 5 and 7 make ServiceProviderConfig and Schemas readOnly.
 func (d discovering) checkMethodNotAllowed(t *testing.T) {
 	for _, path := range []string{"/ServiceProviderConfig", "/ResourceTypes", "/Schemas"} {
 		for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
@@ -125,7 +125,7 @@ func (d discovering) expectNotAllowed(t *testing.T, method, path string) {
 	t.Helper()
 
 	res := d.suite.client.Send(t, method, path, nil)
-	if res.StatusCode == http.StatusNotImplemented {
+	if res.StatusCode == http.StatusNotImplemented || res.StatusCode == http.StatusNotFound {
 		return
 	}
 	RequireError(t, res, http.StatusMethodNotAllowed, "")
@@ -145,7 +145,7 @@ func (d discovering) expectChallenged(t *testing.T, c *Client) {
 
 	RequireError(t, res, http.StatusUnauthorized, "")
 	if res.Header.Get("WWW-Authenticate") == "" {
-		t.Errorf("scimtest: GET %s (RFC 7644 2): no WWW-Authenticate header", d.resources[0].kind.Endpoint)
+		t.Errorf("scimtest: GET %s (RFC 7644 2, RFC 9110 15.5.2): no WWW-Authenticate header", d.resources[0].kind.Endpoint)
 	}
 }
 
@@ -162,7 +162,7 @@ func compareAttributes(t *testing.T, where string, want, got core.Attributes) {
 		path := where + ":" + expected.Name
 		actual := got.Lookup(expected.Name)
 		if actual == nil {
-			t.Errorf("SHOULD: GET /Schemas (RFC 7643 8.7.1): %s is missing", path)
+			t.Errorf("SHOULD: GET /Schemas (RFC 7643 7 and 8.7.1, a non-normative example): %s is missing", path)
 			continue
 		}
 		for _, field := range []struct {
@@ -177,7 +177,7 @@ func compareAttributes(t *testing.T, where string, want, got core.Attributes) {
 			{"caseExact", expected.CaseExact, actual.CaseExact},
 		} {
 			if field.want != field.got {
-				t.Errorf("SHOULD: GET /Schemas (RFC 7643 8.7.1): %s %s is %v, want %v", path, field.name, field.got, field.want)
+				t.Errorf("SHOULD: GET /Schemas (RFC 7643 7 and 8.7.1, a non-normative example): %s %s is %v, want %v", path, field.name, field.got, field.want)
 			}
 		}
 		compareAttributes(t, path, expected.SubAttributes, actual.SubAttributes)

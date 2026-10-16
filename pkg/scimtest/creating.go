@@ -85,14 +85,24 @@ func (r creating) checkMeta(t *testing.T) {
 	}
 }
 
+// RFC 7643 Section 4.1.1: userName MUST be unique. RFC 7643 Section 2.2: "server" uniqueness SHOULD be unique.
 func (r creating) checkUniqueness(t *testing.T) {
 	unique := newUnique()
 	body := r.body(t, unique)
-	r.attribute(t, "unique attribute in its fixture", func(a *core.Attribute) bool { return isUnique(a) && body.Has(a.Name) })
+	attribute := r.attribute(t, "unique attribute in its fixture", func(a *core.Attribute) bool { return isUnique(a) && body.Has(a.Name) })
+	r.shouldUnless(t, attribute, "RFC 7643 2.2 a uniqueness server value SHOULD be unique")
 	r.createBody(t, body)
 
 	res, _ := r.post(t, r.body(t, unique))
 	RequireError(t, res, http.StatusConflict, scimerrors.Uniqueness)
+}
+
+func (r creating) shouldUnless(t *testing.T, attribute *core.Attribute, rule string) {
+	t.Helper()
+
+	if attribute.Name != "userName" {
+		r.suite.should(t, rule)
+	}
 }
 
 func (r creating) checkNotUnique(t *testing.T) {
@@ -124,12 +134,13 @@ func (r creating) checkEmptyRequired(t *testing.T) {
 	RequireError(t, res, http.StatusBadRequest, scimerrors.InvalidValue)
 }
 
-// RFC 7644 Section 3.3: a duplicate MUST be 409; RFC 7643 Section 2.2: caseExact false compares without case.
+// RFC 7644 Section 5: userName uniqueness compares with PRECIS, which folds case. RFC 7643 Section 4.1.1: userName is case insensitive.
 func (r creating) checkUniqueCase(t *testing.T) {
 	body := r.body(t, newUnique())
 	attribute := r.attribute(t, "case-insensitive unique string attribute in its fixture", func(a *core.Attribute) bool {
 		return isUnique(a) && !a.CaseExact && a.Type == core.TypeString && !a.MultiValued && body.Has(a.Name)
 	})
+	r.shouldUnless(t, attribute, "RFC 7643 2.2 a unique value with caseExact false SHOULD compare without case")
 	r.createBody(t, body)
 	value, _ := body.Get(attribute.Name).(string)
 	duplicate := r.body(t, newUnique())
@@ -169,7 +180,7 @@ func (r creating) checkFull(t *testing.T) {
 }
 
 func (r creating) checkMistyped(t *testing.T) {
-	r.suite.should(t, "RFC 7644 Table 9 400 invalidValue for a value of the wrong type")
+	r.suite.should(t, "RFC 7644 Table 9 400 invalidValue or invalidSyntax for a value of the wrong type")
 	body := r.body(t, newUnique())
 	r.mistype(t, body)
 

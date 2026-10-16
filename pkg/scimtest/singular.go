@@ -69,7 +69,7 @@ func (r singular) checkFiltered(t *testing.T) {
 	r.source.expectMatches(t, r.path("")+" pr", ids, ids[:1])
 }
 
-// RFC 7644 Section 3.5.2.3: replace sets the value of the targeted sub-attribute.
+// RFC 7644 Section 3.5.2.3: if the target location is a single-value attribute, the attribute's value is replaced.
 func (r singular) checkReplace(t *testing.T) {
 	supports(t, "patch", r.source.config.Patch.Supported)
 	source := r.newSource(t, r.newTarget(t))
@@ -93,21 +93,22 @@ func (r singular) checkRemove(t *testing.T) {
 }
 
 func (r singular) checkDeletedTarget(t *testing.T) {
-	r.source.suite.should(t, "RFC 7644 3.6 a deleted resource is omitted from the values that reference it")
+	r.source.suite.should(t, "RFC 7643 2.3.7 a server MAY enforce referential integrity, so a deleted resource is dropped from references to it")
 	id := r.newTarget(t)
 	source := r.newSource(t, id)
 
 	expectStatus(t, r.target.client().Delete(t, r.target.path(core.Object{"id": id})), http.StatusNoContent, "RFC 7644 3.6")
-	r.expectUnassigned(t, source, "DELETE", "RFC 7644 3.6")
+	r.expectUnassigned(t, source, "DELETE", "RFC 7643 2.3.7")
 }
 
-// RFC 7644 Section 3.10: a sub-attribute of an extension attribute is named by its schema URI and path.
+// RFC 7644 Section 3.4.2.5: "attributes" names the attributes to return, and Section 3.10 names an extension sub-attribute by its schema URI and path.
 func (r singular) checkProjected(t *testing.T) {
+	r.source.suite.should(t, "RFC 7644 3.4.2.5 an attributes path to a sub-attribute returns only that sub-attribute")
 	id := r.newTarget(t)
 	source := r.newSource(t, id)
 	path := r.source.path(source) + "?" + url.Values{attributesParam: {r.path(valueSub)}}.Encode()
 
-	got := core.Object(objectOf(r.holder(get[core.Object](t, r.source.client(), path, "RFC 7644 3.4.2.5")).Get(r.attribute.Name)))
+	got := core.Object(objectOf(r.holder(get[core.Object](t, r.source.client(), path, "RFC 7644 3.4.1")).Get(r.attribute.Name)))
 	if len(got) != 1 || got.Get(valueSub) != id {
 		t.Errorf("scimtest: GET %s (RFC 7644 3.4.2.5): %s is %v, want only value %s", path, r.path(""), map[string]any(got), id)
 	}

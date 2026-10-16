@@ -111,7 +111,7 @@ func (r replacing) putReadOnly(t *testing.T, o readOnly) {
 }
 
 func (r replacing) checkRequired(t *testing.T) {
-	r.suite.should(t, "RFC 7644 3.12 400 invalidValue for a PUT without a required attribute")
+	r.suite.should(t, "RFC 7644 3.5.1 and Table 9 400 invalidValue for a PUT without a required attribute")
 	unique := newUnique()
 	body := r.body(t, unique)
 	attribute := r.attribute(t, "required attribute in its fixture", required(body))
@@ -122,18 +122,23 @@ func (r replacing) checkRequired(t *testing.T) {
 }
 
 func (r replacing) checkUniqueness(t *testing.T) {
-	r.suite.should(t, "RFC 7644 Table 9 409 uniqueness for a PUT with another resource's unique value")
+	r.suite.should(t, "RFC 7644 3.3 and Table 8 409 uniqueness (RFC 7643 7 allows 400) for a PUT with another resource's unique value")
 	taken := newUnique()
 	body := r.body(t, taken)
 	r.attribute(t, "unique attribute in its fixture", func(a *core.Attribute) bool { return isUnique(a) && body.Has(a.Name) })
 	r.createBody(t, body)
 	_, created := r.create(t, newUnique())
 
-	RequireError(t, r.client().Put(t, r.path(created), r.body(t, taken)), http.StatusConflict, scimerrors.Uniqueness)
+	res := r.client().Put(t, r.path(created), r.body(t, taken))
+	if res.StatusCode == http.StatusBadRequest {
+		RequireError(t, res, http.StatusBadRequest, "")
+		return
+	}
+	RequireError(t, res, http.StatusConflict, scimerrors.Uniqueness)
 }
 
 func (r replacing) checkNotUnique(t *testing.T) {
-	r.suite.should(t, "RFC 7643 2.2 a PUT may repeat another resource's uniqueness none value")
+	r.suite.should(t, "RFC 7643 7 a PUT may repeat another resource's uniqueness none value")
 	value := placeholder + " " + newUnique()
 	r.createBody(t, r.sharing(t, newUnique(), value))
 	unique := newUnique()

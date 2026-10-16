@@ -60,8 +60,8 @@ func (r sorting) checkSubAttribute(t *testing.T) {
 	r.expectOrder(t, attribute.Name+"."+sub.Name, []string{ids[1], ids[0]})
 }
 
+// RFC 7644 Section 3.4.2.3: sortBy SHALL order the responses, and a multi-valued attribute is sorted by its primary value.
 func (r sorting) checkPrimary(t *testing.T) {
-	r.suite.should(t, "RFC 7644 3.4.2.3 a multi-valued sortBy uses the primary value")
 	supports(t, "sort", r.config.Sort.Supported)
 	supports(t, "filter", r.config.Filter.Supported)
 	attribute := r.attribute(t, "readWrite multi-valued attribute with a value and a primary", hasPrimary)
