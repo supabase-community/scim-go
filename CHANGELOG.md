@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/supabase-community/scim-go/compare/v0.24.0...v0.25.0) (2026-10-16)
+
+
+### Features
+
+* **core:** fold userName with PRECIS per RFC 7644 Section 5 ([e7af1e8](https://github.com/supabase-community/scim-go/commit/e7af1e83d8762f1f1cdf54ada75609990cd89522))
+
 ## [0.24.0](https://github.com/supabase-community/scim-go/compare/v0.23.0...v0.24.0) (2026-10-16)
 
 
