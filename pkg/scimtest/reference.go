@@ -56,6 +56,7 @@ func (r referencing) run(t *testing.T) {
 	t.Run("adds values", r.checkAdd)
 	t.Run("returns the values in a query", r.checkQueried)
 	t.Run("finds the source by a value", r.checkFiltered)
+	t.Run("finds the source by a value type", r.checkTypeFiltered)
 	t.Run("removes a value by filter", r.checkRemoveFiltered)
 	t.Run("replaces the values", r.checkReplace)
 	t.Run("replaces the values with PUT", r.checkPut)
@@ -113,6 +114,20 @@ func (r referencing) checkFiltered(t *testing.T) {
 	} {
 		r.source.expectMatches(t, filter, ids, want)
 	}
+}
+
+// RFC 7644 Section 3.4.2.2: a value path filter matches the canonical type of a value.
+func (r referencing) checkTypeFiltered(t *testing.T) {
+	supports(t, "filter", r.source.config.Filter.Supported)
+	kind := string(r.target.kind.Name)
+	if sub := r.attribute.SubAttribute(typeSub); sub == nil || !slices.Contains(sub.CanonicalValues, kind) {
+		t.Skipf("n/a: %s.type has no canonical value %s", r.attribute.Name, kind)
+	}
+	body := r.sourceBody(t)
+	body.Set(r.attribute.Name, []any{map[string]any{valueSub: r.newTarget(t), typeSub: kind}})
+	ids := []string{idOf(r.source.seed(t, body)), idOf(r.newSource(t))}
+
+	r.source.expectMatches(t, r.attribute.Name+"[type eq "+quoted(kind)+"]", ids, ids[:1])
 }
 
 func (r referencing) checkRemoveFiltered(t *testing.T) {
