@@ -250,15 +250,17 @@ func (r *resource) fullBody(t *testing.T) core.Object {
 	if !ok {
 		t.Skipf("n/a: no full fixture for %s", r.kind.Name)
 	}
-	body := r.build(t, full, newUnique())
-	for _, h := range holders(r.schemas, body) {
-		for _, attribute := range h.schema.Attributes {
-			if isReference(attribute) {
-				h.object.Remove(attribute.Name)
-			}
-			compactBinary(attribute, h.object.Get(attribute.Name))
+	unique := newUnique()
+	body := r.build(t, full, unique)
+	for name := range body {
+		if strings.HasPrefix(name, "urn:") && r.schemas.Lookup(core.SchemaURI(name)) == nil {
+			body.Remove(name)
 		}
 	}
+	for name, value := range r.body(t, unique) {
+		body.Set(name, value)
+	}
+	dropReferences(r.schemas, body)
 	body.Set(schemasAttr, r.schemaURIs(body))
 	return body
 }
@@ -322,6 +324,17 @@ func patchable(attribute *core.Attribute) bool {
 }
 
 // RFC 7643 Section 2.3.6: binary values MUST be base64, so drop the spaces of the Section 8.3 example.
+func dropReferences(schemas core.Schemas, body core.Object) {
+	for _, h := range holders(schemas, body) {
+		for _, attribute := range h.schema.Attributes {
+			if isReference(attribute) {
+				h.object.Remove(attribute.Name)
+			}
+			compactBinary(attribute, h.object.Get(attribute.Name))
+		}
+	}
+}
+
 func compactBinary(attribute *core.Attribute, value any) {
 	for _, element := range elementsOf(value) {
 		for _, sub := range attribute.SubAttributes {
