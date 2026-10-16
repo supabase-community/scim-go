@@ -150,6 +150,8 @@ func (r filtering) checkBooleanEquals(t *testing.T) {
 	r.expectMatches(t, attribute.Name+" eq true", ids, ids[:1])
 	r.expectMatches(t, attribute.Name+" eq false", ids, ids[1:])
 	r.expectMatches(t, "not ("+attribute.Name+" eq true)", ids, ids[1:])
+	r.expectMatches(t, attribute.Name+" ne true", ids, ids[1:])
+	r.expectMatches(t, attribute.Name+" ne false", ids, ids[:1])
 }
 
 func (r filtering) checkMeta(t *testing.T) {
@@ -270,6 +272,8 @@ func (r filtering) checkPrimaryDefault(t *testing.T) {
 
 	r.expectMatches(t, attribute.Name+"."+primarySub+" eq false", ids, ids[1:])
 	r.expectMatches(t, attribute.Name+"[primary eq false]", ids, ids[1:])
+	r.expectMatches(t, attribute.Name+"."+primarySub+" eq true", ids, ids[:1])
+	r.expectMatches(t, attribute.Name+"."+primarySub+" ne true", ids, ids[1:])
 }
 
 // RFC 7644 Section 3.4.2.2: pr matches a non-empty value, or a non-empty node for complex attributes.
