@@ -3,6 +3,7 @@ package scimtest
 import (
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -103,15 +104,18 @@ func (r referencing) checkQueried(t *testing.T) {
 func (r referencing) checkFiltered(t *testing.T) {
 	supports(t, "filter", r.source.config.Filter.Supported)
 	first, second := r.newTarget(t), r.newTarget(t)
-	ids := []string{idOf(r.newSource(t, first)), idOf(r.newSource(t, second))}
+	ids := []string{idOf(r.newSource(t, first)), idOf(r.newSource(t, second)), idOf(r.newSource(t))}
 	name := r.attribute.Name
 	urn := string(r.source.kind.Schema) + ":" + name
 
 	for filter, want := range map[string][]string{
-		name + ".value eq " + quoted(first):                  ids[:1],
-		name + "[value eq " + quoted(first) + "]":            ids[:1],
-		"not (" + name + "[value eq " + quoted(first) + "])": ids[1:],
-		urn + ".value eq " + quoted(first):                   ids[:1],
+		name + ".value eq " + quoted(first):                       ids[:1],
+		name + "[value eq " + quoted(first) + "]":                 ids[:1],
+		"not (" + name + "[value eq " + quoted(first) + "])":      ids[1:],
+		urn + ".value eq " + quoted(first):                        ids[:1],
+		strings.ToLower(urn) + "[value eq " + quoted(first) + "]": ids[:1],
+		name + " pr":            ids[:2],
+		"not (" + name + " pr)": ids[2:],
 	} {
 		r.source.expectMatches(t, filter, ids, want)
 	}
