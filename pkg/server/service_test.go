@@ -12,7 +12,7 @@ import (
 
 // RFC 7643 Section 2.2: a service built with NewService enforces attribute characteristics.
 func TestNewServiceEnforcesCharacteristics(t *testing.T) {
-	repo := server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())
+	repo := server.NewMemoryRepository[*core.Group](basePath+"/Groups", groupSchemas())
 	service := server.NewService(repo, groupSchemas(), server.Limits{})
 
 	_, err := service.Create(context.Background(), core.Object{"schemas": []any{string(core.SchemaGroup)}})

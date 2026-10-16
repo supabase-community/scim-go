@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/supabase-community/scim-go/internal/memory"
 	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
@@ -15,7 +16,7 @@ const DefaultMaxBodySize = 1 << 20
 
 type Server struct {
 	mux           *http.ServeMux
-	db            *database
+	db            *memory.Memory
 	handler       http.Handler
 	authenticate  func(http.Handler) http.Handler
 	basePath      string
@@ -33,7 +34,7 @@ func New(basePath string, config *core.ServiceProviderConfig, options ...Option[
 	mux := http.NewServeMux()
 	s := &Server{
 		mux:          mux,
-		db:           newDatabase(),
+		db:           memory.New(),
 		basePath:     basePath,
 		config:       config,
 		limits:       limitsFrom(config),

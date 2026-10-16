@@ -105,7 +105,9 @@ func (c *Resource[T]) mount(s *Server, schemas core.Schemas) {
 	path := s.basePath + c.endpoint
 	build := c.build
 	if build == nil {
-		build = func(*Resource[T]) Repository[T] { return newRepository[T](s.db, c.Location(), schemas) }
+		build = func(*Resource[T]) Repository[T] {
+			return NewRepository[T](s.db.Store(c.Location(), schemas), schemas)
+		}
 	}
 	repository := build(c)
 	service := stamp(NewService(repository, schemas, s.limits, c.validators...), core.ResourceTypeName(c.name), c.Location())

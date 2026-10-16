@@ -46,7 +46,7 @@ func TestServerStampsMetaOnWhatTheRepositoryReturns(t *testing.T) {
 	schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
 	client := newClient(t, server.New(basePath, fullServiceProviderConfig(), server.WithBaseURL("https://example.com/scim/v2"), server.WithResource(
 		server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
-			WithRepository(bareRepository{server.NewRepository[*core.User]("", schemas)}),
+			WithRepository(bareRepository{server.NewMemoryRepository[*core.User]("", schemas)}),
 	)))
 	created := scimtest.Decode[core.User](t, client.Post(t, basePath+"/Users", core.User{UserName: "bjensen"}))
 	patch := protocol.PatchRequest{Schemas: []core.SchemaURI{protocol.SchemaPatchOp}, Operations: []patch.Operation{{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Barbara"`)}}}

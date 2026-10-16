@@ -1,22 +1,32 @@
-package server
+package memory
 
 import (
 	"slices"
 
+	"github.com/supabase-community/scim-go/internal/fields"
 	"github.com/supabase-community/scim-go/internal/value"
+	"github.com/supabase-community/scim-go/pkg/core"
 	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/protocol"
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
+	"github.com/supabase-community/scim-go/pkg/store"
 )
 
 type predicate func(row any) bool
 
 type evaluator struct {
-	fields
+	fields.Fields
 }
 
-func newEvaluator(fields fields) protocol.Evaluator[predicate] {
-	return &evaluator{fields: fields}
+func newEvaluator(all fields.Fields, schemas core.Schemas) protocol.Evaluator[predicate] {
+	return &evaluator{Fields: withoutPassword(all, schemas.Base())}
+}
+
+// RFC 7643 Section 4.1.1: a held password SHOULD be hashed, so it cannot be compared.
+func withoutPassword(all fields.Fields, base *core.Schema) fields.Fields {
+	return slices.DeleteFunc(slices.Clone(all), func(f fields.Field) bool {
+		return f.Name == store.PasswordAttribute && slices.Contains(base.Attributes, f.Attribute)
+	})
 }
 
 func (e *evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, literal any) (predicate, error) {
@@ -56,8 +66,8 @@ func (e *evaluator) Not(operand predicate) (predicate, error) {
 }
 
 func (e *evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() (predicate, error)) (predicate, error) {
-	list, ok := e.lookup(attribute.Definition)
-	if !ok || !list.isList() {
+	list, ok := e.Lookup(attribute.Definition)
+	if !ok || !list.IsList() {
 		return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 	}
 	inner, err := valueFilter()
@@ -65,17 +75,17 @@ func (e *evaluator) ValuePath(attribute *protocol.Attribute, valueFilter func() 
 		return nil, err
 	}
 	return func(row any) bool {
-		return slices.ContainsFunc(list.elements(value.AsObject(row)), inner)
+		return slices.ContainsFunc(list.Elements(value.AsObject(row)), inner)
 	}, nil
 }
 
 func (e *evaluator) reader(attribute *protocol.Attribute) (func(row any) any, error) {
 	definition := attribute.Definition
 	if attribute.Parent != nil {
-		return func(row any) any { return coerce(definition, value.AsObject(row).Get(definition.Name)) }, nil
+		return func(row any) any { return fields.Coerce(definition, value.AsObject(row).Get(definition.Name)) }, nil
 	}
-	if field, ok := e.lookup(definition); ok {
-		return func(row any) any { return field.value(value.AsObject(row)) }, nil
+	if field, ok := e.Lookup(definition); ok {
+		return func(row any) any { return field.Value(value.AsObject(row)) }, nil
 	}
 	return nil, scimerrors.ErrInvalidFilter(scimerrors.InvalidFilter.Description())
 }

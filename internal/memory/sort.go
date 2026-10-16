@@ -1,4 +1,4 @@
-package server
+package memory
 
 import (
 	"github.com/supabase-community/scim-go/internal/value"

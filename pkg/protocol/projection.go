@@ -21,6 +21,7 @@ type Projection struct {
 	included names
 	excluded names
 	written  names
+	plain    bool
 }
 
 type projectionKey struct{}
@@ -58,13 +59,16 @@ func newProjection(schemas core.Schemas, attributes, excluded []string) (Project
 	if err != nil {
 		return Projection{}, err
 	}
-	return Projection{schemas: schemas, included: included, excluded: excludedNames}, nil
+	return Projection{schemas: schemas, included: included, excluded: excludedNames, plain: len(attributes)+len(excluded) == 0 && plainSchemas(schemas)}, nil
 }
 
 // Returns reports whether any part of an attribute, named as in RFC 7644 Section 3.10, can appear in a response.
 func (p Projection) Returns(name string) bool {
+	if len(p.schemas) == 0 {
+		return true
+	}
 	path, err := filter.NewAttrPath(name)
-	if err != nil || len(p.schemas) == 0 {
+	if err != nil {
 		return true
 	}
 	uri := core.SchemaURI(path.URI)
@@ -237,6 +241,9 @@ func (p Projection) write(written names, raw string) names {
 }
 
 func (v projected) MarshalJSON() ([]byte, error) {
+	if typed, ok := v.projection.passthrough(v.resource); ok {
+		return json.Marshal(typed)
+	}
 	document, err := core.NewObject(v.resource)
 	if err != nil {
 		return nil, err
@@ -245,6 +252,31 @@ func (v projected) MarshalJSON() ([]byte, error) {
 	prune(document, v.projection.project)
 	v.projection.fillSchemas(document)
 	return json.Marshal(document)
+}
+
+func (p Projection) passthrough(resource any) (core.Resource, bool) {
+	typed, ok := resource.(core.Resource)
+	if !ok || !p.plain {
+		return nil, false
+	}
+	common, base := typed.Common(), p.schemas.Base()
+	if common.Meta.ResourceType == "" {
+		common.Meta.ResourceType = base.Name
+	}
+	if len(common.Schemas) == 0 {
+		common.Schemas = []core.SchemaURI{base.ID}
+	}
+	return typed, true
+}
+
+func plainSchemas(schemas core.Schemas) bool {
+	return len(schemas) == 1 && !slices.ContainsFunc(schemas[0].Attributes, func(attribute *core.Attribute) bool {
+		return filtered(attribute) || slices.ContainsFunc(attribute.SubAttributes, filtered)
+	})
+}
+
+func filtered(attribute *core.Attribute) bool {
+	return value.Hidden(nil, attribute) || attribute.Returned == core.ReturnedRequest
 }
 
 func (n names) covers(name string) bool {

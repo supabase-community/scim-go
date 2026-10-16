@@ -8,7 +8,7 @@ FUZZTIME ?= 30s
 
 .PHONY: clean
 clean:
-	rm -rf $(COVERAGE) dist
+	rm -rf bin $(COVERAGE) dist
 
 .PHONY: build
 build:

@@ -33,7 +33,7 @@ func (r *recorder) hooks() server.Hooks[*core.Group] {
 func TestHooks(t *testing.T) {
 	ctx := context.Background()
 	newService := func(hooks server.Hooks[*core.Group]) server.Service[*core.Group] {
-		repo := server.NewRepository[*core.Group](basePath+"/Groups", groupSchemas())
+		repo := server.NewMemoryRepository[*core.Group](basePath+"/Groups", groupSchemas())
 		return hooks.Wrap(server.NewService(repo, groupSchemas(), server.Limits{}))
 	}
 	group := func(name string) core.Object {

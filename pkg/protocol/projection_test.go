@@ -345,6 +345,24 @@ func TestProjectionAll(t *testing.T) {
 	assert.JSONEq(t, `[{`+schema+`, "userName": "bjensen", "id": "1"}, {`+schema+`, "userName": "jsmith", "id": "2"}]`, string(raw))
 }
 
+func TestProjectionPassthroughMatchesProjection(t *testing.T) {
+	schemas := core.Schemas{core.NewSchema(core.SchemaGroup).WithName("Group").With(core.GroupAttributes()...)}
+	group := &core.Group{DisplayName: "Admins", Members: []core.Member{{Value: "u1", Type: "User"}}}
+	group.ID = "42"
+	plain, err := protocol.ParseProjection(url.Values{}, schemas)
+	require.NoError(t, err)
+	walked, err := protocol.ParseProjection(url.Values{"excludedAttributes": {"nope"}}, schemas)
+	require.NoError(t, err)
+	want, err := json.Marshal(walked.Of(&core.Group{Base: group.Base, DisplayName: group.DisplayName, Members: group.Members}))
+	require.NoError(t, err)
+
+	got, err := json.Marshal(plain.Of(group))
+
+	require.NoError(t, err)
+	assert.JSONEq(t, string(want), string(got))
+	assert.Contains(t, string(got), `"resourceType":"Group"`)
+}
+
 func keys(m map[string]any) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

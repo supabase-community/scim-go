@@ -222,7 +222,7 @@ func TestListValidatesTheQueryBeforeTheRepository(t *testing.T) {
 
 func TestWithRepository(t *testing.T) {
 	attributes := core.UserAttributes()
-	repository := server.NewRepository[*core.User](basePath+"/Users", []*core.Schema{core.NewSchema(core.SchemaUser).With(attributes...)})
+	repository := server.NewMemoryRepository[*core.User](basePath+"/Users", []*core.Schema{core.NewSchema(core.SchemaUser).With(attributes...)})
 	existing, err := repository.Create(t.Context(), &core.User{UserName: "bjensen"})
 	require.NoError(t, err)
 
@@ -243,7 +243,7 @@ func TestWithRepositoryFunc(t *testing.T) {
 		server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).
 			WithRepositoryFunc(func(resource *server.Resource[*core.User]) server.Repository[*core.User] {
 				location, schemas = resource.Location(), resource.Schemas()
-				return server.NewRepository[*core.User](location, schemas)
+				return server.NewMemoryRepository[*core.User](location, schemas)
 			}),
 	))
 
@@ -308,7 +308,7 @@ func TestWithAuthentication(t *testing.T) {
 	t.Run("passes the validator's context to the repository", func(t *testing.T) {
 		var tenant string
 		schemas := []*core.Schema{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
-		repository := tenantRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), tenant: &tenant}
+		repository := tenantRepository{Repository: server.NewMemoryRepository[*core.User](basePath+"/Users", schemas), tenant: &tenant}
 		srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(repository)),
 			server.WithAuthentication(core.NewOAuthBearerToken().AsPrimary(), server.RequireBearerToken(

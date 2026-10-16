@@ -201,7 +201,7 @@ func newTestHandler(tb testing.TB, options ...testOption) http.Handler {
 		server.WithDatabase(db),
 		server.WithResource(server.NewResource[*core.Group]("Group", "/Groups", core.SchemaGroup, core.GroupAttributes()...)),
 		server.WithResource(server.NewResource[*widget]("Widget", "/Widgets", widgetSchema, widgetAttributes()...).
-			WithRepository(inspectingRepository{server.NewRepository[*widget](basePath+"/Widgets", core.Schemas{
+			WithRepository(inspectingRepository{server.NewMemoryRepository[*widget](basePath+"/Widgets", core.Schemas{
 				core.NewSchema(widgetSchema).WithName("Widget").With(widgetAttributes()...),
 			})})),
 		server.WithResource(server.NewResource[*kit]("Kit", "/Kits", kitSchema, kitAttributes()...)),

@@ -477,7 +477,7 @@ func TestRFC7643UserResourceSchema(t *testing.T) {
 		}
 
 		group := createGroup(t, srv, &core.Group{DisplayName: "earth", Members: []core.Member{{Value: id}}})
-		want := []core.GroupMembership{{Value: group.ID}}
+		want := []core.GroupMembership{{Value: group.ID, Type: "direct"}}
 		assert.Equal(t, want, groupsOf())
 
 		require.Equal(t, http.StatusOK, srv.Patch(t, basePath+"/"+"Users/"+id, patchOf(patch.Operation{Op: patch.OpReplace, Path: "displayName", Value: json.RawMessage(`"Barbara"`)})).StatusCode)
@@ -558,6 +558,21 @@ func TestRFC7643ReferenceValuesExist(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, post("/Groups", &core.Group{DisplayName: "c", Members: []core.Member{{Value: ids["bjensen"]}, {Value: group.ID}}}).StatusCode)
 	assert.Equal(t, http.StatusCreated, post("/Users", asManager(ids["bjensen"])).StatusCode)
 	assert.Equal(t, http.StatusCreated, post("/Users", asManager("missing")).StatusCode)
+}
+
+func TestRejectsGroupMembershipCycles(t *testing.T) {
+	srv := newTestServer(t)
+	outer := createGroup(t, srv, &core.Group{DisplayName: "outer"})
+	inner := createGroup(t, srv, &core.Group{DisplayName: "inner"})
+	require.Equal(t, http.StatusOK, srv.Put(t, basePath+"/Groups/"+outer.ID, &core.Group{DisplayName: "outer", Members: []core.Member{{Value: inner.ID}}}).StatusCode)
+
+	for name, group := range map[string]core.Group{"self": outer, "ancestor": inner} {
+		group.Members = []core.Member{{Value: outer.ID}}
+		response := srv.Put(t, basePath+"/Groups/"+group.ID, &group)
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode, name)
+		assert.Equal(t, scimerrors.InvalidValue, scimtest.Decode[scimerrors.Error](t, response).ScimType, name)
+	}
 }
 
 func TestReplaceStoresUnknownManagerAsSent(t *testing.T) {
@@ -690,6 +705,18 @@ func TestRFC7643EnterpriseUserSchemaExtension(t *testing.T) {
 
 		response := srv.Get(t, basePath+"/Users/"+reportID)
 		assert.Equal(t, &core.Manager{Value: managerID}, scimtest.Decode[core.User](t, response).EnterpriseUser.Manager)
+	})
+
+	// RFC 7643 Section 2.3.7: deleting a manager clears the reference from the users it managed.
+	t.Run("clears the manager from a report when the manager is deleted", func(t *testing.T) {
+		srv := newTestServer(t)
+		managerID, _ := create(t, srv, &core.User{UserName: "jsmith", DisplayName: "John Smith"})
+		reportID, _ := create(t, srv, &core.User{UserName: "bjensen", EnterpriseUser: &core.EnterpriseUser{Manager: &core.Manager{Value: managerID}}})
+
+		require.Equal(t, http.StatusNoContent, srv.Delete(t, basePath+"/Users/"+managerID).StatusCode)
+
+		report := scimtest.Decode[core.User](t, srv.Get(t, basePath+"/Users/"+reportID))
+		assert.Nil(t, report.EnterpriseUser)
 	})
 
 	// RFC 7644 Section 3.14: the returned version matches the stored one when a user manages itself.
@@ -2512,7 +2539,7 @@ func TestRFC7644Attributes(t *testing.T) {
 	// RFC 7644 Section 3.9: attributes and excludedAttributes shape the resource representation that is returned.
 	t.Run("hands the repository the projection of a read and of a write's result", func(t *testing.T) {
 		schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
-		repository := &projectingRepository[*core.User]{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas), attribute: "emails"}
+		repository := &projectingRepository[*core.User]{Repository: server.NewMemoryRepository[*core.User](basePath+"/Users", schemas), attribute: "emails"}
 		srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 			server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(repository)),
 		))
@@ -2994,7 +3021,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 			})
 		}
 
-		t.Run("PATCH remove of an unassigned immutable sub-attribute of a matched member is a no-op", func(t *testing.T) {
+		t.Run("PATCH remove of the server-assigned type of a matched member is rejected", func(t *testing.T) {
 			srv := newTestServer(t)
 			ids := seedUsers(t, srv, "u-1")
 			id := createGroup(t, srv, &core.Group{DisplayName: "eng", Members: []core.Member{{Value: ids["u-1"]}}}).ID
@@ -3004,7 +3031,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 				Operations: []patch.Operation{{Op: patch.OpRemove, Path: ids.fill(`members[value eq "u-1"].type`)}},
 			})
 
-			require.Equal(t, http.StatusOK, response.StatusCode)
+			require.Equal(t, http.StatusBadRequest, response.StatusCode)
 		})
 
 		t.Run("resending a member by value and display alone twice keeps type and never stores $ref", func(t *testing.T) {
@@ -3084,7 +3111,7 @@ func TestRFC7644ReplacingWithPUT(t *testing.T) {
 		newCountingUser := func(t *testing.T) (*scimtest.Client, *countingRepository, string) {
 			t.Helper()
 			schemas := core.Schemas{core.NewSchema(core.SchemaUser).With(core.UserAttributes()...)}
-			repository := &countingRepository{Repository: server.NewRepository[*core.User](basePath+"/Users", schemas)}
+			repository := &countingRepository{Repository: server.NewMemoryRepository[*core.User](basePath+"/Users", schemas)}
 			srv := newClient(t, server.New(basePath, fullServiceProviderConfig(),
 				server.WithResource(server.NewResource[*core.User]("User", "/Users", core.SchemaUser, core.UserAttributes()...).WithRepository(repository)),
 			))
@@ -4964,8 +4991,8 @@ func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 		}
 	})
 
-	// RFC 7644 Section 7.5.2: HTTP POST is the remedy for a sensitive filter refused in a GET.
-	t.Run("accepts a POST .search filter for equality on a writeOnly attribute", func(t *testing.T) {
+	// RFC 7644 Section 3.12: a password is not stored in clear text, so no filter on it is supported.
+	t.Run("rejects a POST .search filter on the password with invalidFilter", func(t *testing.T) {
 		srv := newTestServer(t)
 		create(t, srv, &core.User{UserName: "bjensen", Password: "hunter2"})
 
@@ -4973,13 +5000,14 @@ func TestRFC7644DisclosureOfSensitiveInformationInURIs(t *testing.T) {
 			filter string
 			status int
 		}{
-			{`password eq \"hunter2\"`, http.StatusOK},
+			{`password eq \"hunter2\"`, http.StatusBadRequest},
 			{`password sw \"hun\"`, http.StatusBadRequest},
 		} {
 			body := `{"schemas":["urn:ietf:params:scim:api:messages:2.0:SearchRequest"],"filter":"` + query.filter + `"}`
 			response := srv.Post(t, basePath+"/Users/.search", []byte(body))
 
-			assert.Equal(t, query.status, response.StatusCode, "filter: %s", query.filter)
+			require.Equal(t, query.status, response.StatusCode, "filter: %s", query.filter)
+			assert.Equal(t, scimerrors.InvalidFilter, scimtest.Decode[scimerrors.Error](t, response).ScimType, "filter: %s", query.filter)
 		}
 	})
 
