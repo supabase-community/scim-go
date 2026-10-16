@@ -201,6 +201,7 @@ func (r filtering) checkPrecedence(t *testing.T) {
 	r.expectMatches(t, idFilter(ids[0])+" or "+idFilter(ids[1])+" and "+idFilter(ids[2]), ids, ids[:1])
 	r.expectMatches(t, "not ("+idFilter(ids[0])+") and "+idFilter(ids[1]), ids, ids[1:2])
 	r.expectMatches(t, "("+idFilter(ids[0])+" or "+idFilter(ids[1])+") and "+idFilter(ids[1]), ids, ids[1:2])
+	r.expectMatches(t, "not (not ("+idFilter(ids[0])+"))", ids, ids[:1])
 }
 
 func (r filtering) checkCanonicalTypes(t *testing.T) {
