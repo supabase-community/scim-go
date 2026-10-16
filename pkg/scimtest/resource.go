@@ -29,7 +29,6 @@ type resource struct {
 	kind      core.ResourceType
 	schemas   core.Schemas
 	fixture   fixture
-	full      fixture
 	transport transport
 	searching int
 }
@@ -247,10 +246,11 @@ func (r *resource) body(t *testing.T, unique string) core.Object {
 func (r *resource) fullBody(t *testing.T) core.Object {
 	t.Helper()
 
-	if r.full == nil {
+	full, ok := fullFixtures()[r.kind.Name]
+	if !ok {
 		t.Skipf("n/a: no full fixture for %s", r.kind.Name)
 	}
-	body := r.build(t, r.full, newUnique())
+	body := r.build(t, full, newUnique())
 	for _, h := range holders(r.schemas, body) {
 		for _, attribute := range h.schema.Attributes {
 			if isReference(attribute) {
