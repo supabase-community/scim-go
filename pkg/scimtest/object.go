@@ -53,6 +53,14 @@ func metaOf(object core.Object) map[string]any {
 	return meta
 }
 
+func commonValue(object core.Object, path string) string {
+	if name, ok := strings.CutPrefix(path, "meta."); ok {
+		value, _ := metaOf(object)[name].(string)
+		return value
+	}
+	return idOf(object)
+}
+
 func objectOf(value any) map[string]any {
 	object, _ := value.(map[string]any)
 	return object

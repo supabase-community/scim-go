@@ -147,25 +147,38 @@ func (r filtering) checkMeta(t *testing.T) {
 	_, first := r.create(t, newUnique())
 	_, second := r.create(t, newUnique())
 	ids := []string{idOf(first), idOf(second)}
-	r.expectMatches(t, "meta.resourceType eq "+quoted(string(r.kind.Name)), ids, ids)
+	kind := quoted(string(r.kind.Name))
+	r.expectMatches(t, "meta pr", ids, ids)
+	r.expectMatches(t, "meta.resourceType eq "+kind, ids, ids)
 	r.expectMatches(t, "meta.resourceType eq \"scimtest\"", ids, nil)
-	r.expectMatches(t, "meta.resourceType ne "+quoted(string(r.kind.Name)), ids, nil)
-	for _, name := range []string{"created", "lastModified"} {
-		t.Run(name, func(t *testing.T) {
-			earlier, _ := metaOf(first)[name].(string)
-			later, _ := metaOf(second)[name].(string)
-			if earlier == later {
-				t.Skipf("n/a: both resources have meta.%s %s", name, earlier)
-			}
-			path := "meta." + name
-			r.expectMatches(t, path+" gt "+quoted(earlier), ids, ids[1:])
-			r.expectMatches(t, path+" ge "+quoted(earlier), ids, ids)
-			r.expectMatches(t, path+" eq "+quoted(earlier), ids, ids[:1])
-			r.expectMatches(t, path+" ne "+quoted(earlier), ids, ids[1:])
-			r.expectMatches(t, path+" le "+quoted(earlier), ids, ids[:1])
-			r.expectMatches(t, path+" lt "+quoted(later), ids, ids[:1])
-		})
+	r.expectMatches(t, "meta.resourceType ne "+kind, ids, nil)
+	r.expectMatches(t, "meta.resourceType ge "+kind+" and meta.resourceType le "+kind, ids, ids)
+	r.expectMatches(t, "meta.resourceType gt "+kind+" or meta.resourceType lt "+kind, ids, nil)
+	for _, path := range []string{"id", "meta.created", "meta.lastModified", "meta.location", "meta.version"} {
+		t.Run(path, func(t *testing.T) { r.expectOrdered(t, path, first, second) })
 	}
+}
+
+// RFC 7644 Section 3.4.2.2: gt, ge, lt and le order strings lexically and dateTimes chronologically.
+func (r filtering) expectOrdered(t *testing.T, path string, first, second core.Object) {
+	t.Helper()
+
+	earlier, later := commonValue(first, path), commonValue(second, path)
+	if earlier == "" || earlier == later {
+		t.Skipf("n/a: both resources have %s %q", path, earlier)
+	}
+	low, high := first, second
+	if dated := path == "meta.created" || path == "meta.lastModified"; !dated && earlier > later {
+		earlier, later, low, high = later, earlier, second, first
+	}
+	ids := []string{idOf(low), idOf(high)}
+	r.expectMatches(t, path+" pr", ids, ids)
+	r.expectMatches(t, path+" gt "+quoted(earlier), ids, ids[1:])
+	r.expectMatches(t, path+" ge "+quoted(earlier), ids, ids)
+	r.expectMatches(t, path+" eq "+quoted(earlier), ids, ids[:1])
+	r.expectMatches(t, path+" ne "+quoted(earlier), ids, ids[1:])
+	r.expectMatches(t, path+" le "+quoted(earlier), ids, ids[:1])
+	r.expectMatches(t, path+" lt "+quoted(later), ids, ids[:1])
 }
 
 // RFC 7644 Section 3.4.2.2: "not" takes precedence over "and", which takes precedence over "or".
