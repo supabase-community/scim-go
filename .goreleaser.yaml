@@ -20,3 +20,4 @@ changelog:
   disable: true
 release:
   mode: append
+  use_existing_draft: true
