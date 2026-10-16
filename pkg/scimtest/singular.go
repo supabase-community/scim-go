@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
+	"github.com/supabase-community/scim-go/pkg/filter"
 	"github.com/supabase-community/scim-go/pkg/patch"
 )
 
@@ -26,12 +27,16 @@ func newSingulars(resources []*resource) []singular {
 
 func singularsIn(resources []*resource, source *resource, schema *core.Schema) []singular {
 	found := []singular{}
+	var extension *core.Schema
+	if source.schemas.IsExtension(schema) {
+		extension = schema
+	}
 	for _, attribute := range schema.Attributes {
 		if attribute.MultiValued || attribute.Mutability != core.MutabilityReadWrite {
 			continue
 		}
 		if targets := targetsOf(resources, attribute.ReferenceTargets()); len(targets) > 0 {
-			found = append(found, singular{source: source, target: targets[0], extension: extensionOf(source.schemas, schema), attribute: attribute})
+			found = append(found, singular{source: source, target: targets[0], extension: extension, attribute: attribute})
 		}
 	}
 	return found
@@ -56,10 +61,10 @@ func (r singular) checkStored(t *testing.T) {
 func (r singular) checkFiltered(t *testing.T) {
 	supports(t, "filter", r.source.config.Filter.Supported)
 	id := r.newTarget(t)
-	ids := []string{idOf(r.newSource(t, id)), idOf(r.newSource(t))}
+	ids := []string{idOf(r.newSource(t, id)), idOf(r.newSource(t, ""))}
 
-	r.source.expectMatches(t, r.path()+".value eq "+quoted(id), ids, ids[:1])
-	r.source.expectMatches(t, r.path()+" pr", ids, ids[:1])
+	r.source.expectMatches(t, r.path(valueSub)+" eq "+quoted(id), ids, ids[:1])
+	r.source.expectMatches(t, r.path("")+" pr", ids, ids[:1])
 }
 
 // RFC 7644 Section 3.5.2.3: replace sets the value of the targeted sub-attribute.
@@ -68,14 +73,14 @@ func (r singular) checkReplace(t *testing.T) {
 	source := r.newSource(t, r.newTarget(t))
 	second := r.newTarget(t)
 
-	r.patch(t, source, op(patch.OpReplace, r.path()+"."+valueSub, second))
+	r.patch(t, source, op(patch.OpReplace, r.path(valueSub), second))
 	r.expectValue(t, source, second)
 }
 
 // RFC 7644 Section 3.5.2.2: remove unassigns the targeted attribute and leaves the others.
 func (r singular) checkRemove(t *testing.T) {
 	supports(t, "patch", r.source.config.Patch.Supported)
-	for _, path := range []string{r.path(), r.path() + "." + valueSub} {
+	for _, path := range []string{r.path(""), r.path(valueSub)} {
 		t.Run(path, func(t *testing.T) {
 			sibling := r.sibling()
 			source := r.newSource(t, r.newTarget(t))
@@ -83,7 +88,7 @@ func (r singular) checkRemove(t *testing.T) {
 			r.patch(t, source, op(patch.OpRemove, path, nil))
 			read := r.source.read(t, source)
 			if got := r.holder(read).Get(r.attribute.Name); got != nil {
-				t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want unassigned", r.source.path(source), r.path(), got)
+				t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want unassigned", r.source.path(source), r.path(""), got)
 			}
 			if sibling != nil && r.holder(read).Get(sibling.Name) == nil {
 				t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): removing %s also removed %s", r.source.path(source), path, sibling.Name)
@@ -96,15 +101,15 @@ func (r singular) checkRemove(t *testing.T) {
 func (r singular) checkProjected(t *testing.T) {
 	id := r.newTarget(t)
 	source := r.newSource(t, id)
-	path := r.source.path(source) + "?" + url.Values{attributesParam: {r.path() + "." + valueSub}}.Encode()
+	path := r.source.path(source) + "?" + url.Values{attributesParam: {r.path(valueSub)}}.Encode()
 
 	got := core.Object(objectOf(r.holder(get[core.Object](t, r.source.client(), path, "RFC 7644 3.4.2.5")).Get(r.attribute.Name)))
 	if len(got) != 1 || got.Get(valueSub) != id {
-		t.Errorf("scimtest: GET %s (RFC 7644 3.4.2.5): %s is %v, want only value %s", path, r.path(), map[string]any(got), id)
+		t.Errorf("scimtest: GET %s (RFC 7644 3.4.2.5): %s is %v, want only value %s", path, r.path(""), map[string]any(got), id)
 	}
 }
 
-func (r singular) newSource(t *testing.T, ids ...string) core.Object {
+func (r singular) newSource(t *testing.T, id string) core.Object {
 	t.Helper()
 
 	body := r.source.body(t, newUnique())
@@ -112,7 +117,7 @@ func (r singular) newSource(t *testing.T, ids ...string) core.Object {
 	if sibling := r.sibling(); sibling != nil {
 		holder[sibling.Name] = placeholder + " " + newUnique()
 	}
-	for _, id := range ids {
+	if id != "" {
 		holder[r.attribute.Name] = map[string]any{valueSub: id}
 	}
 	if r.extension == nil {
@@ -132,15 +137,16 @@ func (r singular) expectValue(t *testing.T, source core.Object, id string) {
 
 	got := core.Object(objectOf(r.holder(r.source.read(t, source)).Get(r.attribute.Name)))
 	if got.Get(valueSub) != id {
-		t.Errorf("scimtest: GET %s (RFC 7643 2.3.7): %s is %v, want value %s", r.source.path(source), r.path(), map[string]any(got), id)
+		t.Errorf("scimtest: GET %s (RFC 7643 2.3.7): %s is %v, want value %s", r.source.path(source), r.path(""), map[string]any(got), id)
 	}
 }
 
-func (r singular) path() string {
-	if r.extension == nil {
-		return r.attribute.Name
+func (r singular) path(sub string) string {
+	path := filter.AttrPath{Name: r.attribute.Name, SubAttribute: sub}
+	if r.extension != nil {
+		path.URI = string(r.extension.ID)
 	}
-	return string(r.extension.ID) + ":" + r.attribute.Name
+	return path.String()
 }
 
 func (r singular) holder(object core.Object) core.Object {
@@ -155,11 +161,4 @@ func (r singular) sibling() *core.Attribute {
 		return nil
 	}
 	return firstOf(r.extension.Attributes, isFilterable)
-}
-
-func extensionOf(schemas core.Schemas, schema *core.Schema) *core.Schema {
-	if schemas.IsExtension(schema) {
-		return schema
-	}
-	return nil
 }

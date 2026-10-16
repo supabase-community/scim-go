@@ -79,7 +79,7 @@ func (s *Suite) Run(t *testing.T) {
 				t.Run(string(reference.source.kind.Name)+"."+reference.attribute.Name+" to "+string(reference.target.kind.Name), reference.run)
 			}
 			for _, reference := range newSingulars(resources) {
-				t.Run(string(reference.source.kind.Name)+"."+reference.path()+" to "+string(reference.target.kind.Name), reference.run)
+				t.Run(string(reference.source.kind.Name)+"."+reference.path("")+" to "+string(reference.target.kind.Name), reference.run)
 			}
 		})
 		t.Run("3.1 Common Attributes", identifying{resources}.run)
