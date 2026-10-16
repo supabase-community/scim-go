@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/supabase-community/scim-go/compare/v0.22.0...v0.23.0) (2026-10-16)
+
+
+### Features
+
+* **store:** add a Store interface and serve the default server from an in-memory store ([078faec](https://github.com/supabase-community/scim-go/commit/078faece98ee3f77dc4e379e5e1f50d962ac9e6e))
+
 ## [0.22.0](https://github.com/supabase-community/scim-go/compare/v0.21.0...v0.22.0) (2026-10-16)
 
 
