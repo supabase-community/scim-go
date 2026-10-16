@@ -62,7 +62,7 @@ func Primary(element any) bool {
 
 // Observed returns the folded value a comparison sees, per RFC 7643, Section 2.4.
 func Observed(attribute *core.Attribute, raw any) any {
-	return Fold(attribute, Defaulted(attribute, raw))
+	return attribute.Fold(Defaulted(attribute, raw))
 }
 
 // Defaulted returns false for an unspecified "primary", which SHALL be assumed to be false, per RFC 7643, Section 2.4.

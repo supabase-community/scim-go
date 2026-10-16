@@ -1,6 +1,9 @@
 package core
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // Attribute describes one attribute of a schema, per RFC 7643, Section 7.
 type Attribute struct {
@@ -121,6 +124,18 @@ func (a *Attribute) Coerce(value any) (any, bool) {
 		return nil, true
 	}
 	return a.Type.coerce(value)
+}
+
+// Fold lowercases a string value unless it is case exact; binary and reference values always are, per RFC 7643, Sections 2.3.6 and 2.3.7.
+func (a *Attribute) Fold(value any) any {
+	s, ok := value.(string)
+	if !ok || a.CaseExact || a.Type == TypeBinary || a.Type == TypeReference {
+		return value
+	}
+	if lower := strings.ToLower(s); lower != s {
+		return lower
+	}
+	return value
 }
 
 func elements(name string, value *Attribute, types ...string) *Attribute {

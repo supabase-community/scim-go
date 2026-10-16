@@ -316,6 +316,22 @@ func TestAttributeCoerce(t *testing.T) {
 	})
 }
 
+func TestAttributeFold(t *testing.T) {
+	t.Run("lowercases a string that is not case exact", func(t *testing.T) {
+		assert.Equal(t, "bjensen", core.NewAttribute("userName", core.TypeString).Fold("BJensen"))
+	})
+
+	t.Run("preserves a case exact string", func(t *testing.T) {
+		assert.Equal(t, "BJensen", core.NewAttribute("id", core.TypeString).AsCaseExact().Fold("BJensen"))
+	})
+
+	// RFC 7643 Sections 2.3.6 and 2.3.7: binary and reference values are case exact.
+	t.Run("preserves binary and reference values", func(t *testing.T) {
+		assert.Equal(t, "QUJD", core.NewAttribute("x509", core.TypeBinary).Fold("QUJD"))
+		assert.Equal(t, "https://Example.com/Users/A", core.NewAttribute("$ref", core.TypeReference).Fold("https://Example.com/Users/A"))
+	})
+}
+
 func TestNewMultiValuedAttribute(t *testing.T) {
 	attribute := core.NewMultiValuedAttribute("emails", "work", "home")
 

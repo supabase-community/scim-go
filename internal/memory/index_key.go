@@ -39,7 +39,7 @@ func uniqueKeys(field fields.Field, object core.Object) []any {
 }
 
 func uniqueKey(attribute *core.Attribute, v any) any {
-	switch folded := value.Fold(attribute, v).(type) {
+	switch folded := attribute.Fold(v).(type) {
 	case string, int64, float64, bool:
 		return folded
 	case time.Time:

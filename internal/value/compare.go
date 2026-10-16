@@ -24,18 +24,6 @@ func Allowed(t core.AttributeType, op filter.Operator) bool {
 	return false
 }
 
-// Fold lowercases a string value unless it is case exact; binary and reference values always are, per RFC 7643, Sections 2.3.6 and 2.3.7.
-func Fold(attribute *core.Attribute, value any) any {
-	s, ok := value.(string)
-	if !ok || attribute.CaseExact || attribute.Type == core.TypeBinary || attribute.Type == core.TypeReference {
-		return value
-	}
-	if lower := strings.ToLower(s); lower != s {
-		return lower
-	}
-	return value
-}
-
 func Equal(attribute *core.Attribute, a, b any) bool {
 	if order, ok := Compare(canonical(attribute, a), canonical(attribute, b)); ok {
 		return order == 0
@@ -87,7 +75,7 @@ func Compare(a, b any) (int, bool) {
 }
 
 func canonical(attribute *core.Attribute, value any) any {
-	return Fold(attribute, typed(attribute, value))
+	return attribute.Fold(typed(attribute, value))
 }
 
 func typed(attribute *core.Attribute, value any) any {

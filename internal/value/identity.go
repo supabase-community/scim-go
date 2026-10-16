@@ -19,13 +19,13 @@ func Identity(attribute *core.Attribute, element core.Object) string {
 	if !ok {
 		return ""
 	}
-	folded := Fold(sub, key)
+	folded := sub.Fold(key)
 	kind := attribute.SubAttribute("type")
 	if kind == nil || kind.Mutability != core.MutabilityReadWrite {
 		name, _ := folded.(string)
 		return name
 	}
-	typ := Fold(kind, element.Get(kind.Name))
+	typ := kind.Fold(element.Get(kind.Name))
 	if IsUnassigned(typ) {
 		typ = nil
 	}

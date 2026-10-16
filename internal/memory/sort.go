@@ -37,6 +37,6 @@ func compareAscending(attribute *core.Attribute, a, b any) int {
 	case bMissing:
 		return -1
 	}
-	order, _ := value.Compare(value.Fold(attribute, a), value.Fold(attribute, b))
+	order, _ := value.Compare(attribute.Fold(a), attribute.Fold(b))
 	return order
 }

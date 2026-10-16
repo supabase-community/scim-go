@@ -127,7 +127,7 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 		}
 		expected, ok := literal(typed, op, want)
 		actual, _ := typed.Coerce(got)
-		return ok && value.Match(op, value.Fold(typed, actual), expected)
+		return ok && value.Match(op, typed.Fold(actual), expected)
 	}, nil
 }
 
@@ -158,7 +158,7 @@ func (m matcher) check(attr *core.Attribute, op filter.Operator, want any) error
 
 func literal(attr *core.Attribute, op filter.Operator, want any) (any, bool) {
 	coerced, ok := attr.Coerce(want)
-	return value.Fold(attr, coerced), ok && value.Allowed(attr.Type, op)
+	return attr.Fold(coerced), ok && value.Allowed(attr.Type, op)
 }
 
 func isSimple(attr *core.Attribute) bool {

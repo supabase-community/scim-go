@@ -104,7 +104,7 @@ func bucketKey(attribute *core.Attribute, v any) string {
 		raw, _ := json.Marshal(normalizeZero(value))
 		return string(raw)
 	}
-	raw, _ := json.Marshal(Fold(attribute, v))
+	raw, _ := json.Marshal(attribute.Fold(v))
 	return string(raw)
 }
 
