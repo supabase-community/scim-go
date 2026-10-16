@@ -19,6 +19,7 @@ func (r patching) run(t *testing.T) {
 	t.Helper()
 
 	t.Run("replaces an attribute", r.checkReplaceByPath)
+	t.Run("replaces a boolean", r.checkReplaceBoolean)
 	t.Run("rejects removing a required attribute", r.checkRequired)
 	t.Run("adds attributes without a path", r.checkAddWithoutPath)
 	t.Run("unassigns a removed attribute", r.checkRemove)
@@ -60,6 +61,17 @@ func (r patching) checkReplaceByPath(t *testing.T) {
 	want := "scimtest " + newUnique()
 	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, attribute.Name, want))), created)
 	r.expectValue(t, created, attribute.Name, want)
+}
+
+func (r patching) checkReplaceBoolean(t *testing.T) {
+	supports(t, "patch", r.config.Patch.Supported)
+	attribute := r.attribute(t, "readWrite singular boolean attribute", isWritableBoolean)
+	_, created := r.create(t, newUnique())
+
+	for _, want := range []bool{false, true} {
+		r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, attribute.Name, want))), created)
+		r.expectValue(t, created, attribute.Name, want)
+	}
 }
 
 func (r patching) checkRequired(t *testing.T) {
