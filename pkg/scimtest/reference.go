@@ -39,12 +39,14 @@ func (r referencing) run(t *testing.T) {
 	t.Run("stores the referenced values", r.checkStored)
 	t.Run("adds values", r.checkAdd)
 	t.Run("returns the values in a query", r.checkQueried)
+	t.Run("finds the source by a value", r.checkFiltered)
 	t.Run("removes a value by filter", r.checkRemoveFiltered)
 	t.Run("replaces the values", r.checkReplace)
 	t.Run("replaces the values with PUT", r.checkPut)
 	t.Run("removes every value without a filter", r.checkRemoveAll)
 	t.Run("rejects a change to an immutable value", r.checkImmutable)
 	t.Run("lists the source on the readOnly inverse", r.checkInverse)
+	t.Run("types a nested source as indirect", r.checkIndirect)
 	t.Run("drops a deleted target", r.checkDeletedTarget)
 }
 
@@ -76,6 +78,24 @@ func (r referencing) checkQueried(t *testing.T) {
 	}
 	if got, want := valuesIn(page.Resources[0], r.attribute.Name), slices.Sorted(slices.Values(ids)); !slices.Equal(got, want) {
 		t.Errorf("scimtest: %s (RFC 7643 2.3.7): %s values %v, want %v", r.source.describe(query), r.attribute.Name, got, want)
+	}
+}
+
+// RFC 7644 Section 3.4.2.2: a filter matches a sub-attribute of any value, alone or in a value path.
+func (r referencing) checkFiltered(t *testing.T) {
+	supports(t, "filter", r.source.config.Filter.Supported)
+	first, second := r.newTarget(t), r.newTarget(t)
+	ids := []string{idOf(r.newSource(t, first)), idOf(r.newSource(t, second))}
+	name := r.attribute.Name
+	urn := string(r.source.kind.Schema) + ":" + name
+
+	for filter, want := range map[string][]string{
+		name + ".value eq " + quoted(first):                  ids[:1],
+		name + "[value eq " + quoted(first) + "]":            ids[:1],
+		"not (" + name + "[value eq " + quoted(first) + "])": ids[1:],
+		urn + ".value eq " + quoted(first):                   ids[:1],
+	} {
+		r.source.expectMatches(t, filter, ids, want)
 	}
 }
 
@@ -142,9 +162,39 @@ func (r referencing) checkInverse(t *testing.T) {
 	if got := valuesIn(r.target.read(t, target), r.inverse.Name); !slices.Contains(got, idOf(source)) {
 		t.Errorf("scimtest: GET %s (RFC 7643 4.1.2): %s %v, want %s", r.target.path(target), r.inverse.Name, got, idOf(source))
 	}
+	r.expectType(t, target, idOf(source), "direct")
 	r.patch(t, source, op(patch.OpRemove, r.attribute.Name+"[value eq "+quoted(first)+"]", nil))
 	if got := valuesIn(r.target.read(t, target), r.inverse.Name); slices.Contains(got, idOf(source)) {
 		t.Errorf("scimtest: GET %s (RFC 7643 4.1.2): %s %v, want no %s", r.target.path(target), r.inverse.Name, got, idOf(source))
+	}
+}
+
+// RFC 7643 Section 4.1.2: membership through a nested source is "indirect".
+func (r referencing) checkIndirect(t *testing.T) {
+	r.source.suite.should(t, "RFC 7643 4.1.2 a membership through a nested group is typed indirect")
+	r.patchable(t)
+	if r.inverse == nil || len(targetsOf([]*resource{r.source}, referenceTargetsOf(r.attribute))) == 0 {
+		t.Skipf("n/a: %s.%s cannot nest %s", r.source.kind.Name, r.attribute.Name, r.source.kind.Name)
+	}
+	first := r.newTarget(t)
+	child := r.newSource(t, first)
+	parent := r.newSource(t)
+	r.patch(t, parent, op(patch.OpAdd, r.attribute.Name, members(idOf(child))))
+	target := core.Object{"id": first}
+
+	if element := elementWith(r.target.read(t, target), r.inverse.Name, idOf(parent)); element == nil {
+		t.Skipf("n/a: %s lists direct memberships only", r.inverse.Name)
+	}
+	r.expectType(t, target, idOf(parent), "indirect")
+}
+
+func (r referencing) expectType(t *testing.T, target core.Object, id, want string) {
+	t.Helper()
+
+	r.source.suite.should(t, "RFC 7643 4.1.2 groups.type is direct or indirect")
+	element := elementWith(r.target.read(t, target), r.inverse.Name, id)
+	if kind, ok := element[typeSub]; ok && kind != want {
+		t.Errorf("scimtest: GET %s (RFC 7643 4.1.2): %s %s has type %v, want %s", r.target.path(target), r.inverse.Name, id, kind, want)
 	}
 }
 

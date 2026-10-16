@@ -53,6 +53,15 @@ func valuesIn(object core.Object, name string) []string {
 	return values
 }
 
+func elementWith(object core.Object, name, id string) map[string]any {
+	for _, element := range elementsOf(object.Get(name)) {
+		if element[valueSub] == id {
+			return element
+		}
+	}
+	return nil
+}
+
 func members(ids ...string) []any {
 	values := make([]any, 0, len(ids))
 	for _, id := range ids {

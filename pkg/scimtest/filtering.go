@@ -167,7 +167,7 @@ func (r filtering) checkCanonicalTypes(t *testing.T) {
 	supports(t, "filter", r.config.Filter.Supported)
 	typed := slices.DeleteFunc(slices.Clone(r.schemas.Base().Attributes), func(a *core.Attribute) bool {
 		kind := a.SubAttributes.Lookup(typeSub)
-		return !a.MultiValued || a.Mutability != core.MutabilityReadWrite || kind == nil || len(kind.CanonicalValues) < 2
+		return !a.MultiValued || a.Mutability != core.MutabilityReadWrite || kind == nil || len(kind.CanonicalValues) < 2 || isReference(a)
 	})
 	if len(typed) == 0 {
 		t.Skipf("n/a: %s has no multi-valued attribute with a canonical type", r.kind.Name)
