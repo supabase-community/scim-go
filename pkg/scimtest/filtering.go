@@ -122,9 +122,19 @@ func (r filtering) checkValuePath(t *testing.T) {
 		body.Set(attribute.Name, []any{map[string]any{typeSub: kinds[0], valueSub: values[0]}, map[string]any{typeSub: kinds[1], valueSub: values[1]}})
 		ids = append(ids, idOf(r.seed(t, body)))
 	}
-	filter := attribute.Name + "[type eq " + quoted(kinds[0]) + " and value eq " + quoted(alpha) + "]"
+	first, second := "type eq "+quoted(kinds[0]), "type eq "+quoted(kinds[1])
 
-	r.expectMatches(t, filter, ids, ids[:1])
+	for filter, want := range map[string][]string{
+		first + " and value eq " + quoted(alpha):                                                      ids[:1],
+		first + " and value ne " + quoted(beta):                                                       ids[:1],
+		first + " and value sw " + quoted(alpha[:len(alpha)-1]):                                       ids[:1],
+		first + " and not (value eq " + quoted(beta) + ")":                                            ids[:1],
+		first + " and (value eq " + quoted(alpha) + " or value eq \"scimtest\")":                      ids[:1],
+		first + " and value eq " + quoted(alpha) + " or " + second + " and value eq " + quoted(alpha): ids,
+		first + " and not (value pr)":                                                                 nil,
+	} {
+		r.expectMatches(t, attribute.Name+"["+filter+"]", ids, want)
+	}
 }
 
 func (r filtering) checkBooleanEquals(t *testing.T) {
