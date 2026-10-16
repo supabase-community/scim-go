@@ -1,6 +1,7 @@
 package scimtest
 
 import (
+	"net/http"
 	"net/url"
 	"slices"
 	"testing"
@@ -38,6 +39,7 @@ func (r projecting) run(t *testing.T) {
 	})
 	t.Run("returns a requested sub-attribute only", r.checkSubAttribute)
 	t.Run("projects an extension attribute", r.checkExtension)
+	t.Run("rejects attributes with excludedAttributes", func(t *testing.T) { r.checkExclusive(t, created, attribute.Name) })
 	for _, tr := range transports {
 		t.Run("never excludes id from a query over "+tr.name, func(t *testing.T) { r.checkListedID(t, tr, idOf(created)) })
 		t.Run("projects a query over "+tr.name, func(t *testing.T) { r.checkListed(t, tr, created, attribute.Name) })
@@ -109,6 +111,16 @@ func (r projecting) checkExtension(t *testing.T) {
 	if core.Object(objectOf(r.get(t, excluded).Get(uri))).Has(attribute.Name) {
 		t.Errorf("scimtest: GET %s (RFC 7644 3.4.2.5): %s is present", excluded, path)
 	}
+}
+
+// RFC 7644 Section 3.9: "attributes" and "excludedAttributes" are mutually exclusive.
+func (r projecting) checkExclusive(t *testing.T, created core.Object, name string) {
+	t.Helper()
+
+	r.suite.should(t, "RFC 7644 3.9 400 for both attributes and excludedAttributes")
+	path := r.path(created) + "?" + url.Values{attributesParam: {name}, excludedParam: {name}}.Encode()
+
+	RequireError(t, r.client().Get(t, path), http.StatusBadRequest, "")
 }
 
 func (r projecting) populated(t *testing.T) core.Object {

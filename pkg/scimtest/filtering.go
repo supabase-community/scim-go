@@ -45,6 +45,8 @@ func (r filtering) run(t *testing.T) {
 	t.Run("treats attribute names and operators as case-insensitive", r.checkNameCase)
 	t.Run("forbids a GET filter on a returned:never attribute", r.checkSensitive)
 	t.Run("finds every stored value by eq and pr", r.checkStored)
+	t.Run("compares an unassigned value with null", r.checkNull)
+	t.Run("folds non-ASCII case", r.checkUnicodeCase)
 }
 
 func (r filtering) checkID(t *testing.T) {
@@ -335,6 +337,36 @@ func (r filtering) checkStored(t *testing.T) {
 			paths[l.path] = true
 			r.expectMatches(t, l.path+" pr", ids, matching(ids, hasPath(others, l.path)))
 		}
+	}
+}
+
+// RFC 7643 Section 2.5: unassigned and null are equivalent in state.
+func (r filtering) checkNull(t *testing.T) {
+	r.suite.should(t, "RFC 7643 2.5 eq null matches an unassigned attribute")
+	supports(t, "filter", r.config.Filter.Supported)
+	attribute := r.attribute(t, "optional readWrite singular string attribute", func(a *core.Attribute) bool { return patchable(a) && !a.Required })
+	assigned := r.body(t, newUnique())
+	assigned.Set(attribute.Name, "scimtest "+newUnique())
+	unassigned := r.body(t, newUnique())
+	unassigned.Remove(attribute.Name)
+	ids := []string{idOf(r.seed(t, assigned)), idOf(r.seed(t, unassigned))}
+
+	r.expectMatches(t, attribute.Name+" eq null", ids, ids[1:])
+	r.expectMatches(t, attribute.Name+" ne null", ids, ids[:1])
+}
+
+// RFC 7644 Section 3.4.2.2: caseExact false compares without case, including non-ASCII letters.
+func (r filtering) checkUnicodeCase(t *testing.T) {
+	r.suite.should(t, "RFC 7644 3.4.2.2 caseExact false folds non-ASCII case")
+	supports(t, "filter", r.config.Filter.Supported)
+	attribute := r.attribute(t, "readWrite singular case-insensitive string attribute", func(a *core.Attribute) bool { return patchable(a) && !a.CaseExact })
+	unique := newUnique()
+	body := r.body(t, newUnique())
+	body.Set(attribute.Name, "scimtest \u00c9mile "+unique)
+	id := idOf(r.seed(t, body))
+
+	for _, op := range []string{"eq", "sw", "co"} {
+		r.expectMatches(t, attribute.Name+" "+op+" "+quoted("SCIMTEST \u00e9MILE "+strings.ToUpper(unique)), []string{id}, []string{id})
 	}
 }
 
