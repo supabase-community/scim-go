@@ -10,9 +10,13 @@ import (
 	"github.com/supabase-community/scim-go/pkg/scimerrors"
 )
 
+type link struct {
+	source *resource
+	target *resource
+}
+
 type referencing struct {
-	source    *resource
-	target    *resource
+	link
 	attribute *core.Attribute
 	inverse   *core.Attribute
 	optional  bool
@@ -31,6 +35,18 @@ func newReferencing(resources []*resource) []referencing {
 		}
 	}
 	return references
+}
+
+func (l link) newTarget(t *testing.T) string {
+	t.Helper()
+
+	_, created := l.target.create(t, newUnique())
+	return idOf(created)
+}
+
+func (l link) patch(t *testing.T, source core.Object, operation patch.Operation) {
+	t.Helper()
+	l.source.expectPatched(t, l.source.client().Patch(t, l.source.path(source), ops(operation)), source)
 }
 
 func (r referencing) run(t *testing.T) {
@@ -205,18 +221,6 @@ func (r referencing) checkDeletedTarget(t *testing.T) {
 
 	expectStatus(t, r.target.client().Delete(t, r.target.path(core.Object{"id": first})), http.StatusNoContent, "RFC 7644 3.6")
 	r.source.expectValues(t, source, r.attribute.Name, second)
-}
-
-func (r referencing) patch(t *testing.T, source core.Object, operation patch.Operation) {
-	t.Helper()
-	r.source.expectPatched(t, r.source.client().Patch(t, r.source.path(source), ops(operation)), source)
-}
-
-func (r referencing) newTarget(t *testing.T) string {
-	t.Helper()
-
-	_, created := r.target.create(t, newUnique())
-	return idOf(created)
 }
 
 func (r referencing) newSource(t *testing.T, ids ...string) core.Object {

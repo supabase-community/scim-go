@@ -9,8 +9,7 @@ import (
 )
 
 type singular struct {
-	source    *resource
-	target    *resource
+	link
 	extension *core.Schema
 	attribute *core.Attribute
 }
@@ -105,13 +104,6 @@ func (r singular) checkProjected(t *testing.T) {
 	}
 }
 
-func (r singular) newTarget(t *testing.T) string {
-	t.Helper()
-
-	_, created := r.target.create(t, newUnique())
-	return idOf(created)
-}
-
 func (r singular) newSource(t *testing.T, ids ...string) core.Object {
 	t.Helper()
 
@@ -133,11 +125,6 @@ func (r singular) newSource(t *testing.T, ids ...string) core.Object {
 	body.Set(schemasAttr, r.source.schemaURIs(body))
 	_, created := r.source.createBody(t, body)
 	return created
-}
-
-func (r singular) patch(t *testing.T, source core.Object, operation patch.Operation) {
-	t.Helper()
-	r.source.expectPatched(t, r.source.client().Patch(t, r.source.path(source), ops(operation)), source)
 }
 
 func (r singular) expectValue(t *testing.T, source core.Object, id string) {
