@@ -1422,6 +1422,30 @@ func TestRFC7644Filtering(t *testing.T) {
 		assert.Equal(t, scimerrors.InvalidFilter, scimtest.Decode[scimerrors.Error](t, response).ScimType)
 	})
 
+	t.Run("rejects an operator or path the attribute does not support", func(t *testing.T) {
+		srv := newTestServer(t)
+		manager := string(core.SchemaEnterpriseUser) + ":manager"
+
+		for _, filter := range []string{`active sw "t"`, `active ew "e"`, `emails.primary co "t"`, `meta.created co "2"`, `meta.lastModified sw "2"`, `meta.lastModified ew "Z"`, manager + `[value eq "x"]`, manager + `.$ref pr`} {
+			response := srv.Get(t, basePath+"/Users?"+url.Values{"filter": {filter}}.Encode())
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, filter)
+			assert.Equal(t, scimerrors.InvalidFilter, scimtest.Decode[scimerrors.Error](t, response).ScimType, filter)
+		}
+	})
+
+	// RFC 7644 Section 3.12, Table 9: invalidValue when the value is not compatible with the attribute type.
+	t.Run("rejects a value of the wrong type", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		for _, filter := range []string{`userName eq 5`, `active eq "true"`, `meta.created eq "x"`} {
+			response := srv.Get(t, basePath+"/Users?"+url.Values{"filter": {filter}}.Encode())
+
+			require.Equal(t, http.StatusBadRequest, response.StatusCode, filter)
+			assert.Equal(t, scimerrors.InvalidValue, scimtest.Decode[scimerrors.Error](t, response).ScimType, filter)
+		}
+	})
+
 	// RFC 7643 Section 3.1: "externalId" and "meta" are common attributes of every resource.
 	t.Run("filters by presence on the other common attributes", func(t *testing.T) {
 		srv := newTestServer(t)
@@ -2008,6 +2032,15 @@ func TestRFC7644Filtering(t *testing.T) {
 
 // RFC 7644 3.4.2.3 Sorting
 func TestRFC7644Sorting(t *testing.T) {
+	t.Run("rejects an unknown sortBy", func(t *testing.T) {
+		srv := newTestServer(t)
+
+		response := srv.Get(t, basePath+"/Users?"+url.Values{"sortBy": {"nope"}}.Encode())
+
+		require.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Equal(t, scimerrors.InvalidValue, scimtest.Decode[scimerrors.Error](t, response).ScimType)
+	})
+
 	// RFC 7644 Section 3.4.2.3: if "sortBy" is provided and no "sortOrder" is specified, "sortOrder" SHALL default to ascending.
 	t.Run("sorts ascending by default when only sortBy is given", func(t *testing.T) {
 		srv := newTestServer(t)
