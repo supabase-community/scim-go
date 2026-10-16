@@ -1,0 +1,39 @@
+package scimtest
+
+import (
+	"net/url"
+	"strings"
+	"testing"
+)
+
+type listing struct {
+	*resource
+}
+
+func (r listing) run(t *testing.T) {
+	t.Helper()
+
+	t.Run("returns a ListResponse", func(t *testing.T) { r.list(t, url.Values{}) })
+	t.Run("returns totalResults 0 when nothing matches", r.checkListEmpty)
+	t.Run("locates every listed resource", r.checkListLocations)
+}
+
+func (r listing) checkListEmpty(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	query := byID("scimtest-" + newUnique())
+
+	if page := r.list(t, query); page.TotalResults != 0 || len(page.Resources) != 0 {
+		t.Errorf("scimtest: %s (RFC 7644 3.4.2): totalResults %d with %d resources, want 0", r.describe(query), page.TotalResults, len(page.Resources))
+	}
+}
+
+func (r listing) checkListLocations(t *testing.T) {
+	r.create(t, newUnique())
+	query := url.Values{}
+
+	for _, object := range r.list(t, query).Resources {
+		if location, ok := metaOf(object)["location"].(string); ok && !strings.HasSuffix(location, r.path(object)) {
+			t.Errorf("scimtest: %s (RFC 7643 3.1): meta.location %q, want the URI of %s", r.describe(query), location, r.path(object))
+		}
+	}
+}

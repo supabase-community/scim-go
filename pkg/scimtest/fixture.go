@@ -51,10 +51,6 @@ func uniquified(value, unique string) string {
 	return value + "-" + unique
 }
 
-func isUnique(attribute *core.Attribute) bool {
-	return attribute.Uniqueness != "" && attribute.Uniqueness != core.UniquenessNone
-}
-
 func newUnique() string {
 	return strings.ToLower(rand.Text()[:12])
 }

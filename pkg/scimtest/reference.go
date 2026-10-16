@@ -131,11 +131,6 @@ func (r referencing) checkDeletedTarget(t *testing.T) {
 	r.source.expectValues(t, source, r.attribute.Name, second)
 }
 
-func (r referencing) patchable(t *testing.T) {
-	t.Helper()
-	supports(t, "patch", r.source.config.Patch.Supported)
-}
-
 func (r referencing) patch(t *testing.T, source core.Object, operation patch.Operation) {
 	t.Helper()
 	r.source.expectPatched(t, r.source.client().Patch(t, r.source.path(source), ops(operation)), source)
@@ -177,28 +172,4 @@ func inverseOf(target, source *resource) *core.Attribute {
 
 func baseReferences(r *resource) []core.ReferenceAttribute {
 	return core.Schemas{r.schemas.Base()}.ReferenceAttributes()
-}
-
-func isWritableList(attribute *core.Attribute) bool {
-	value := attribute.SubAttribute(valueSub)
-	return attribute.MultiValued && attribute.Mutability == core.MutabilityReadWrite && value != nil
-}
-
-func members(ids ...string) []any {
-	values := make([]any, 0, len(ids))
-	for _, id := range ids {
-		values = append(values, map[string]any{valueSub: id})
-	}
-	return values
-}
-
-func valuesIn(object core.Object, name string) []string {
-	values := []string{}
-	for _, element := range elementsOf(object.Get(name)) {
-		if value, ok := element[valueSub].(string); ok {
-			values = append(values, value)
-		}
-	}
-	slices.Sort(values)
-	return values
 }

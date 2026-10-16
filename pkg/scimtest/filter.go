@@ -164,9 +164,3 @@ func subSetter(holder func(core.Object) core.Object, attribute, sub *core.Attrib
 		holder(body).Set(attribute.Name, parent)
 	}
 }
-
-func isFilterable(attribute *core.Attribute) bool {
-	return attribute.Type == core.TypeString && !attribute.MultiValued &&
-		attribute.Mutability == core.MutabilityReadWrite && len(attribute.CanonicalValues) == 0 &&
-		(attribute.Returned == core.ReturnedDefault || attribute.Returned == core.ReturnedAlways)
-}

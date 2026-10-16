@@ -18,28 +18,28 @@ type patching struct {
 func (r patching) run(t *testing.T) {
 	t.Helper()
 
-	t.Run("replaces an attribute", r.checkPatchReplace)
-	t.Run("rejects removing a required attribute", r.checkPatchRequired)
-	t.Run("adds attributes without a path", r.checkPatchAdd)
-	t.Run("unassigns a removed attribute", r.checkPatchRemove)
-	t.Run("rejects a remove without a path", r.checkPatchNoPath)
-	t.Run("rejects a value filter without a match", r.checkPatchNoMatch)
-	t.Run("is atomic", r.checkPatchAtomic)
-	t.Run("rejects a body without the PatchOp schema", r.checkPatchSchema)
-	t.Run("adds an attribute by path", r.checkPatchAddPath)
-	t.Run("adds an unassigned attribute on replace", r.checkPatchReplaceUnassigned)
-	t.Run("keeps meta.lastModified when adding the current value", r.checkPatchUnchanged)
-	t.Run("adds and removes multi-valued values", r.checkPatchValues)
-	t.Run("keeps a single primary value", r.checkPatchPrimary)
-	t.Run("adds the extension schema with an extension attribute", r.checkPatchExtension)
-	t.Run("rejects an unknown op", r.checkPatchUnknownOp)
-	t.Run("rejects an unknown path", r.checkPatchUnknownPath)
-	t.Run("rejects a readOnly id", r.checkPatchReadOnly)
-	t.Run("rejects a body without operations", r.checkPatchEmpty)
-	t.Run("returns 200 with the requested attributes", r.checkPatchProjected)
+	t.Run("replaces an attribute", r.checkReplaceByPath)
+	t.Run("rejects removing a required attribute", r.checkRequired)
+	t.Run("adds attributes without a path", r.checkAddWithoutPath)
+	t.Run("unassigns a removed attribute", r.checkRemove)
+	t.Run("rejects a remove without a path", r.checkNoPath)
+	t.Run("rejects a value filter without a match", r.checkNoMatch)
+	t.Run("is atomic", r.checkAtomic)
+	t.Run("rejects a body without the PatchOp schema", r.checkSchema)
+	t.Run("adds an attribute by path", r.checkAddByPath)
+	t.Run("adds an unassigned attribute on replace", r.checkReplaceUnassigned)
+	t.Run("keeps meta.lastModified when adding the current value", r.checkUnchanged)
+	t.Run("adds and removes multi-valued values", r.checkValues)
+	t.Run("keeps a single primary value", r.checkPrimary)
+	t.Run("adds the extension schema with an extension attribute", r.checkExtension)
+	t.Run("rejects an unknown op", r.checkUnknownOp)
+	t.Run("rejects an unknown path", r.checkUnknownPath)
+	t.Run("rejects a readOnly id", r.checkReadOnly)
+	t.Run("rejects a body without operations", r.checkEmpty)
+	t.Run("returns 200 with the requested attributes", r.checkProjected)
 }
 
-func (r patching) checkPatchReplace(t *testing.T) {
+func (r patching) checkReplaceByPath(t *testing.T) {
 	if r.suite.unsupported(t, "patch", r.config.Patch.Supported) {
 		_, created := r.create(t, newUnique())
 		res := r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, "externalId", placeholder)))
@@ -56,7 +56,7 @@ func (r patching) checkPatchReplace(t *testing.T) {
 	r.expectValue(t, created, attribute.Name, want)
 }
 
-func (r patching) checkPatchRequired(t *testing.T) {
+func (r patching) checkRequired(t *testing.T) {
 	supports(t, "patch", r.config.Patch.Supported)
 	body := r.body(t, newUnique())
 	attribute := r.attribute(t, "required attribute in its fixture", required(body))
@@ -65,7 +65,7 @@ func (r patching) checkPatchRequired(t *testing.T) {
 	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, attribute.Name, nil))), http.StatusBadRequest, scimerrors.Mutability)
 }
 
-func (r patching) checkPatchAdd(t *testing.T) {
+func (r patching) checkAddWithoutPath(t *testing.T) {
 	created, attribute := r.patchTarget(t)
 	want := "scimtest " + newUnique()
 
@@ -74,7 +74,7 @@ func (r patching) checkPatchAdd(t *testing.T) {
 	r.expectValue(t, created, attribute.Name, want)
 }
 
-func (r patching) checkPatchRemove(t *testing.T) {
+func (r patching) checkRemove(t *testing.T) {
 	attribute := r.patchAttribute(t)
 	if attribute.Required {
 		t.Skipf("n/a: %s is required", attribute.Name)
@@ -90,13 +90,13 @@ func (r patching) checkPatchRemove(t *testing.T) {
 	r.expectValue(t, created, attribute.Name, nil)
 }
 
-func (r patching) checkPatchNoPath(t *testing.T) {
+func (r patching) checkNoPath(t *testing.T) {
 	created, _ := r.patchTarget(t)
 
 	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, "", nil))), http.StatusBadRequest, scimerrors.NoTarget)
 }
 
-func (r patching) checkPatchNoMatch(t *testing.T) {
+func (r patching) checkNoMatch(t *testing.T) {
 	created, _ := r.patchTarget(t)
 	attribute := r.attribute(t, "readWrite multi-valued complex attribute with a value", func(a *core.Attribute) bool {
 		return a.MultiValued && a.Type == core.TypeComplex && a.Mutability == core.MutabilityReadWrite && a.SubAttributes.Lookup(valueSub) != nil
@@ -106,7 +106,7 @@ func (r patching) checkPatchNoMatch(t *testing.T) {
 	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, path, map[string]string{valueSub: placeholder}))), http.StatusBadRequest, scimerrors.NoTarget)
 }
 
-func (r patching) checkPatchAtomic(t *testing.T) {
+func (r patching) checkAtomic(t *testing.T) {
 	created, attribute := r.patchTarget(t)
 	remove := r.attribute(t, "required attribute", required(created))
 
@@ -117,7 +117,7 @@ func (r patching) checkPatchAtomic(t *testing.T) {
 	r.expectValue(t, created, attribute.Name, created.Get(attribute.Name))
 }
 
-func (r patching) checkPatchSchema(t *testing.T) {
+func (r patching) checkSchema(t *testing.T) {
 	r.suite.should(t, "RFC 7644 Table 8 400 for a PATCH body without the PatchOp schema")
 	created, attribute := r.patchTarget(t)
 	body := ops(op(patch.OpReplace, attribute.Name, placeholder))
@@ -126,7 +126,7 @@ func (r patching) checkPatchSchema(t *testing.T) {
 	expectStatus(t, r.client().Patch(t, r.path(created), body), http.StatusBadRequest, "RFC 7644 3.5.2")
 }
 
-func (r patching) checkPatchAddPath(t *testing.T) {
+func (r patching) checkAddByPath(t *testing.T) {
 	created, attribute := r.patchTarget(t)
 	want := placeholder + " " + newUnique()
 
@@ -135,7 +135,7 @@ func (r patching) checkPatchAddPath(t *testing.T) {
 }
 
 // RFC 7644 Section 3.5.2.3: replacing an attribute that does not exist SHALL be treated as an "add".
-func (r patching) checkPatchReplaceUnassigned(t *testing.T) {
+func (r patching) checkReplaceUnassigned(t *testing.T) {
 	attribute := r.patchAttribute(t)
 	if attribute.Required {
 		t.Skipf("n/a: %s is required", attribute.Name)
@@ -150,7 +150,7 @@ func (r patching) checkPatchReplaceUnassigned(t *testing.T) {
 }
 
 // RFC 7644 Section 3.5.2.1: adding the current value SHALL NOT change the modify timestamp.
-func (r patching) checkPatchUnchanged(t *testing.T) {
+func (r patching) checkUnchanged(t *testing.T) {
 	attribute := r.patchAttribute(t)
 	body := r.body(t, newUnique())
 	current := placeholder + " " + newUnique()
@@ -164,7 +164,7 @@ func (r patching) checkPatchUnchanged(t *testing.T) {
 }
 
 // RFC 7644 Section 3.5.2.2: a multi-valued attribute without values SHALL be considered unassigned.
-func (r patching) checkPatchValues(t *testing.T) {
+func (r patching) checkValues(t *testing.T) {
 	attribute := r.valued(t)
 	unique := newUnique()
 	first, second := "first+"+unique+"@example.com", "second+"+unique+"@example.com"
@@ -183,7 +183,7 @@ func (r patching) checkPatchValues(t *testing.T) {
 }
 
 // RFC 7644 Section 3.5.2: setting "primary" to true SHALL set "primary" to false for the other values.
-func (r patching) checkPatchPrimary(t *testing.T) {
+func (r patching) checkPrimary(t *testing.T) {
 	attribute := r.valued(t)
 	if attribute.SubAttributes.Lookup("primary") == nil {
 		t.Skipf("n/a: %s has no primary", attribute.Name)
@@ -207,7 +207,7 @@ func (r patching) checkPatchPrimary(t *testing.T) {
 }
 
 // RFC 7644 Section 3.5.2: adding an extension attribute adds the extension URI to "schemas".
-func (r patching) checkPatchExtension(t *testing.T) {
+func (r patching) checkExtension(t *testing.T) {
 	supports(t, "patch", r.config.Patch.Supported)
 	extension, attribute := r.extended(t)
 	_, created := r.create(t, newUnique())
@@ -224,7 +224,7 @@ func (r patching) checkPatchExtension(t *testing.T) {
 	}
 }
 
-func (r patching) checkPatchUnknownOp(t *testing.T) {
+func (r patching) checkUnknownOp(t *testing.T) {
 	created, attribute := r.patchTarget(t)
 	body := ops(op(patch.OpReplace, attribute.Name, placeholder))
 	body.Operations[0].Op = "scimtest"
@@ -232,20 +232,20 @@ func (r patching) checkPatchUnknownOp(t *testing.T) {
 	RequireError(t, r.client().Patch(t, r.path(created), body), http.StatusBadRequest, scimerrors.InvalidSyntax)
 }
 
-func (r patching) checkPatchUnknownPath(t *testing.T) {
+func (r patching) checkUnknownPath(t *testing.T) {
 	r.suite.should(t, "RFC 7644 Table 9 400 invalidPath for a path to an undefined attribute")
 	created, _ := r.patchTarget(t)
 
 	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, "scimtest"+newUnique(), placeholder))), http.StatusBadRequest, scimerrors.InvalidPath)
 }
 
-func (r patching) checkPatchReadOnly(t *testing.T) {
+func (r patching) checkReadOnly(t *testing.T) {
 	created, _ := r.patchTarget(t)
 
 	RequireError(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, "id", "scimtest-"+newUnique()))), http.StatusBadRequest, scimerrors.Mutability)
 }
 
-func (r patching) checkPatchEmpty(t *testing.T) {
+func (r patching) checkEmpty(t *testing.T) {
 	r.suite.should(t, "RFC 7644 3.5.2 400 for a PATCH body without operations")
 	created, _ := r.patchTarget(t)
 
@@ -253,7 +253,7 @@ func (r patching) checkPatchEmpty(t *testing.T) {
 }
 
 // RFC 7644 Section 3.5.2: the server MUST return 200 OK if the "attributes" parameter is specified.
-func (r patching) checkPatchProjected(t *testing.T) {
+func (r patching) checkProjected(t *testing.T) {
 	created, attribute := r.patchTarget(t)
 	other := find(r.schemas.Base(), func(a *core.Attribute) bool {
 		return a.Returned == core.ReturnedDefault && a.Name != attribute.Name && created.Has(a.Name)
@@ -312,20 +312,4 @@ func (r patching) expectValue(t *testing.T, object core.Object, name string, wan
 	if got := r.read(t, object).Get(name); got != want {
 		t.Errorf("scimtest: GET %s (RFC 7644 3.5.2): %s is %v, want %v", r.path(object), name, got, want)
 	}
-}
-
-func elementsOf(value any) []map[string]any {
-	list, _ := value.([]any)
-	elements := make([]map[string]any, 0, len(list))
-	for _, element := range list {
-		if object, ok := element.(map[string]any); ok {
-			elements = append(elements, object)
-		}
-	}
-	return elements
-}
-
-func objectOf(value any) map[string]any {
-	object, _ := value.(map[string]any)
-	return object
 }
