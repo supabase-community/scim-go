@@ -3,7 +3,6 @@ package server
 import (
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/supabase-community/scim-go/internal/value"
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -32,7 +31,7 @@ func conforms(field field, candidate core.Object) error {
 	if field.Required && field.holder(candidate) != nil && isMissing(field.Attribute, raw) {
 		return scimerrors.ErrInvalidValue(strconv.Quote(field.Name) + " is required")
 	}
-	if isPrimaryField(field.Attribute) && count(values, true) > 1 {
+	if value.IsPrimary(field.Attribute) && count(values, true) > 1 {
 		return scimerrors.ErrInvalidValue(`"primary" may be true for at most one value`)
 	}
 	if field.Type == core.TypeBinary && !isEncoded(field, candidate) {
@@ -45,15 +44,11 @@ func conforms(field field, candidate core.Object) error {
 }
 
 func isConstrained(field field) bool {
-	return field.Required || isPrimaryField(field.Attribute) || len(field.CanonicalValues) > 0 || field.Type == core.TypeBinary
+	return field.Required || value.IsPrimary(field.Attribute) || len(field.CanonicalValues) > 0 || field.Type == core.TypeBinary
 }
 
 func isImmutable(field field) bool {
 	return field.Mutability == core.MutabilityImmutable && (field.parent == nil || !field.parent.MultiValued)
-}
-
-func isPrimaryField(attribute *core.Attribute) bool {
-	return strings.EqualFold(attribute.Name, "primary")
 }
 
 func isCanonical(field field, values []any) bool {

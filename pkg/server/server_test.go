@@ -2050,6 +2050,23 @@ func TestRFC7644Sorting(t *testing.T) {
 		assert.Equal(t, "u1", list.Resources[1].UserName)
 	})
 
+	// RFC 7643 Section 2.4: an unspecified "primary" SHALL be assumed to be false.
+	t.Run("sorts an unspecified primary as false", func(t *testing.T) {
+		srv := newTestServer(t)
+		yes, no := true, false
+		create(t, srv, &core.User{UserName: "unspecified", Emails: []core.Email{{Value: "a@example.com"}}})
+		create(t, srv, &core.User{UserName: "primary", Emails: []core.Email{{Value: "b@example.com", Primary: &yes}}})
+		create(t, srv, &core.User{UserName: "explicit", Emails: []core.Email{{Value: "c@example.com", Primary: &no}}})
+
+		path := basePath + "/Users?" + url.Values{"sortBy": {"emails.primary"}}.Encode()
+		response := srv.Get(t, path)
+
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		list := scimtest.Decode[protocol.ListResponse[*core.User]](t, response)
+		require.Len(t, list.Resources, 3)
+		assert.Equal(t, "primary", list.Resources[2].UserName)
+	})
+
 	// RFC 7644 Section 3.4.2.3: resources with no data for "sortBy" are ordered last if ascending and first if descending.
 	t.Run("resources both missing the sort attribute keep their relative order", func(t *testing.T) {
 		srv := newTestServer(t)

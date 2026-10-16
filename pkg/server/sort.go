@@ -27,6 +27,7 @@ func compareSortKeys(attribute *core.Attribute, a, b any, descending bool) int {
 }
 
 func compareAscending(attribute *core.Attribute, a, b any) int {
+	a, b = value.Defaulted(attribute, a), value.Defaulted(attribute, b)
 	aMissing, bMissing := value.IsUnassigned(a), value.IsUnassigned(b)
 	switch {
 	case aMissing && bMissing:

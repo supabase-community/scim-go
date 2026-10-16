@@ -38,8 +38,9 @@ var sections = []section{
 	{"3.5.1 Replacing with PUT", (*resource).checkReplace, false},
 	{"3.5.2 Modifying with PATCH", (*resource).checkPatch, false},
 	{"3.6 Deleting Resources", (*resource).checkDelete, false},
-	{"3.14 Versioning Resources", (*resource).checkVersioning, false},
 }
+
+var versionSection = section{"3.14 Versioning Resources", (*resource).checkVersioning, false}
 
 func NewSuite(c *Client, opts ...Option[*Suite]) *Suite {
 	s := &Suite{client: c, fixtures: defaultFixtures()}
@@ -67,23 +68,31 @@ func (s *Suite) Run(t *testing.T) {
 
 	d := s.discover(t)
 	resources := s.resources(d)
-	t.Run("RFC7644", func(t *testing.T) {
-		t.Run("4 Service Provider Configuration Endpoints", discovering{s, d, resources}.run)
-		for _, sec := range sections {
-			t.Run(sec.name, func(t *testing.T) {
-				for _, r := range resources {
-					t.Run(string(r.kind.Name), func(t *testing.T) { s.run(t, r, sec) })
-				}
-			})
-		}
-		t.Run("3.7 Bulk Operations", func(t *testing.T) { s.checkBulk(t, &d.config) })
-	})
 	t.Run("RFC7643", func(t *testing.T) {
 		t.Run("2.3.7 Reference", func(t *testing.T) {
 			for _, reference := range newReferencing(resources) {
-				t.Run(string(reference.source.kind.Name)+"."+reference.attribute.Name, reference.run)
+				t.Run(string(reference.source.kind.Name)+"."+reference.attribute.Name+" to "+string(reference.target.kind.Name), reference.run)
 			}
 		})
+		t.Run("3.1 Common Attributes", identifying{resources}.run)
+	})
+	t.Run("RFC7644", func(t *testing.T) {
+		for _, sec := range sections {
+			s.section(t, resources, sec)
+		}
+		t.Run("3.7 Bulk Operations", func(t *testing.T) { s.checkBulk(t, &d.config) })
+		s.section(t, resources, versionSection)
+		t.Run("4 Service Provider Configuration Endpoints", discovering{s, d, resources}.run)
+	})
+}
+
+func (s *Suite) section(t *testing.T, resources []*resource, sec section) {
+	t.Helper()
+
+	t.Run(sec.name, func(t *testing.T) {
+		for _, r := range resources {
+			t.Run(string(r.kind.Name), func(t *testing.T) { s.run(t, r, sec) })
+		}
 	})
 }
 
@@ -147,7 +156,7 @@ func (s *Suite) checkBulk(t *testing.T, config *core.ServiceProviderConfig) {
 	t.Helper()
 
 	if s.unsupported(t, "bulk", config.Bulk.Supported) {
-		body := map[string]any{"schemas": []core.SchemaURI{protocol.SchemaBulkRequest}, "Operations": []any{}}
+		body := map[string]any{schemasAttr: []core.SchemaURI{protocol.SchemaBulkRequest}, "Operations": []any{}}
 		expectStatus(t, s.client.Post(t, "/Bulk", body), http.StatusNotImplemented, "RFC 7644 3.12")
 		return
 	}

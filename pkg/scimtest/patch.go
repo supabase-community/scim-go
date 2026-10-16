@@ -37,6 +37,11 @@ func (r patching) run(t *testing.T) {
 	t.Run("rejects a readOnly id", r.checkReadOnly)
 	t.Run("rejects a body without operations", r.checkEmpty)
 	t.Run("returns 200 with the requested attributes", r.checkProjected)
+	t.Run("replaces attributes without a path", r.checkReplaceWithoutPath)
+	t.Run("replaces the values a value filter matches", r.checkReplaceFiltered)
+	t.Run("replaces a sub-attribute of the values a value filter matches", r.checkReplaceFilteredSub)
+	t.Run("keeps the sub-attributes a complex replace leaves out", r.checkReplaceComplex)
+	t.Run("unassigns a removed sub-attribute", r.checkRemoveSub)
 }
 
 func (r patching) checkReplaceByPath(t *testing.T) {
@@ -167,7 +172,7 @@ func (r patching) checkUnchanged(t *testing.T) {
 func (r patching) checkValues(t *testing.T) {
 	attribute := r.valued(t)
 	unique := newUnique()
-	first, second := "first+"+unique+"@example.com", "second+"+unique+"@example.com"
+	first, second := email("first", unique), email("second", unique)
 	body := r.body(t, newUnique())
 	body.Set(attribute.Name, []any{map[string]any{valueSub: first}})
 	_, created := r.createBody(t, body)
@@ -185,19 +190,19 @@ func (r patching) checkValues(t *testing.T) {
 // RFC 7644 Section 3.5.2: setting "primary" to true SHALL set "primary" to false for the other values.
 func (r patching) checkPrimary(t *testing.T) {
 	attribute := r.valued(t)
-	if attribute.SubAttributes.Lookup("primary") == nil {
+	if attribute.SubAttributes.Lookup(primarySub) == nil {
 		t.Skipf("n/a: %s has no primary", attribute.Name)
 	}
 	unique := newUnique()
-	first, second := "first+"+unique+"@example.com", "second+"+unique+"@example.com"
+	first, second := email("first", unique), email("second", unique)
 	body := r.body(t, newUnique())
-	body.Set(attribute.Name, []any{map[string]any{valueSub: first, "primary": true}})
+	body.Set(attribute.Name, []any{map[string]any{valueSub: first, primarySub: true}})
 	_, created := r.createBody(t, body)
 
-	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpAdd, attribute.Name, []any{map[string]any{valueSub: second, "primary": true}}))), created)
+	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpAdd, attribute.Name, []any{map[string]any{valueSub: second, primarySub: true}}))), created)
 	primaries := []any{}
 	for _, element := range elementsOf(r.read(t, created).Get(attribute.Name)) {
-		if element["primary"] == true {
+		if element[primarySub] == true {
 			primaries = append(primaries, element[valueSub])
 		}
 	}
@@ -209,14 +214,14 @@ func (r patching) checkPrimary(t *testing.T) {
 // RFC 7644 Section 3.5.2: adding an extension attribute adds the extension URI to "schemas".
 func (r patching) checkExtension(t *testing.T) {
 	supports(t, "patch", r.config.Patch.Supported)
-	extension, attribute := r.extended(t)
+	extension, attribute := r.extended(t, patchable)
 	_, created := r.create(t, newUnique())
 	path := string(extension.ID) + ":" + attribute.Name
 	want := placeholder + " " + newUnique()
 
 	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, path, want))), created)
 	read := r.read(t, created)
-	if raw, _ := json.Marshal(read.Get("schemas")); !strings.Contains(string(raw), string(extension.ID)) {
+	if raw, _ := json.Marshal(read.Get(schemasAttr)); !strings.Contains(string(raw), string(extension.ID)) {
 		t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2): schemas %s, want %s", r.path(created), raw, extension.ID)
 	}
 	if got := core.Object(objectOf(read.Get(string(extension.ID)))).Get(attribute.Name); got != want {
@@ -270,6 +275,72 @@ func (r patching) checkProjected(t *testing.T) {
 	}
 }
 
+// RFC 7644 Section 3.5.2.3: without a path, "value" SHALL contain the attributes to replace.
+func (r patching) checkReplaceWithoutPath(t *testing.T) {
+	created, attribute := r.patchTarget(t)
+	want := placeholder + " " + newUnique()
+
+	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, "", map[string]string{attribute.Name: want}))), created)
+	r.expectValue(t, created, attribute.Name, want)
+}
+
+// RFC 7644 Section 3.5.2.3: all values matching a value selection filter SHALL be replaced.
+func (r patching) checkReplaceFiltered(t *testing.T) {
+	attribute, created, first, second := r.twoValues(t)
+	third := email("third", newUnique())
+	path := attribute.Name + "[value eq " + quoted(first) + "]"
+
+	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, path, map[string]any{valueSub: third}))), created)
+	r.expectValues(t, created, attribute.Name, second, third)
+}
+
+func (r patching) checkReplaceFilteredSub(t *testing.T) {
+	r.suite.should(t, "RFC 7644 3.5.2.3 a value path with a sub-attribute replaces that sub-attribute of the matching values")
+	attribute, created, first, second := r.twoValues(t)
+	third := email("third", newUnique())
+	path := attribute.Name + "[value eq " + quoted(first) + "]." + valueSub
+
+	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, path, third))), created)
+	r.expectValues(t, created, attribute.Name, second, third)
+}
+
+func (r patching) checkReplaceComplex(t *testing.T) {
+	r.suite.should(t, "RFC 7644 3.5.2.3 sub-attributes a complex replace leaves out are left unchanged")
+	supports(t, "patch", r.config.Patch.Supported)
+	attribute, created, kept, replaced := r.complexTarget(t)
+	want := placeholder + " " + newUnique()
+
+	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpReplace, attribute.Name, map[string]any{replaced: want}))), created)
+	got := core.Object(objectOf(r.read(t, created).Get(attribute.Name)))
+	if got.Get(replaced) != want || got.Get(kept) != objectOf(created.Get(attribute.Name))[kept] {
+		t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.3): %s is %v, want %s replaced and %s kept", r.path(created), attribute.Name, map[string]any(got), replaced, kept)
+	}
+}
+
+// RFC 7644 Section 3.5.2.2: a removed single-value attribute SHALL be considered unassigned.
+func (r patching) checkRemoveSub(t *testing.T) {
+	supports(t, "patch", r.config.Patch.Supported)
+	attribute, created, kept, removed := r.complexTarget(t)
+
+	r.expectPatched(t, r.client().Patch(t, r.path(created), ops(op(patch.OpRemove, attribute.Name+"."+removed, nil))), created)
+	got := core.Object(objectOf(r.read(t, created).Get(attribute.Name)))
+	if got.Has(removed) || !got.Has(kept) {
+		t.Errorf("scimtest: PATCH %s (RFC 7644 3.5.2.2): %s is %v, want %s unassigned and %s kept", r.path(created), attribute.Name, map[string]any(got), removed, kept)
+	}
+}
+
+func (r patching) twoValues(t *testing.T) (*core.Attribute, core.Object, string, string) {
+	t.Helper()
+
+	attribute := r.valued(t)
+	unique := newUnique()
+	first, second := email("first", unique), email("second", unique)
+	body := r.body(t, newUnique())
+	body.Set(attribute.Name, []any{map[string]any{valueSub: first}, map[string]any{valueSub: second}})
+	_, created := r.createBody(t, body)
+	return attribute, created, first, second
+}
+
 func (r patching) valued(t *testing.T) *core.Attribute {
 	t.Helper()
 
@@ -277,18 +348,6 @@ func (r patching) valued(t *testing.T) *core.Attribute {
 	return r.attribute(t, "readWrite multi-valued complex attribute with a value", func(a *core.Attribute) bool {
 		return a.MultiValued && a.Type == core.TypeComplex && a.Mutability == core.MutabilityReadWrite && a.SubAttributes.Lookup(valueSub) != nil && a.SubAttributes.Lookup(valueSub).Mutability == core.MutabilityReadWrite
 	})
-}
-
-func (r patching) extended(t *testing.T) (*core.Schema, *core.Attribute) {
-	t.Helper()
-
-	for _, extension := range r.schemas.Extensions() {
-		if attribute := find(extension, patchable); attribute != nil {
-			return extension, attribute
-		}
-	}
-	t.Skipf("n/a: %s has no extension with a readWrite singular string attribute", r.kind.Name)
-	return nil, nil
 }
 
 func (r patching) patchTarget(t *testing.T) (core.Object, *core.Attribute) {

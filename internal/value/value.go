@@ -1,6 +1,10 @@
 package value
 
-import "github.com/supabase-community/scim-go/pkg/core"
+import (
+	"strings"
+
+	"github.com/supabase-community/scim-go/pkg/core"
+)
 
 // IsUnassigned reports nil, "", [] or {}, the values that RFC 7644 Section 3.4.2.2 "pr" treats as not present.
 func IsUnassigned(value any) bool {
@@ -54,6 +58,24 @@ func AsObject(element any) core.Object {
 
 func Primary(element any) bool {
 	return AsObject(element).Get("primary") == true
+}
+
+// Observed returns the folded value a comparison sees, per RFC 7643, Section 2.4.
+func Observed(attribute *core.Attribute, raw any) any {
+	return Fold(attribute, Defaulted(attribute, raw))
+}
+
+// Defaulted returns false for an unspecified "primary", which SHALL be assumed to be false, per RFC 7643, Section 2.4.
+func Defaulted(attribute *core.Attribute, raw any) any {
+	if raw == nil && IsPrimary(attribute) {
+		return false
+	}
+	return raw
+}
+
+// IsPrimary reports the "primary" sub-attribute of RFC 7643, Section 2.4.
+func IsPrimary(attribute *core.Attribute) bool {
+	return attribute.Type == core.TypeBoolean && strings.EqualFold(attribute.Name, "primary")
 }
 
 // Hidden reports an attribute, or the parent it belongs to, whose values SHALL NOT be returned, per RFC 7643, Section 7.

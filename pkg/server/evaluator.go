@@ -27,7 +27,9 @@ func (e *evaluator) Compare(attribute *protocol.Attribute, op filter.Operator, l
 	definition := attribute.Definition
 	want := value.Fold(definition, literal)
 	return func(row any) bool {
-		return anyMatch(read(row), func(raw any) bool { return value.Match(op, value.Fold(definition, raw), want) })
+		return anyMatch(read(row), func(raw any) bool {
+			return value.Match(op, value.Observed(definition, raw), want)
+		})
 	}, nil
 }
 

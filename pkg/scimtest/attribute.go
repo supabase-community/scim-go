@@ -14,6 +14,41 @@ func find(schema *core.Schema, match func(*core.Attribute) bool) *core.Attribute
 	return nil
 }
 
+func subOf(attribute *core.Attribute, match func(*core.Attribute) bool) *core.Attribute {
+	if i := slices.IndexFunc(attribute.SubAttributes, match); i >= 0 {
+		return attribute.SubAttributes[i]
+	}
+	return nil
+}
+
+func pathsOf(schema *core.Schema, match func(*core.Attribute) bool) map[string]*core.Attribute {
+	paths := map[string]*core.Attribute{}
+	for _, attribute := range schema.Attributes {
+		if match(attribute) {
+			paths[attribute.Name] = attribute
+		}
+		for _, sub := range attribute.SubAttributes {
+			if match(sub) {
+				paths[attribute.Name+"."+sub.Name] = sub
+			}
+		}
+	}
+	return paths
+}
+
+func extensionAttribute(schemas core.Schemas, match func(*core.Attribute) bool) (*core.Schema, *core.Attribute) {
+	for _, extension := range schemas.Extensions() {
+		if attribute := find(extension, match); attribute != nil {
+			return extension, attribute
+		}
+	}
+	return nil, nil
+}
+
+func filterableSubs(attribute *core.Attribute) core.Attributes {
+	return slices.DeleteFunc(slices.Clone(attribute.SubAttributes), func(sub *core.Attribute) bool { return !isFilterable(sub) })
+}
+
 func isReadOnly(attribute *core.Attribute) bool {
 	return attribute.Mutability == core.MutabilityReadOnly
 }
@@ -51,4 +86,9 @@ func isUnique(attribute *core.Attribute) bool {
 func isWritableList(attribute *core.Attribute) bool {
 	value := attribute.SubAttribute(valueSub)
 	return attribute.MultiValued && attribute.Mutability == core.MutabilityReadWrite && value != nil
+}
+
+func hasPrimary(attribute *core.Attribute) bool {
+	value := attribute.SubAttribute(valueSub)
+	return isWritableList(attribute) && value.Type == core.TypeString && value.Mutability == core.MutabilityReadWrite && attribute.SubAttribute(primarySub) != nil
 }

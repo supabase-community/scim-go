@@ -116,7 +116,7 @@ func (m matcher) leaf(path filter.AttrPath, op filter.Operator, want any) (predi
 		expected, ok := literal(attr, op, want)
 		return func(element any) bool {
 			actual, _ := attr.Coerce(field(element, path.Name))
-			return ok && value.Match(op, value.Fold(attr, actual), expected)
+			return ok && value.Match(op, value.Observed(attr, actual), expected)
 		}, nil
 	}
 	return func(element any) bool {

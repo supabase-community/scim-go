@@ -54,3 +54,7 @@ func uniquified(value, unique string) string {
 func newUnique() string {
 	return strings.ToLower(rand.Text()[:12])
 }
+
+func email(prefix, unique string) string {
+	return prefix + "+" + unique + "@example.com"
+}

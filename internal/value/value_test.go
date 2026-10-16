@@ -87,6 +87,20 @@ func TestPrimary(t *testing.T) {
 	}
 }
 
+func TestObserved(t *testing.T) {
+	primary := core.NewAttribute("Primary", core.TypeBoolean)
+	assert.Equal(t, false, value.Observed(primary, nil))
+	assert.Equal(t, true, value.Observed(primary, true))
+	assert.Nil(t, value.Observed(core.NewAttribute("active", core.TypeBoolean), nil))
+	assert.Equal(t, "ab", value.Observed(core.NewAttribute("name", core.TypeString), "AB"))
+}
+
+func TestDefaulted(t *testing.T) {
+	assert.Equal(t, false, value.Defaulted(core.NewAttribute("primary", core.TypeBoolean), nil))
+	assert.Nil(t, value.Defaulted(core.NewAttribute("primary", core.TypeString), nil))
+	assert.Nil(t, value.Defaulted(core.NewAttribute("active", core.TypeBoolean), nil))
+}
+
 func TestEqual(t *testing.T) {
 	assert.True(t, value.Equal(core.NewAttribute("userName", core.TypeString), "BJensen", "bjensen"))
 	assert.False(t, value.Equal(core.NewAttribute("id", core.TypeString).AsCaseExact(), "BJensen", "bjensen"))

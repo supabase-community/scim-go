@@ -15,6 +15,7 @@ type referencing struct {
 	target    *resource
 	attribute *core.Attribute
 	inverse   *core.Attribute
+	optional  bool
 }
 
 func newReferencing(resources []*resource) []referencing {
@@ -24,8 +25,8 @@ func newReferencing(resources []*resource) []referencing {
 			if !isWritableList(reference.Attribute) {
 				continue
 			}
-			if target := targetOf(resources, reference.Targets); target != nil {
-				references = append(references, referencing{source: source, target: target, attribute: reference.Attribute, inverse: inverseOf(target, source)})
+			for i, target := range targetsOf(resources, reference.Targets) {
+				references = append(references, referencing{source: source, target: target, attribute: reference.Attribute, inverse: inverseOf(target, source), optional: i > 0})
 			}
 		}
 	}
@@ -164,17 +165,21 @@ func (r referencing) newSource(t *testing.T, ids ...string) core.Object {
 
 	body := r.source.body(t, newUnique())
 	body.Set(r.attribute.Name, members(ids...))
+	if r.optional {
+		return r.source.seed(t, body)
+	}
 	_, created := r.source.createBody(t, body)
 	return created
 }
 
-func targetOf(resources []*resource, targets []core.ReferenceType) *resource {
+func targetsOf(resources []*resource, targets []core.ReferenceType) []*resource {
+	found := []*resource{}
 	for _, target := range targets {
 		if i := slices.IndexFunc(resources, func(r *resource) bool { return r.kind.Name.Reference() == target }); i >= 0 {
-			return resources[i]
+			found = append(found, resources[i])
 		}
 	}
-	return nil
+	return found
 }
 
 func inverseOf(target, source *resource) *core.Attribute {

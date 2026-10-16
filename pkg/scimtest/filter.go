@@ -8,10 +8,11 @@ import (
 )
 
 type filterCase struct {
-	op   string
-	expr func(target *filterTarget) string
-	want []int
-	fold bool
+	op    string
+	expr  func(target *filterTarget) string
+	want  []int
+	fold  bool
+	exact []int
 }
 
 type filterTarget struct {
@@ -30,18 +31,27 @@ type filterTable struct {
 	targets []*filterTarget
 }
 
+// RFC 7644 Section 3.4.2.2: case sensitivity SHALL be determined by the attribute's "caseExact".
 var filterCases = []filterCase{
 	{op: "eq", expr: func(f *filterTarget) string { return f.compare("eq", f.alpha) }, want: []int{0}},
 	{op: "eq case", expr: func(f *filterTarget) string { return f.compare("eq", strings.ToUpper(f.alpha)) }, want: []int{0}, fold: true},
 	{op: "ne", expr: func(f *filterTarget) string { return f.compare("ne", f.alpha) }, want: []int{1}},
+	{op: "ne case", expr: func(f *filterTarget) string { return f.compare("ne", strings.ToUpper(f.alpha)) }, want: []int{1}, fold: true, exact: []int{0, 1}},
 	{op: "co", expr: func(f *filterTarget) string { return f.compare("co", "alpha "+f.unique) }, want: []int{0}},
+	{op: "co case", expr: func(f *filterTarget) string { return f.compare("co", strings.ToUpper("alpha "+f.unique)) }, want: []int{0}, fold: true},
 	{op: "sw", expr: func(f *filterTarget) string { return f.compare("sw", "scimtest beta") }, want: []int{1}},
+	{op: "sw case", expr: func(f *filterTarget) string { return f.compare("sw", "SCIMTEST BETA") }, want: []int{1}, fold: true},
 	{op: "ew", expr: func(f *filterTarget) string { return f.compare("ew", " "+f.unique) }, want: []int{0, 1}},
+	{op: "ew case", expr: func(f *filterTarget) string { return f.compare("ew", " "+strings.ToUpper(f.unique)) }, want: []int{0, 1}, fold: true},
 	{op: "pr", expr: func(f *filterTarget) string { return f.path + " pr" }, want: []int{0, 1}},
 	{op: "gt", expr: func(f *filterTarget) string { return f.compare("gt", f.alpha) }, want: []int{1}},
+	{op: "gt case", expr: func(f *filterTarget) string { return f.compare("gt", strings.ToUpper(f.alpha)) }, want: []int{1}, fold: true, exact: []int{0, 1}},
 	{op: "ge", expr: func(f *filterTarget) string { return f.compare("ge", f.alpha) }, want: []int{0, 1}},
+	{op: "ge case", expr: func(f *filterTarget) string { return f.compare("ge", strings.ToUpper(f.alpha)) }, want: []int{0, 1}, fold: true, exact: []int{0, 1}},
 	{op: "lt", expr: func(f *filterTarget) string { return f.compare("lt", f.beta) }, want: []int{0}},
+	{op: "lt case", expr: func(f *filterTarget) string { return f.compare("lt", strings.ToUpper(f.beta)) }, want: []int{0}, fold: true},
 	{op: "le", expr: func(f *filterTarget) string { return f.compare("le", f.beta) }, want: []int{0, 1}},
+	{op: "le case", expr: func(f *filterTarget) string { return f.compare("le", strings.ToUpper(f.beta)) }, want: []int{0, 1}, fold: true},
 	{op: "not", expr: func(f *filterTarget) string { return "not (" + f.compare("eq", f.alpha) + ")" }, want: []int{1}},
 }
 
@@ -78,7 +88,7 @@ func (ft *filterTable) seed(t *testing.T, target *filterTarget) {
 	for _, value := range []string{target.alpha, target.beta} {
 		body := ft.r.body(t, newUnique())
 		target.set(body, value)
-		body.Set("schemas", ft.r.schemaURIs(body))
+		body.Set(schemasAttr, ft.r.schemaURIs(body))
 		_, created := ft.r.post(t, body)
 		if created == nil {
 			target.rejected = true
@@ -94,11 +104,13 @@ func (ft *filterTable) check(t *testing.T, target *filterTarget, tc filterCase) 
 	if target.rejected {
 		t.Skipf("n/a: the server rejected %q as %s", target.alpha, target.path)
 	}
-	want := make([]string, 0, len(tc.want))
-	if !tc.fold || !target.caseExact {
-		for _, i := range tc.want {
-			want = append(want, target.ids[i])
-		}
+	indices := tc.want
+	if tc.fold && target.caseExact {
+		indices = tc.exact
+	}
+	want := make([]string, 0, len(indices))
+	for _, i := range indices {
+		want = append(want, target.ids[i])
 	}
 	ft.r.expectMatches(t, tc.expr(target), target.ids, want)
 }

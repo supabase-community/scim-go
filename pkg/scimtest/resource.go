@@ -18,7 +18,9 @@ import (
 const (
 	typeSub     = "type"
 	valueSub    = "value"
+	primarySub  = "primary"
 	placeholder = "scimtest"
+	schemasAttr = "schemas"
 )
 
 type resource struct {
@@ -100,6 +102,29 @@ func (r *resource) attribute(t *testing.T, what string, match func(*core.Attribu
 		t.Skipf("n/a: %s has no %s", r.kind.Name, what)
 	}
 	return attribute
+}
+
+func (r *resource) extended(t *testing.T, match func(*core.Attribute) bool) (*core.Schema, *core.Attribute) {
+	t.Helper()
+
+	extension, attribute := extensionAttribute(r.schemas, match)
+	if extension == nil {
+		t.Skipf("n/a: %s has no extension with a readWrite singular string attribute", r.kind.Name)
+	}
+	return extension, attribute
+}
+
+func (r *resource) complexTarget(t *testing.T) (*core.Attribute, core.Object, string, string) {
+	t.Helper()
+
+	attribute := r.attribute(t, "readWrite singular complex attribute with two string sub-attributes", func(a *core.Attribute) bool {
+		return a.Type == core.TypeComplex && !a.MultiValued && a.Mutability == core.MutabilityReadWrite && len(filterableSubs(a)) > 1
+	})
+	subs := filterableSubs(attribute)
+	body := r.body(t, newUnique())
+	body.Set(attribute.Name, map[string]any{subs[0].Name: placeholder + " " + newUnique(), subs[1].Name: placeholder + " " + newUnique()})
+	_, created := r.createBody(t, body)
+	return attribute, created, subs[0].Name, subs[1].Name
 }
 
 func (r *resource) expectPatched(t *testing.T, res *http.Response, object core.Object) {
@@ -196,14 +221,6 @@ func (r *resource) expectMatches(t *testing.T, filter string, ours, want []strin
 	}
 }
 
-func (r *resource) expectIDs(t *testing.T, query url.Values, want []string, section string) {
-	t.Helper()
-
-	if got := idsOf(r.list(t, query).Resources); !slices.Equal(got, want) {
-		t.Errorf("scimtest: %s (%s): ids %v, want %v", r.describe(query), section, got, want)
-	}
-}
-
 func (r *resource) expectPage(t *testing.T, query url.Values, most, total int) {
 	t.Helper()
 
@@ -283,8 +300,13 @@ func (r *resource) body(t *testing.T, unique string) core.Object {
 	}
 	object.Remove("id")
 	object.Remove("meta")
-	object.Set("schemas", r.schemaURIs(object))
+	object.Set(schemasAttr, r.schemaURIs(object))
 	return object
+}
+
+func (r *resource) withExtension(body core.Object, extension *core.Schema, name string, value any) {
+	body.Set(string(extension.ID), map[string]any{name: value})
+	body.Set(schemasAttr, r.schemaURIs(body))
 }
 
 func (r *resource) schemaURIs(object core.Object) []core.SchemaURI {
