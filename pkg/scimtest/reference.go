@@ -37,6 +37,7 @@ func (r referencing) run(t *testing.T) {
 
 	t.Run("stores the referenced values", r.checkStored)
 	t.Run("adds values", r.checkAdd)
+	t.Run("returns the values in a query", r.checkQueried)
 	t.Run("removes a value by filter", r.checkRemoveFiltered)
 	t.Run("replaces the values", r.checkReplace)
 	t.Run("removes every value without a filter", r.checkRemoveAll)
@@ -59,6 +60,21 @@ func (r referencing) checkAdd(t *testing.T) {
 
 	r.patch(t, source, op(patch.OpAdd, r.attribute.Name, members(second)))
 	r.source.expectValues(t, source, r.attribute.Name, first, second)
+}
+
+func (r referencing) checkQueried(t *testing.T) {
+	supports(t, "filter", r.source.config.Filter.Supported)
+	ids := []string{r.newTarget(t), r.newTarget(t)}
+	source := r.newSource(t, ids...)
+	query := byID(idOf(source))
+
+	page := r.source.list(t, query)
+	if len(page.Resources) != 1 {
+		t.Fatalf("scimtest: %s (RFC 7644 3.4.2): %d resources, want 1", r.source.describe(query), len(page.Resources))
+	}
+	if got, want := valuesIn(page.Resources[0], r.attribute.Name), slices.Sorted(slices.Values(ids)); !slices.Equal(got, want) {
+		t.Errorf("scimtest: %s (RFC 7643 2.3.7): %s values %v, want %v", r.source.describe(query), r.attribute.Name, got, want)
+	}
 }
 
 func (r referencing) checkRemoveFiltered(t *testing.T) {

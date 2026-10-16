@@ -108,7 +108,9 @@ func (target *filterTarget) compare(op, value string) string {
 }
 
 func filterTargets(schemas core.Schemas) []*filterTarget {
-	targets := attributeTargets(schemas.Base().Attributes, "", func(body core.Object) core.Object { return body })
+	root := func(body core.Object) core.Object { return body }
+	targets := attributeTargets(commonTargets(), "", root)
+	targets = append(targets, attributeTargets(schemas.Base().Attributes, "", root)...)
 	for _, extension := range schemas.Extensions() {
 		uri := string(extension.ID)
 		targets = append(targets, attributeTargets(extension.Attributes, uri+":", func(body core.Object) core.Object {
@@ -121,6 +123,11 @@ func filterTargets(schemas core.Schemas) []*filterTarget {
 		})...)
 	}
 	return targets
+}
+
+func commonTargets() core.Attributes {
+	externalID, _ := core.CommonAttribute("externalId")
+	return core.Attributes{externalID}
 }
 
 func attributeTargets(attributes core.Attributes, prefix string, holder func(core.Object) core.Object) []*filterTarget {

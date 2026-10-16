@@ -118,12 +118,12 @@ func (r patching) checkAtomic(t *testing.T) {
 }
 
 func (r patching) checkSchema(t *testing.T) {
-	r.suite.should(t, "RFC 7644 Table 8 400 for a PATCH body without the PatchOp schema")
+	r.suite.should(t, "RFC 7644 Table 9 400 invalidSyntax for a PATCH body without the PatchOp schema")
 	created, attribute := r.patchTarget(t)
 	body := ops(op(patch.OpReplace, attribute.Name, placeholder))
 	body.Schemas = nil
 
-	expectStatus(t, r.client().Patch(t, r.path(created), body), http.StatusBadRequest, "RFC 7644 3.5.2")
+	RequireError(t, r.client().Patch(t, r.path(created), body), http.StatusBadRequest, scimerrors.InvalidSyntax)
 }
 
 func (r patching) checkAddByPath(t *testing.T) {
@@ -246,10 +246,10 @@ func (r patching) checkReadOnly(t *testing.T) {
 }
 
 func (r patching) checkEmpty(t *testing.T) {
-	r.suite.should(t, "RFC 7644 3.5.2 400 for a PATCH body without operations")
+	r.suite.should(t, "RFC 7644 Table 9 400 invalidSyntax for a PATCH body without operations")
 	created, _ := r.patchTarget(t)
 
-	expectStatus(t, r.client().Patch(t, r.path(created), ops()), http.StatusBadRequest, "RFC 7644 3.5.2")
+	RequireError(t, r.client().Patch(t, r.path(created), ops()), http.StatusBadRequest, scimerrors.InvalidSyntax)
 }
 
 // RFC 7644 Section 3.5.2: the server MUST return 200 OK if the "attributes" parameter is specified.

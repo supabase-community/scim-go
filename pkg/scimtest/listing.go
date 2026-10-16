@@ -22,8 +22,12 @@ func (r listing) checkListEmpty(t *testing.T) {
 	supports(t, "filter", r.config.Filter.Supported)
 	query := byID("scimtest-" + newUnique())
 
-	if page := r.list(t, query); page.TotalResults != 0 || len(page.Resources) != 0 {
+	res := r.send(t, query)
+	if page := r.page(t, query, res); page.TotalResults != 0 || len(page.Resources) != 0 {
 		t.Errorf("scimtest: %s (RFC 7644 3.4.2): totalResults %d with %d resources, want 0", r.describe(query), page.TotalResults, len(page.Resources))
+	}
+	if _, ok := Decode[map[string]any](t, res)["totalResults"]; !ok {
+		t.Errorf("scimtest: %s (RFC 7644 3.4.2): totalResults is missing", r.describe(query))
 	}
 }
 

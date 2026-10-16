@@ -24,6 +24,7 @@ func (r filtering) run(t *testing.T) {
 	t.Run("compares a boolean", r.checkBooleanEquals)
 	t.Run("compares meta attributes", r.checkMeta)
 	t.Run("binds and tighter than or", r.checkPrecedence)
+	t.Run("compares a canonical type", r.checkCanonicalTypes)
 }
 
 func (r filtering) checkID(t *testing.T) {
@@ -118,4 +119,35 @@ func (r filtering) checkPrecedence(t *testing.T) {
 
 	r.expectMatches(t, idFilter(ids[0])+" or "+idFilter(ids[1])+" and "+idFilter(ids[2]), ids, ids[:1])
 	r.expectMatches(t, "not ("+idFilter(ids[0])+") and "+idFilter(ids[1]), ids, ids[1:2])
+}
+
+func (r filtering) checkCanonicalTypes(t *testing.T) {
+	supports(t, "filter", r.config.Filter.Supported)
+	typed := slices.DeleteFunc(slices.Clone(r.schemas.Base().Attributes), func(a *core.Attribute) bool {
+		kind := a.SubAttributes.Lookup(typeSub)
+		return !a.MultiValued || a.Mutability != core.MutabilityReadWrite || kind == nil || len(kind.CanonicalValues) < 2
+	})
+	if len(typed) == 0 {
+		t.Skipf("n/a: %s has no multi-valued attribute with a canonical type", r.kind.Name)
+	}
+	for _, attribute := range typed {
+		t.Run(attribute.Name+".type", func(t *testing.T) { r.checkCanonicalType(t, attribute) })
+	}
+}
+
+func (r filtering) checkCanonicalType(t *testing.T, attribute *core.Attribute) {
+	t.Helper()
+
+	kinds := attribute.SubAttribute(typeSub).CanonicalValues[:2]
+	ids := make([]string, 0, len(kinds))
+	for _, kind := range kinds {
+		body := r.body(t, newUnique())
+		body.Set(attribute.Name, []any{map[string]any{typeSub: kind}})
+		ids = append(ids, idOf(r.seed(t, body)))
+	}
+	path := attribute.Name + "." + typeSub
+
+	r.expectMatches(t, path+" eq "+quoted(kinds[0]), ids, ids[:1])
+	r.expectMatches(t, path+" ne "+quoted(kinds[0]), ids, ids[1:])
+	r.expectMatches(t, path+" pr", ids, ids)
 }

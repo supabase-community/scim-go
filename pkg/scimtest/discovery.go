@@ -125,11 +125,12 @@ func compareAttributes(t *testing.T, where string, want, got core.Attributes) {
 	t.Helper()
 
 	for _, expected := range want {
+		path := where + ":" + expected.Name
 		actual := got.Lookup(expected.Name)
 		if actual == nil {
+			t.Errorf("SHOULD: GET /Schemas (RFC 7643 8.7.1): %s is missing", path)
 			continue
 		}
-		path := where + ":" + expected.Name
 		for _, field := range []struct {
 			name      string
 			want, got any

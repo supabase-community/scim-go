@@ -2,6 +2,7 @@ package scimtest
 
 import (
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/supabase-community/scim-go/pkg/core"
@@ -30,6 +31,23 @@ func (r projecting) run(t *testing.T) {
 	t.Run("never excludes id", func(t *testing.T) {
 		r.expectAttributes(t, r.path(created)+"?excludedAttributes=id", []string{"id"}, nil)
 	})
+	for _, tr := range transports {
+		t.Run("never excludes id from a query over "+tr.name, func(t *testing.T) { r.checkListedID(t, tr, idOf(created)) })
+	}
+}
+
+// RFC 7643 Section 3.1: "id" is returned "always", so a query cannot exclude it.
+func (r projecting) checkListedID(t *testing.T, tr transport, id string) {
+	t.Helper()
+
+	supports(t, "filter", r.config.Filter.Supported)
+	query := byID(id)
+	query.Set("excludedAttributes", "id")
+
+	over := r.over(t, tr)
+	if got := idsOf(over.list(t, query).Resources); !slices.Equal(got, []string{id}) {
+		t.Errorf("scimtest: %s (RFC 7644 3.4.2.5): ids %v, want [%s]", over.describe(query), got, id)
+	}
 }
 
 func (r projecting) expectAttributes(t *testing.T, path string, present, absent []string) {
