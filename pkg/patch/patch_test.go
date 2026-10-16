@@ -905,6 +905,18 @@ func TestApplyDedupInvalidatedByAReplaceOfTheWholeAttribute(t *testing.T) {
 }
 
 // RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made to the resource.
+func TestApplyDedupWithinOneAddValue(t *testing.T) {
+	item := map[string]any{}
+
+	require.NoError(t, apply(item, userSchemas(),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"},{"value":"a@x"}]`),
+		operation(patch.OpAdd, "emails", `[{"value":"a@x"}]`),
+	))
+
+	assert.Equal(t, []any{map[string]any{"value": "a@x"}}, item["emails"])
+}
+
+// RFC 7644 Section 3.5.2.1: if the target already contains the value, no changes SHOULD be made to the resource.
 func TestApplyDedupInvalidatedByARemoveOfTheWholeAttribute(t *testing.T) {
 	item := map[string]any{"emails": []any{map[string]any{"value": "a@x"}}}
 

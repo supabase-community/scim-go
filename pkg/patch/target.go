@@ -47,7 +47,7 @@ func (t *target) write(kind Op, incoming any) error {
 		}
 	}
 	adds.demoteIfPromoted(kind, before, written, incoming)
-	adds.record(kind, incoming)
+	adds.record(kind, before, incoming)
 	t.unassignEmptyExtension()
 	return nil
 }

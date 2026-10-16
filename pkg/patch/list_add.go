@@ -54,14 +54,12 @@ func (r listAdd) fresh(kind Op, candidate any) any {
 	return r.index(r.t.elements()).fresh(shapedList(candidate))
 }
 
-func (r listAdd) record(kind Op, added any) {
+func (r listAdd) record(kind Op, before []any, added any) {
 	if !r.isAdd(kind) || promotes(r.t.key(), added) && !value.KeyedByIdentity(r.t.attr) {
 		clear(r.t.indexes)
 		return
 	}
-	elements := r.t.elements()
-	stored := len(elements) - len(shapedList(added))
-	r.index(elements[:stored]).add(elements[stored:])
+	r.index(before).add(r.t.elements()[len(before):])
 }
 
 func (r listAdd) index(elements []any) *index {
